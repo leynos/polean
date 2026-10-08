@@ -13,8 +13,8 @@ merely because it grants nothing dangerous.
 
 ## Current reality
 
-This repository contains a Rust development scaffold and the revision 0.1 design
-pack. It does **not** yet contain:
+This repository contains a Rust development scaffold and the revision 0.1
+design pack. It does **not** yet contain:
 
 - a Polean command-line implementation;
 - a Regorus frontend;
@@ -29,8 +29,8 @@ APIs.
 
 The distinction matters. The intended first assurance statement is that Lean
 checked the admitted policy *model* against six requirements. The source
-frontend remains explicitly trusted, while OPA and Regorus supply tested runtime
-observations rather than a formal refinement theorem.
+frontend remains explicitly trusted, while OPA and Regorus supply tested
+runtime observations rather than a formal refinement theorem.
 
 ## The example policy
 
@@ -56,8 +56,8 @@ and vertical experiments.
 
 The [documentation index](docs/contents.md) links the remaining guides and
 contracts. The [bootstrap ADR](docs/adr-001-repository-bootstrap.md) records
-which parts of the Combobulate scaffold were adopted and which were deliberately
-deferred.
+which parts of the Combobulate scaffold were adopted and which were
+deliberately deferred.
 
 ## Reproduce the design checks
 

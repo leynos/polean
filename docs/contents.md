@@ -10,14 +10,15 @@ already exist.
 - [Terms of reference](terms-of-reference.md): problem, users, goals, scope,
   assumptions, and acceptance criteria.
 - [Context and vocabulary](context.md): the shared meanings of profile,
-  admission, model theorem, source binding, runtime correspondence, and evidence.
+  admission, model theorem, source binding, runtime correspondence, and
+  evidence.
 - [Technical design](technical-design.md): semantic profile, finite abstraction,
   proof obligations, Rust and Lean boundaries, evidence, CLI outcomes, and
   vertical experiments.
 - [Bootstrap decision](adr-001-repository-bootstrap.md): repository provenance,
   selected Combobulate scaffold elements, and deliberate deferrals.
-- [Draft-pack validation](../validation/README.md): checks that ran, results, and
-  explicit omissions.
+- [Draft-pack validation](../validation/README.md): checks that ran, results,
+  and explicit omissions.
 
 ## Project guides
 
@@ -33,5 +34,5 @@ already exist.
 The [contracts directory](../contracts/) contains the profile and JSON schemas.
 The [tenant-write example](../examples/tenant-write/) contains the baseline
 policy, source-neutral policy IR, claims, mutations, and a sample request. The
-[validation directory](../validation/) contains executable design-fixture checks,
-recorded results, and mutation witnesses.
+[validation directory](../validation/) contains executable design-fixture
+checks, recorded results, and mutation witnesses.

@@ -25,8 +25,8 @@ does not authenticate request attributes or certify an application integration.
 Unsupported syntax fails closed.
 
 Do not accept arbitrary user Lean, Lake files, compiled proof modules, native
-libraries, or plug-ins as verifier input. Generated proof jobs must contain data
-inside fixed trusted templates.
+libraries, or plug-ins as verifier input. Generated proof jobs must contain
+data inside fixed trusted templates.
 
 ## Code and documentation
 

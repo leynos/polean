@@ -12,8 +12,8 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - `jsonschema` from `validation/requirements.txt` for design checks.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
-`mdtablefix` 0.6.0 or later and `markdownlint-cli2` to reproduce every formatting
-and prose gate.
+`mdtablefix` 0.6.0 or later and `markdownlint-cli2` to reproduce every
+formatting and prose gate.
 
 ## Common commands
 
@@ -33,12 +33,12 @@ regeneration is harmless.
 ## Change discipline
 
 Keep functional changes and assurance-claim changes explicit. A parser feature,
-new atom, wider input domain, changed failure outcome, or revised trust boundary
-must update the relevant contracts and design text before implementation is
-reported complete.
+new atom, wider input domain, changed failure outcome, or revised trust
+boundary must update the relevant contracts and design text before
+implementation is reported complete.
 
-Do not add a Rego form merely because Regorus can parse it. Admission requires a
-specified model, source mapping, proof strategy, conformance fixtures, and
+Do not add a Rego form merely because Regorus can parse it. Admission requires
+a specified model, source mapping, proof strategy, conformance fixtures, and
 failure semantics. Unknown syntax fails closed.
 
 Do not accept submitted Lean, Lake, native-library, or compiled proof artefacts
@@ -51,7 +51,8 @@ Add the smallest test at the boundary where a defect could recur:
 
 - Rust unit and integration tests for orchestration and contracts;
 - design-fixture validation for schema and example consistency;
-- Lean theorems for semantic, abstraction, checker-soundness, and witness claims;
+- Lean theorems for semantic, abstraction, checker-soundness, and witness
+  claims;
 - OPA and Regorus replay tests for observed source behaviour; and
 - hostile-input tests for evidence binding and process supervision.
 

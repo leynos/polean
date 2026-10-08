@@ -26,8 +26,8 @@ polean verify evidence \
 
 `check` would establish only that a policy belongs to the selected profile.
 `prove` would check all six registered requirements and package replayable
-evidence. `verify` would reconstruct the admitted model from explicit source and
-claims rather than execute submitted Lean or compiled proof modules.
+evidence. `verify` would reconstruct the admitted model from explicit source
+and claims rather than execute submitted Lean or compiled proof modules.
 
 The intended logical outcomes are proved, refuted, and unknown. Unsupported
 syntax, invalid input, tool failure, invalid evidence, and runtime conformance

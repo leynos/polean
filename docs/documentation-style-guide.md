@@ -12,8 +12,7 @@ assumption, or failure mode. Do not use “verified”, “proved”, “safe”
 Wrap ordinary Markdown prose near 80 columns. Tables and code may exceed that
 limit where wrapping would make them less readable. Use fenced code blocks with
 a language where practical. Relative links connect repository documents;
-references to external evidence belong in a clearly labelled references
-section.
+references to external evidence belong in a clearly labelled references section.
 
 Terms of reference describe the problem, users, scope, assumptions, and
 acceptance criteria. Technical designs describe mechanisms and proof
