@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Polean v0 verification result",
+  "description": "Structural validation is necessary, not sufficient. The consumer must check semantic consistency, exact claim coverage, evidence binding and path containment as specified in the technical design.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "polean.result.v0"
+    },
+    "status": {
+      "enum": [
+        "model_proved",
+        "refuted",
+        "unknown",
+        "unsupported",
+        "invalid_input",
+        "tool_error",
+        "invalid_evidence",
+        "conformance_mismatch"
+      ]
+    },
+    "profile": {
+      "const": "polean.tenant-write.v0"
+    },
+    "entrypoint": {
+      "const": "data.authz.allow"
+    },
+    "digests": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "ir": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "claims": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "profile": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "request_schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "toolchain": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "proof_package": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "source",
+            "ir",
+            "claims",
+            "profile",
+            "request_schema",
+            "toolchain",
+            "proof_package"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "assurance": {
+      "type": "object",
+      "properties": {
+        "logic": {
+          "enum": [
+            "kernel_checked",
+            "not_checked"
+          ]
+        },
+        "source_binding": {
+          "enum": [
+            "trusted_frontend",
+            "not_checked"
+          ]
+        },
+        "runtime_correspondence": {
+          "enum": [
+            "tested_agreement",
+            "mismatch",
+            "not_run"
+          ]
+        }
+      },
+      "required": [
+        "logic",
+        "source_binding",
+        "runtime_correspondence"
+      ],
+      "additionalProperties": false
+    },
+    "claims": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "enum": [
+              "tenant-isolation",
+              "write-only",
+              "locked-requires-admin",
+              "admin-or-owner",
+              "admin-write-available",
+              "owner-write-available"
+            ]
+          },
+          "status": {
+            "enum": [
+              "proved",
+              "refuted",
+              "unknown"
+            ]
+          },
+          "theorem": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "witness_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "theorem",
+          "witness_path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "source_start_byte": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "source_end_byte": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "source_start_byte",
+          "source_end_byte"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "evidence_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "status",
+    "profile",
+    "entrypoint",
+    "digests",
+    "assurance",
+    "claims",
+    "diagnostics",
+    "evidence_path"
+  ],
+  "additionalProperties": false
+}

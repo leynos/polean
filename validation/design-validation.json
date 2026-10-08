@@ -1,0 +1,70 @@
+{
+  "scope": "design-fixture validation only",
+  "json_schemas_checked": 4,
+  "fact_vectors_per_policy": 32,
+  "policy_variants": 7,
+  "concrete_abstract_comparisons": 224,
+  "full_contract_decision_checks": 64,
+  "malformed_request_shapes_rejected": 5,
+  "strict_decoding_negatives_rejected": 4,
+  "lean_proofs_checked": false,
+  "rego_parsed_by_opa_or_regorus": false,
+  "runtime_conformance_executed": false,
+  "policies": [
+    {
+      "policy": "baseline",
+      "vectors": 32,
+      "allowed_vectors": 5,
+      "failed_claims": []
+    },
+    {
+      "policy": "cross-tenant-admin",
+      "vectors": 32,
+      "allowed_vectors": 9,
+      "failed_claims": [
+        "tenant-isolation"
+      ]
+    },
+    {
+      "policy": "locked-owner",
+      "vectors": 32,
+      "allowed_vectors": 6,
+      "failed_claims": [
+        "locked-requires-admin"
+      ]
+    },
+    {
+      "policy": "unowned-unlocked",
+      "vectors": 32,
+      "allowed_vectors": 6,
+      "failed_claims": [
+        "admin-or-owner"
+      ]
+    },
+    {
+      "policy": "non-write-admin",
+      "vectors": 32,
+      "allowed_vectors": 9,
+      "failed_claims": [
+        "write-only"
+      ]
+    },
+    {
+      "policy": "deny-all",
+      "vectors": 32,
+      "allowed_vectors": 0,
+      "failed_claims": [
+        "admin-write-available",
+        "owner-write-available"
+      ]
+    },
+    {
+      "policy": "admin-only",
+      "vectors": 32,
+      "allowed_vectors": 4,
+      "failed_claims": [
+        "owner-write-available"
+      ]
+    }
+  ]
+}
