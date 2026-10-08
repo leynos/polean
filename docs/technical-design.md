@@ -3,9 +3,15 @@
 **Status:** draft v0.1. All components and proof obligations below are
 proposed. **Date:** 2026-10-04. **Audience:** Rust and Lean implementers,
 security reviewers, and maintainers. **Scope:** one local, source-first
-verification workflow for a closed Rego profile. **Companions:**
-[terms of reference](terms-of-reference.md), [vocabulary](context.md), [bootstrap ADR](adr-001-repository-bootstrap.md), [contracts](../contracts/profile.json),
-and [draft-pack validation](../validation/README.md).
+verification workflow for a closed Rego profile.
+
+**Companions:**
+
+- [Terms of reference](terms-of-reference.md)
+- [Vocabulary](context.md)
+- [Bootstrap ADR](adr-001-repository-bootstrap.md)
+- [Contracts](../contracts/profile.json)
+- [Draft-pack validation](../validation/README.md)
 
 ## 1. Decision and scope
 
