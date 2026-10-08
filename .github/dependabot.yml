@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "github-actions"]
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "cargo"]
+    schedule:
+      interval: "daily"
