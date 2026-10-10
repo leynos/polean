@@ -66,8 +66,7 @@ The module shares its definitions with `validate_design.py` rather than
 restating them, so it tests the harness the other check runs rather than a
 parallel copy, and it asserts that each property is Hypothesis-wrapped before
 running it, so a property that lost its `@given` decorator fails rather than
-sampling no examples and reporting a false pass. The example count it prints is
-the budget passed to Hypothesis, not a measured execution count.
+sampling no examples and reporting a false pass.
 
 It is a search, not a proof, and it does not replace the enumeration: a
 property suite can miss a fault that the fixed vectors happen to cover, and the
