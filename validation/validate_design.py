@@ -474,6 +474,9 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
     def sweep_accepted(generated: set[str]) -> bool:
         return bool(generated) and not stale_witness_names(WITNESS_DIR, generated)
 
+    def profile_schema_accepted(p: dict[str, Any]) -> bool:
+        return validators["profile"].is_valid(p)
+
     denied = {"same_tenant": False, "write_action": True, "admin_role": True,
               "owns_resource": False, "locked": False}
     renamed = copy.deepcopy(baseline)
@@ -486,6 +489,16 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
     tampered_decision["admin-write-available"]["decision"] = True
     tampered_facts = copy.deepcopy(witness)
     tampered_facts["admin-write-available"]["facts"]["same_tenant"] = False
+    drifted_identity = copy.deepcopy(profile)
+    drifted_identity["id"] = "polean.other-profile.v0"
+    drifted_bounds = copy.deepcopy(profile)
+    drifted_bounds["rules"]["max"] = 32
+    drifted_runtime = copy.deepcopy(profile)
+    drifted_runtime["runtime_options"]["network"] = True
+    unadmitted_atom = copy.deepcopy(profile)
+    unadmitted_atom["atoms"]["same_tenant"] = "input.tenant == input.tenant"
+    extra_profile_entry = copy.deepcopy(profile)
+    extra_profile_entry["mode"] = "permissive"
     names = {path.name for path in WITNESS_DIR.glob("*.json")}
     checks: list[tuple[str, bool, bool]] = [
         ("request rejects a non-Boolean locked value",
@@ -508,9 +521,19 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
          contract_differences(baseline, extra_rule)
          == [f"rules[{len(baseline['rules'])}]"],
          contract_differences(baseline, extra_rule) == []),
-        ("profile probe accepts the reviewed profile",
+        ("contract discrepancies detect a widened atom expression",
          contract_differences(profile, profile) == [],
          contract_differences(profile, widened) == []),
+        ("profile schema rejects a changed profile identity",
+         profile_schema_accepted(profile), profile_schema_accepted(drifted_identity)),
+        ("profile schema rejects widened rule bounds",
+         profile_schema_accepted(profile), profile_schema_accepted(drifted_bounds)),
+        ("profile schema rejects an enabled network option",
+         profile_schema_accepted(profile), profile_schema_accepted(drifted_runtime)),
+        ("profile schema rejects an unadmitted atom expression",
+         profile_schema_accepted(profile), profile_schema_accepted(unadmitted_atom)),
+        ("profile schema rejects an unreviewed top-level entry",
+         profile_schema_accepted(profile), profile_schema_accepted(extra_profile_entry)),
         ("witness re-derivation accepts the stored witness",
          witness_accepted(witness),
          witness_accepted(tampered_decision) or witness_accepted(tampered_facts)),

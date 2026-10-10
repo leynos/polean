@@ -23,7 +23,7 @@ machine-readable result is [design-validation.json](design-validation.json).
 | Strict ingress examples               | Duplicate keys, unpaired surrogates, invalid UTF-8, and non-JSON `NaN` rejected.                                                                                        |
 | Unicode examples                      | Empty, ASCII, composed/decomposed accented, and supplementary-plane strings accepted; composed and decomposed tenant names remain distinct, with a same-tenant control. |
 | Example result structure              | An explicitly inconclusive, unproved report satisfies the result schema.                                                                                                |
-| Negative controls                     | Eleven injected fixture faults each detected by the check meant to catch them.                                                                                          |
+| Negative controls                     | Sixteen injected fixture faults each detected by the check meant to catch them.                                                                                         |
 
 The source-fixture check compares prepared Rego text with the proposed atom
 mapping. It is a consistency check, **not an independently verified parser or
