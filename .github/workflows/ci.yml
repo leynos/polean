@@ -1,0 +1,43 @@
+name: CI
+
+'on':
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-and-docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@47b337e4f230b591891656534d4ffad868131740
+        with:
+          rustflags: ''
+      - name: Install mdtablefix
+        uses: >-
+          leynos/shared-actions/.github/actions/install-mdtablefix@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        with:
+          version: '0.6.0'
+      - name: Check formatting
+        run: make check-fmt
+      - name: Lint Markdown
+        uses: DavidAnson/markdownlint-cli2-action@2df9e28eb87988518ef3880c34edad45d65b1668
+        with:
+          globs: '**/*.md'
+      - name: Type-check Rust
+        run: make typecheck
+      - name: Lint Rust
+        run: make lint
+      - name: Test Rust
+        run: make test

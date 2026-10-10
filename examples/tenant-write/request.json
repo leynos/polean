@@ -1,0 +1,13 @@
+{
+  "subject": {
+    "tenant": "tenant-a",
+    "id": "subject-a",
+    "role": "member"
+  },
+  "resource": {
+    "tenant": "tenant-a",
+    "owner": "subject-a",
+    "locked": false
+  },
+  "action": "write"
+}

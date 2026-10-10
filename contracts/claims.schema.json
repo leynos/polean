@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Polean v0 fixed contract suite",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "polean.claims.v0"
+    },
+    "profile": {
+      "const": "polean.tenant-write.v0"
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "tenant-isolation",
+          "write-only",
+          "locked-requires-admin",
+          "admin-or-owner",
+          "admin-write-available",
+          "owner-write-available"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "profile",
+    "claims"
+  ],
+  "additionalProperties": false
+}
