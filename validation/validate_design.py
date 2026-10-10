@@ -29,10 +29,33 @@ EXPECTED_FAILURES = {
     "deny-all": {"admin-write-available", "owner-write-available"},
     "admin-only": {"owner-write-available"},
 }
+# The admitted vocabulary is a reviewed constant of this harness, not a
+# consequence of whatever contracts/profile.json currently says. Profiles,
+# rules, and rendered source are checked against these tuples, so widening the
+# profile or the grammar cannot pass by editing one document.
+PROFILE_ATOM_NAMES = (
+    "same_tenant", "write_action", "admin_role", "owns_resource", "locked", "unlocked",
+)
+PROFILE_EXCLUDED = (
+    "other packages", "other imports", "additional modules", "metadata annotations",
+    "other rules", "variables", "unification", "negation", "else", "with", "some",
+    "every", "built-in calls", "functions", "data references", "dynamic references",
+    "numeric expressions", "collections", "arbitrary Lean source", "custom invariants",
+)
+NEGATIVE_CONTROL_HELP = "a negative control did not detect its injected fault"
+WITNESS_DIR = ROOT / "validation/witnesses"
 
 
 def load(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def extract(path: Path, name: str) -> Any:
+    """Read one folder's contract document and reject any unknown entry."""
+    document = load(path / name)
+    require(set(document) <= {"rules", "profile"},
+            f"Unknown top-level entry in {path / name}: {sorted(set(document))}")
+    return document
 
 
 def facts_of(request: dict[str, Any]) -> dict[str, bool]:
@@ -134,46 +157,176 @@ def strict_json(raw: bytes) -> Any:
     return result
 
 
-def main() -> None:
-    validators = {}
+def contract_differences(before: Any, after: Any, prefix: str = "") -> list[str]:
+    """List every JSON path where one contract document departs from another.
+
+    A mutation is a deliberately weakened policy, not licence to widen the
+    grammar or edit metadata. Reporting the changed paths lets the caller
+    require that each reviewed variant differs from the baseline only inside
+    its rule list, so a synchronous edit to an atom mapping, profile identity,
+    or any new contract entry cannot slip through unnoticed. The walk reports
+    added and removed containers as well as changed scalars, so an added empty
+    object or list is a difference rather than an invisible no-op.
+    """
+    if isinstance(before, dict) and isinstance(after, dict):
+        differences: list[str] = []
+        for key in sorted(set(before) | set(after)):
+            here = f"{prefix}.{key}" if prefix else key
+            if key not in before or key not in after:
+                differences.append(here)
+            else:
+                differences.extend(contract_differences(before[key], after[key], here))
+        return differences
+    if isinstance(before, list) and isinstance(after, list):
+        differences = []
+        for index in range(max(len(before), len(after))):
+            here = f"{prefix}[{index}]"
+            if index >= len(before) or index >= len(after):
+                differences.append(here)
+            else:
+                differences.extend(
+                    contract_differences(before[index], after[index], here))
+        return differences
+    return [] if before == after else [prefix]
+
+
+def rule_rendering_reason(rule: list[str], atoms: dict[str, str]) -> str | None:
+    """Return why a rule cannot be rendered as one atom per source line."""
+    for atom in rule:
+        source = atoms.get(atom)
+        if source is None:
+            return f"unmapped atom {atom!r}"
+        if "\n" in source:
+            return f"multi-line atom source for {atom!r}"
+    return None
+
+
+def render_source(rules: list[list[str]], atoms: dict[str, str]) -> str:
+    """Render the reviewed Rego template for a policy's rule list."""
+    text = "package authz\n\nimport rego.v1\n\ndefault allow := false\n"
+    for rule in rules:
+        text += "\nallow if {\n" + "".join(f"    {atoms[a]}\n" for a in rule) + "}\n"
+    return text
+
+
+def decision_matches(f: dict[str, bool], allowed: bool,
+                     requirements: dict[str, bool]) -> bool:
+    """Check six requirements against the intended decision for one vector."""
+    expected = (f["same_tenant"] and f["write_action"]
+                and (f["admin_role"] or (f["owns_resource"] and not f["locked"])))
+    return all(requirements.values()) == (allowed == expected)
+
+
+def contract_completeness(facts: list[dict[str, bool]]) -> int:
+    """Check the six-requirement contract over the whole fact/decision product."""
+    combinations = list(itertools.product(facts, (False, True)))
+    require(len(combinations) == 2 ** (len(FACT_KEYS) + 1),
+            "Contract enumeration is not the complete fact/decision product")
+    for f, allowed in combinations:
+        require(decision_matches(f, allowed, claims(f, allowed)),
+                "Contract permits a decision outside the intended policy")
+    always_true = dict.fromkeys(CLAIM_IDS, True)
+    require([(f, allowed) for f, allowed in combinations
+             if not decision_matches(f, allowed, always_true)],
+            NEGATIVE_CONTROL_HELP)
+    return len(combinations)
+
+
+def check_witness(name: str, witnesses: dict[str, Any], rules: list[list[str]],
+                  expected: set[str]) -> None:
+    """Re-derive a stored witness from its request and require it to refute.
+
+    A refutation is a fact vector the admitted policy decides one way while the
+    named requirement demands the other, so a witness may record either an
+    allow that a safety requirement forbids or a denial that an availability
+    requirement forbids. The request is re-evaluated from the rule list rather
+    than trusted, which is why the stored decision and facts are checked.
+    """
+    require(set(witnesses) == expected,
+            f"Unexpected witness failures for {name}: {sorted(witnesses)}")
+    for claim_id, witness in witnesses.items():
+        r = witness["request"]
+        require(facts_of(r) == witness["facts"],
+                f"Witness facts mismatch for {name}/{claim_id}")
+        decision = eval_request(rules, r)
+        require(decision == witness["decision"],
+                f"Witness decision mismatch for {name}/{claim_id}")
+        require(not claims(witness["facts"], decision)[claim_id],
+                f"Witness does not refute {name}/{claim_id}")
+
+
+def stale_witness_names(directory: Path, generated: set[str]) -> list[str]:
+    """List witness files the current run did not generate."""
+    return sorted(path.name for path in directory.glob("*.json")
+                  if path.name not in generated)
+
+
+def load_schemas() -> dict[str, Draft202012Validator]:
+    """Meta-validate every contract schema and index it by contract name."""
+    validators: dict[str, Draft202012Validator] = {}
     for path in sorted((ROOT / "contracts").glob("*.schema.json")):
         schema = load(path)
         Draft202012Validator.check_schema(schema)
         validators[path.stem.removesuffix(".schema")] = Draft202012Validator(schema)
+    return validators
 
+
+def check_profile(validators: dict[str, Draft202012Validator]) -> dict[str, Any]:
+    """Validate the profile document and its closed vocabulary."""
     profile = load(ROOT / "contracts/profile.json")
-    claim_manifest = load(ROOT / "examples/tenant-write/claims.json")
-    validators["claims"].validate(claim_manifest)
-    require(tuple(claim_manifest["claims"]) == CLAIM_IDS, "Claim registry mismatch")
-    require(profile["claims"] == list(CLAIM_IDS), "Profile claims mismatch")
-    facts = [dict(zip(FACT_KEYS, values, strict=True))
-             for values in itertools.product((False, True), repeat=5)]
-    require(len(facts) == 32, "Expected five-fact Cartesian product")
+    validators["profile"].validate(profile)
+    require(tuple(profile["atoms"]) == PROFILE_ATOM_NAMES, "Profile atoms mismatch")
+    require(tuple(profile["facts"]) == FACT_KEYS, "Profile facts mismatch")
+    require(tuple(profile["claims"]) == CLAIM_IDS, "Profile claims mismatch")
+    require(tuple(profile["excluded"]) == PROFILE_EXCLUDED, "Profile exclusions mismatch")
+    require(profile["limits"]["concurrent_proof_jobs"] == 1,
+            "Profile must admit one proof job at a time")
+    require(profile["runtime_options"]["network"] is False,
+            "Profile must forbid network access")
+    require(profile["assurance"]["source_binding"] == "trusted frontend",
+            "Profile must keep the source frontend explicitly trusted")
+    return profile
 
-    # Check the complete six-claim contract against the separately stated formula.
-    for f in facts:
-        t, w, a, o, locked = (f[k] for k in FACT_KEYS)
-        expected = t and w and (a or (o and not locked))
-        for allowed in (False, True):
-            require(all(claims(f, allowed).values()) == (allowed == expected),
-                    "Contract permits a decision outside the intended policy")
 
-    rows = []
+def check_claims_registry(validators: dict[str, Draft202012Validator]) -> int:
+    """Validate the claim manifest and require it to list every fixed claim."""
+    manifest = load(ROOT / "examples/tenant-write/claims.json")
+    validators["claims"].validate(manifest)
+    require(set(manifest["claims"]) == set(CLAIM_IDS), "Claim registry mismatch")
+    return len(manifest["claims"])
+
+
+def validate_policies(validators: dict[str, Draft202012Validator],
+                      profile: dict[str, Any],
+                      facts: list[dict[str, bool]]) -> tuple[list[dict[str, Any]], int, int]:
+    """Compare every variant's fixtures, witnesses, and rendered source."""
+    atoms = profile["atoms"]
+    baseline = extract(ROOT / "examples/tenant-write", "policy.json")
+    WITNESS_DIR.mkdir(exist_ok=True)
+    rows: list[dict[str, Any]] = []
     evaluations = 0
-    witness_dir = ROOT / "validation/witnesses"
-    witness_dir.mkdir(exist_ok=True)
+    replays = 0
+    generated: set[str] = set()
     for name, expected_failures in EXPECTED_FAILURES.items():
         folder = (ROOT / "examples/tenant-write" if name == "baseline"
                   else ROOT / "examples/tenant-write/mutations" / name)
-        policy = load(folder / "policy.json")
+        policy = extract(folder, "policy.json")
         validators["policy"].validate(policy)
+        # A variant may differ from the baseline only in its rule list, which is
+        # what its reviewed mutation entry describes. Any other changed leaf
+        # means a coordinated edit accompanied the mutation and needs review.
+        if name != "baseline":
+            require(policy.get("profile") == baseline.get("profile"),
+                    f"Variant {name} changed the profile identity")
+            differences = [path for path in contract_differences(baseline, policy)
+                           if not path.startswith("rules")]
+            require(not differences,
+                    f"Variant {name} changed reviewed contract entries: {differences}")
         rules = policy["rules"]
-        # Consistency check only, not a Rego parsing or semantic-equivalence test.
-        expected_source = "package authz\n\nimport rego.v1\n\ndefault allow := false\n"
         for rule in rules:
-            expected_source += "\nallow if {\n" + "".join(
-                "    " + profile["atoms"][a] + "\n" for a in rule) + "}\n"
-        require((folder / "policy.rego").read_text() == expected_source,
+            reason = rule_rendering_reason(rule, atoms)
+            require(reason is None, f"Unrenderable rule in {name}: {reason}")
+        require(render_source(rules, atoms) == (folder / "policy.rego").read_text(),
                 f"Source/fixture text drift: {name}")
 
         failures: dict[str, Any] = {}
@@ -194,12 +347,25 @@ def main() -> None:
                 f"Unexpected mutation failures for {name}: {set(failures)}")
         if name == "baseline":
             require(allow_count == 5, "Baseline expected to allow 5 of 32 vectors")
-        if failures:
-            (witness_dir / f"{name}.json").write_text(
-                json.dumps(failures, ensure_ascii=False, indent=2) + "\n")
-        rows.append({"policy": name, "vectors": 32, "allowed_vectors": allow_count,
-                     "failed_claims": sorted(failures)})
 
+        witness_path = WITNESS_DIR / f"{name}.json"
+        if failures:
+            witness_path.write_text(
+                json.dumps(failures, ensure_ascii=False, indent=2) + "\n")
+            generated.add(witness_path.name)
+            check_witness(name, load(witness_path), rules, expected_failures)
+            replays += 1
+        elif witness_path.exists():
+            witness_path.unlink()
+        rows.append({"policy": name, "vectors": len(facts), "allowed_vectors": allow_count,
+                     "failed_claims": sorted(failures)})
+    stale = stale_witness_names(WITNESS_DIR, generated)
+    require(not stale, f"Stale witness files not generated by this run: {stale}")
+    return rows, evaluations, replays
+
+
+def check_request_ingress(validators: dict[str, Draft202012Validator]) -> int:
+    """Require the request schema to reject malformed shapes."""
     good = load(ROOT / "examples/tenant-write/request.json")
     validators["request"].validate(good)
     bad_requests = []
@@ -210,7 +376,11 @@ def main() -> None:
     r = copy.deepcopy(good); r["admin"] = True; bad_requests.append(r)
     for r in bad_requests:
         require(not validators["request"].is_valid(r), "Malformed request admitted")
+    return len(bad_requests)
 
+
+def check_strict_decoding() -> int:
+    """Require the strict ingress decoder to reject malformed byte strings."""
     bad_bytes = [b'{"locked":true,"locked":false}', b'{"id":"\\ud800"}', b'\xff', b'NaN']
     for raw in bad_bytes:
         try:
@@ -219,16 +389,39 @@ def main() -> None:
             pass
         else:
             raise AssertionError(f"Strict decoder admitted {raw!r}")
+    return len(bad_bytes)
 
-    for text in ("", "Edinburgh", "é", "e\u0301", "🦉"):
+
+def check_unicode_handling(validators: dict[str, Draft202012Validator]) -> None:
+    """Require Unicode text to survive ingress without normalization."""
+    good = load(ROOT / "examples/tenant-write/request.json")
+    for text in ("", "Edinburgh", "é", "é", "🦉"):
         r = copy.deepcopy(good)
         r["subject"]["tenant"] = r["resource"]["tenant"] = text
         validators["request"].validate(r)
         require(facts_of(strict_json(json.dumps(r).encode()))["same_tenant"],
                 "Valid Unicode request failed")
-    require("é" != "e\u0301", "The profile must not normalize Unicode")
+    # Composed U+00E9 and decomposed e+U+0301 must stay distinct under the
+    # byte-comparison profile, because tenant isolation depends on that
+    # distinction. The check runs through ingress and the fact mapping rather
+    # than comparing two string literals.
+    r = copy.deepcopy(good)
+    r["subject"]["tenant"], r["resource"]["tenant"] = "é", "é"
+    validators["request"].validate(r)
+    decoded = strict_json(json.dumps(r).encode())
+    require(not facts_of(decoded)["same_tenant"],
+            "The profile must not normalize Unicode")
+    # Positive control: the same request becomes same-tenant once the subject
+    # tenant is also decomposed, so the rejection above is about code points
+    # rather than a request that never reaches the fact mapping.
+    control = copy.deepcopy(r)
+    control["subject"]["tenant"] = "é"
+    require(facts_of(control)["same_tenant"],
+            "Unicode control did not restore tenant equality")
 
-    # Basic report-schema validation must not be confused with certificate checks.
+
+def check_result_schema(validators: dict[str, Draft202012Validator]) -> None:
+    """Check that an explicitly unproved report satisfies the result schema."""
     report_sample = {
         "schema_version": "polean.result.v0", "status": "unknown",
         "profile": "polean.tenant-write.v0", "entrypoint": "data.authz.allow",
@@ -241,15 +434,126 @@ def main() -> None:
     }
     validators["result"].validate(report_sample)
 
+
+def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
+    """Require fixture checks to reject one targeted injected fault each.
+
+    Each control pairs an accepted fixture with one mutation of it and demands
+    that the same predicate accept the first and still accept the second. A
+    check that rejects both is as broken as one that accepts both, and a
+    control whose fault goes unnoticed would prove nothing.
+    """
+    profile = load(ROOT / "contracts/profile.json")
+    atoms = profile["atoms"]
+    baseline = load(ROOT / "examples/tenant-write/policy.json")
+    good = load(ROOT / "examples/tenant-write/request.json")
+    witness = load(WITNESS_DIR / "deny-all.json")
+    baseline_source = (ROOT / "examples/tenant-write/policy.rego").read_text()
+    deny_all_rules = load(
+        ROOT / "examples/tenant-write/mutations/deny-all/policy.json")["rules"]
+
+    def request_accepted(r: dict[str, Any]) -> bool:
+        return validators["request"].is_valid(r)
+
+    def render_accepted(rules: list[list[str]]) -> bool:
+        return render_source(rules, atoms) == baseline_source
+
+    def witness_accepted(w: dict[str, Any]) -> bool:
+        try:
+            check_witness("deny-all", w, deny_all_rules, EXPECTED_FAILURES["deny-all"])
+        except (AssertionError, ValueError):
+            return False
+        return True
+
+    def variant_accepted(variant: dict[str, Any]) -> bool:
+        if variant.get("profile") != baseline.get("profile"):
+            return False
+        return not [path for path in contract_differences(baseline, variant)
+                    if not path.startswith("rules")]
+
+    def sweep_accepted(generated: set[str]) -> bool:
+        return bool(generated) and not stale_witness_names(WITNESS_DIR, generated)
+
+    denied = {"same_tenant": False, "write_action": True, "admin_role": True,
+              "owns_resource": False, "locked": False}
+    renamed = copy.deepcopy(baseline)
+    renamed["rules"][0][0] = "write_action"
+    extra_rule = copy.deepcopy(baseline)
+    extra_rule["rules"].append(["locked"])
+    widened = copy.deepcopy(profile)
+    widened["atoms"]["same_tenant"] = "input.resource.owner == input.subject.id"
+    tampered_decision = copy.deepcopy(witness)
+    tampered_decision["admin-write-available"]["decision"] = True
+    tampered_facts = copy.deepcopy(witness)
+    tampered_facts["admin-write-available"]["facts"]["same_tenant"] = False
+    names = {path.name for path in WITNESS_DIR.glob("*.json")}
+    checks: list[tuple[str, bool, bool]] = [
+        ("request rejects a non-Boolean locked value",
+         request_accepted(good),
+         request_accepted({**good, "resource": {**good["resource"], "locked": 0}})),
+        ("request rejects an unknown top-level field",
+         request_accepted(good), request_accepted({**good, "admin": True})),
+        ("request rejects a missing required entry",
+         request_accepted(good),
+         request_accepted({k: v for k, v in good.items() if k != "action"})),
+        ("source template accepts the reviewed rules",
+         render_accepted(baseline["rules"]), render_accepted(extra_rule["rules"])),
+        ("variant probe accepts a reviewed rule-list-only change",
+         variant_accepted({"profile": baseline["profile"], "rules": []}),
+         variant_accepted({"profile": "other.v0", "rules": []})),
+        ("variant probe rejects an added contract entry",
+         variant_accepted(baseline),
+         variant_accepted({**baseline, "atoms": {}})),
+        ("contract discrepancies describe the mutated rule",
+         contract_differences(baseline, extra_rule)
+         == [f"rules[{len(baseline['rules'])}]"],
+         contract_differences(baseline, extra_rule) == []),
+        ("profile probe accepts the reviewed profile",
+         contract_differences(profile, profile) == [],
+         contract_differences(profile, widened) == []),
+        ("witness re-derivation accepts the stored witness",
+         witness_accepted(witness),
+         witness_accepted(tampered_decision) or witness_accepted(tampered_facts)),
+        ("witness sweep accepts its own output",
+         sweep_accepted(names), sweep_accepted(names - {"deny-all.json"})),
+        ("contract pairs requirements with the decision",
+         decision_matches(denied, False, claims(denied, False)),
+         decision_matches(denied, False, claims(denied, True))),
+    ]
+    for description, accepted, still_accepted in checks:
+        require(accepted, f"{description}: the reviewed fixture was rejected")
+        require(not still_accepted, f"{description}: {NEGATIVE_CONTROL_HELP}")
+    return len(checks)
+
+
+def main() -> None:
+    validators = load_schemas()
+    profile = check_profile(validators)
+    claim_count = check_claims_registry(validators)
+    facts = [dict(zip(FACT_KEYS, values, strict=True))
+             for values in itertools.product((False, True), repeat=len(FACT_KEYS))]
+    require(len(facts) == 2 ** len(FACT_KEYS), "Expected the full five-fact product")
+    decisions_checked = contract_completeness(facts)
+    rows, evaluations, replays = validate_policies(validators, profile, facts)
+    malformed = check_request_ingress(validators)
+    negatives = check_strict_decoding()
+    check_unicode_handling(validators)
+    check_result_schema(validators)
+    controls = negative_controls(validators)
+
     summary = {
         "scope": "design-fixture validation only",
         "json_schemas_checked": len(validators),
-        "fact_vectors_per_policy": 32,
+        "profile_schema_validated": True,
+        "fact_vectors_per_policy": len(facts),
         "policy_variants": len(rows),
         "concrete_abstract_comparisons": evaluations,
-        "full_contract_decision_checks": 64,
-        "malformed_request_shapes_rejected": len(bad_requests),
-        "strict_decoding_negatives_rejected": len(bad_bytes),
+        "full_contract_decision_checks": decisions_checked,
+        "claim_registry_entries": claim_count,
+        "witnesses_replayed": replays,
+        "negative_controls_passed": controls,
+        "malformed_request_shapes_rejected": malformed,
+        "strict_decoding_negatives_rejected": negatives,
         "lean_proofs_checked": False,
         "rego_parsed_by_opa_or_regorus": False,
         "runtime_conformance_executed": False,
