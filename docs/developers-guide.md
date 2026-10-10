@@ -20,6 +20,7 @@ formatting and prose gate.
 ```bash
 make build
 make check-fmt
+make typecheck
 make lint
 make test
 make design-check

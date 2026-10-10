@@ -70,16 +70,19 @@ python -m pip install -r validation/requirements.txt
 make design-check
 ```
 
-The design check validates JSON contracts, enumerates the 32 abstract fact
-vectors for seven policy variants, compares concrete and abstract fixture
-interpretations, checks that the six requirements characterize the intended
-decision, and records concrete witnesses for each mutation. It does not parse
-Rego with OPA or Regorus and does not invoke Lean.
+The design check validates JSON contracts, including the profile against its
+own schema and reviewed vocabulary; enumerates the 32 abstract fact vectors for
+seven policy variants; compares concrete and abstract fixture interpretations;
+checks that the six requirements characterize the intended decision; replays
+each mutation witness against its rule list; and fails if
+`validation/witnesses/` holds a witness the current run did not generate. It
+does not parse Rego with OPA or Regorus and does not invoke Lean.
 
 The Rust scaffold gates are:
 
 ```bash
 make check-fmt
+make typecheck
 make lint
 make test
 ```

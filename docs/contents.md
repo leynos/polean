@@ -31,8 +31,9 @@ already exist.
 
 ## Machine-readable design
 
-The [contracts directory](../contracts/) contains the profile and JSON schemas.
-The [tenant-write example](../examples/tenant-write/) contains the baseline
-policy, source-neutral policy IR, claims, mutations, and a sample request. The
+The [contracts directory](../contracts/) contains the profile, its schema, and
+the request, policy, claims, and result JSON schemas. The
+[tenant-write example](../examples/tenant-write/) contains the baseline policy,
+source-neutral policy IR, claims, mutations, and a sample request. The
 [validation directory](../validation/) contains executable design-fixture
 checks, recorded results, and mutation witnesses.

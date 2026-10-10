@@ -7,26 +7,26 @@ The module split proposed by the technical design is not yet implemented.
 
 ## Paths and responsibilities
 
-| Path                           | Responsibility                                                                      |
-| ------------------------------ | ----------------------------------------------------------------------------------- |
-| `src/lib.rs`                   | Current Rust crate root and disposable scaffold identity.                           |
-| `tests/`                       | Rust integration tests for implemented public behaviour.                            |
-| `lean/`                        | Reserved home of the pinned Lean package once experiment E0 resolves its toolchain. |
-| `contracts/`                   | Versioned profile, request, policy, claims, result, and CLI contracts.              |
-| `examples/tenant-write/`       | Baseline Rego source, canonical IR, claims, requests, and mutations.                |
-| `validation/`                  | Design-fixture checks and concrete witnesses; not the production checker.           |
-| `docs/`                        | Terms of reference, technical design, guides, vocabulary, and decisions.            |
-| `docs/contents.md`             | Canonical documentation index.                                                      |
-| `.github/workflows/ci.yml`     | Hosted Rust, Markdown, and basic repository gate.                                   |
-| `.github/workflows/design.yml` | Independent design-contract validation lane.                                        |
-| `.github/dependabot.yml`       | Cargo and GitHub Actions dependency updates.                                        |
-| `Cargo.toml`, `Cargo.lock`     | Package metadata, lint policy, and dependency lockfile.                             |
-| `rust-toolchain.toml`          | Pinned Rust toolchain and required components.                                      |
-| `Makefile`                     | Public contributor entry points.                                                    |
-| `AGENTS.md`                    | Contributor and coding-agent instructions.                                          |
-| `.markdownlint-cli2.jsonc`     | Markdown lint policy.                                                               |
-| `.rustfmt.toml`, `clippy.toml` | Rust formatting and lint policy.                                                    |
-| `README.md`, `LICENSE`         | Project introduction and ISC licence.                                               |
+| Path                           | Responsibility                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------------- |
+| `src/lib.rs`                   | Current Rust crate root and disposable scaffold identity.                              |
+| `tests/`                       | Rust integration tests for implemented public behaviour.                               |
+| `lean/`                        | Reserved home of the pinned Lean package once experiment E0 resolves its toolchain.    |
+| `contracts/`                   | Versioned profile, profile schema, request, policy, claims, result, and CLI contracts. |
+| `examples/tenant-write/`       | Baseline Rego source, canonical IR, claims, requests, and mutations.                   |
+| `validation/`                  | Design-fixture checks and concrete witnesses; not the production checker.              |
+| `docs/`                        | Terms of reference, technical design, guides, vocabulary, and decisions.               |
+| `docs/contents.md`             | Canonical documentation index.                                                         |
+| `.github/workflows/ci.yml`     | Hosted Rust, Markdown, and basic repository gate.                                      |
+| `.github/workflows/design.yml` | Independent design-contract validation lane.                                           |
+| `.github/dependabot.yml`       | Cargo and GitHub Actions dependency updates.                                           |
+| `Cargo.toml`, `Cargo.lock`     | Package metadata, lint policy, and dependency lockfile.                                |
+| `rust-toolchain.toml`          | Pinned Rust toolchain and required components.                                         |
+| `Makefile`                     | Public contributor entry points.                                                       |
+| `AGENTS.md`                    | Contributor and coding-agent instructions.                                             |
+| `.markdownlint-cli2.jsonc`     | Markdown lint policy.                                                                  |
+| `.rustfmt.toml`, `clippy.toml` | Rust formatting and lint policy.                                                       |
+| `README.md`, `LICENSE`         | Project introduction and ISC licence.                                                  |
 
 ## Ownership boundaries
 

@@ -49,6 +49,7 @@ Run the relevant subset of:
 
 ```bash
 make check-fmt
+make typecheck
 make lint
 make test
 make design-check
