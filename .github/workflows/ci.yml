@@ -35,6 +35,8 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@2df9e28eb87988518ef3880c34edad45d65b1668
         with:
           globs: '**/*.md'
+      - name: Type-check Rust
+        run: make typecheck
       - name: Lint Rust
         run: make lint
       - name: Test Rust

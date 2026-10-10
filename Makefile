@@ -5,11 +5,11 @@ MDLINT ?= markdownlint-cli2
 CARGO ?= cargo
 PYTHON ?= python3
 
-.PHONY: help all build clean test lint fmt check-fmt markdownlint design-check audit
+.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check audit
 
 SHELL := bash
 
-all: check-fmt lint test design-check ## Run every local commit gate
+all: check-fmt typecheck lint test design-check ## Run every local commit gate
 
 build: ## Build the Rust scaffold
 	$(CARGO) build --all-targets --all-features
@@ -25,6 +25,9 @@ lint: ## Build documentation and run Clippy with warnings denied
 test: ## Run Rust unit, integration, and documentation tests
 	$(CARGO) test --all-targets --all-features
 	RUSTDOCFLAGS="-D warnings" $(CARGO) test --doc --all-features
+
+typecheck: ## Type-check every Rust target with warnings denied
+	RUSTFLAGS="-D warnings" $(CARGO) check --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
