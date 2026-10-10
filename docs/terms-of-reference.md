@@ -42,7 +42,7 @@ establishes a capability; it does not establish product-market fit.
 
 [KNOWN] The domain is authorization policy assurance. Rego is the policy
 language used by Open Policy Agent (OPA), and OPA provides policy evaluation
-and example- based testing workflows. Rego distinguishes undefined results from
+and example-based testing workflows. Rego distinguishes undefined results from
 Boolean values. [R1, R2]
 
 [KNOWN] Three questions require separate answers: whether a policy belongs to

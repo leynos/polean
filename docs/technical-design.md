@@ -183,7 +183,7 @@ The theorem assumes the application supplied the correct attributes. It neither
 authenticates subjects nor infers that an owner identifier is globally unique.
 Missing or malformed requests are `invalid_input`, not evidence that the policy
 has denied a valid request. Tenant equality must never become a precondition:
-that would assume away the attack we want to detect.
+that would assume away the cross-tenant attack.
 
 ## 5. Semantic core and exact finite abstraction
 
@@ -613,7 +613,7 @@ not be reported as proof completion.
 The technical-design structure follows the df12 security-oriented pattern:
 threats and trust boundaries before components, named verification obligations,
 external contracts, explicit failure outcomes, and an editing pass. The terms
-of reference remains the upstream authority for scope. [T1–T3]
+of reference remain the upstream authority for scope. [T1–T3]
 
 ## References
 
