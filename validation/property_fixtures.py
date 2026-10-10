@@ -87,16 +87,23 @@ assert len(ATOM_SOURCES) == len(ATOMS), "Atom sources must be distinct to decode
 # A cap of 64 is a search restriction, not a completeness argument. Distinct
 # strings can share more than 64 leading characters, and an implementation
 # fault could activate only above that length; nothing here rules that out.
-# LONGS and SHARED_PREFIXES below pin the length and prefix boundaries so that
-# the cap does not also exclude the cases where such a fault would first show,
-# but the cap still bounds coverage and is not claimed to be fault-preserving
-# in general.
+# LONG_STRING and SHARED_PREFIXES below deliberately cross that boundary so the
+# cap does not also exclude the cases where such a fault would first show, but
+# coverage remains bounded and is not claimed to be fault-preserving in
+# general. LONG_STRING reaches tenants, ids, and owners alike, since all three
+# are compared.
 TEXT = st.text(max_size=64)
 LONG_STRING = st.integers(min_value=65, max_value=4096).map(lambda n: "a" * n)
+# A pair sharing a prefix that itself runs past the cap, so both members are
+# longer than anything the capped TEXT domain can draw. The extension is
+# non-empty, making the two members unequal and the longer one a strict
+# extension of the other.
 SHARED_PREFIXES = st.tuples(
-    st.text(max_size=64), st.text(min_size=1, max_size=8)
+    st.integers(min_value=65, max_value=2048).map(lambda n: "a" * n),
+    st.text(min_size=1, max_size=8),
 ).map(lambda pair: (pair[0], pair[0] + pair[1]))
 TENANTS = st.sampled_from(["tenant-a", "tenant-b"]) | TEXT | LONG_STRING
+IDS = TEXT | LONG_STRING
 ROLES = st.sampled_from(["admin", "member"]) | TEXT
 ACTIONS = st.sampled_from(["write", "read"]) | TEXT
 # A policy's rule list inside the closed profile: zero to sixteen rules, each
@@ -128,12 +135,12 @@ def requests(draw: st.DrawFn) -> dict[str, Any]:
     return {
         "subject": {
             "tenant": draw(TENANTS),
-            "id": draw(TEXT),
+            "id": draw(IDS),
             "role": draw(ROLES),
         },
         "resource": {
             "tenant": draw(TENANTS),
-            "owner": draw(TEXT),
+            "owner": draw(IDS),
             "locked": draw(st.booleans()),
         },
         "action": draw(ACTIONS),
@@ -176,15 +183,20 @@ def test_equality_ignores_length_and_shared_prefix(
         pair: tuple[str, str], locked: bool) -> None:
     """Only whole-string equality may drive a decision, not length or prefix.
 
-    The string cap bounds the general search, so these boundary cases are
-    drawn explicitly: two strings differing beyond 64 characters must compare
-    unequal, and a string compared with a strict extension of itself must do
-    the same. An implementation that truncated, prefix-compared, or branched
-    on length would diverge here even though the capped domain would not
-    reach it.
+    The general string cap bounds the search, so the cases that cross it are
+    drawn explicitly here. Each member of the pair is longer than the cap and
+    the shorter (by construction) is a strict prefix of the longer, so an
+    implementation that truncated, prefix-compared, or branched on length
+    diverges on these draws. Both compared pairs are exercised: the tenants
+    drive ``same_tenant`` and the ids drive ``owns_resource``.
+
+    Coverage is still bounded. These are two specific shapes of long input
+    among many, so a fault needing some other long-string arrangement may
+    escape both this property and the capped domain.
     """
     left, right = pair
-    assert left != right, "the extension must be non-empty"
+    assert len(left) > 64 and len(right) > 64, pair
+    assert right.startswith(left) and right != left, pair
     request = {
         "subject": {"tenant": left, "id": left, "role": "member"},
         "resource": {"tenant": right, "owner": right, "locked": locked},
@@ -192,10 +204,24 @@ def test_equality_ignores_length_and_shared_prefix(
     }
     VALIDATORS["request"].validate(request)
     facts = VD.facts_of(request)
+    # Strict extensions must compare unequal in both compared positions.
     assert facts["same_tenant"] is False, request
     assert facts["owns_resource"] is False, request
     assert VD.eval_request([["same_tenant"]], request) is False, request
     assert VD.eval_request([["owns_resource"]], request) is False, request
+    # Control: the same long string against itself must compare equal, so the
+    # assertions above cannot be satisfied by an operator that always denies.
+    identical = {
+        "subject": {"tenant": left, "id": left, "role": "member"},
+        "resource": {"tenant": left, "owner": left, "locked": locked},
+        "action": "write",
+    }
+    VALIDATORS["request"].validate(identical)
+    equal_facts = VD.facts_of(identical)
+    assert equal_facts["same_tenant"] is True, identical
+    assert equal_facts["owns_resource"] is True, identical
+    assert VD.eval_request([["same_tenant"]], identical) is True, identical
+    assert VD.eval_request([["owns_resource"]], identical) is True, identical
 
 
 @given(
@@ -311,10 +337,9 @@ def main() -> int:
     silently running once against no examples and reporting a false pass.
 
     The printed figure is the *budget* passed to Hypothesis, not a measured
-    execution count: a property whose inputs are drawn from a small finite
-    domain explores every distinct value long before the budget is spent, and
-    Hypothesis may also stop early. Do not read this as 400 distinct examples
-    per property.
+    execution count. Hypothesis can stop before reaching the budget, including
+    when it exhausts a finite strategy. This output does not report an
+    execution count or establish exhaustive coverage.
     """
     properties = [
         test_concrete_and_abstract_evaluation_agree,

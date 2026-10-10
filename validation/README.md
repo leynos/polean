@@ -51,8 +51,16 @@ already give.
 The string domains are capped for search cost. A cap is a restriction, not a
 completeness argument: distinct strings can share more than the cap in leading
 characters, and an implementation fault could activate only beyond it. The
-boundary cases above cover where such a fault would first appear, but the cap
-still bounds what the general properties can reach.
+boundary property draws pairs that cross the cap, with both members longer than
+it and one a strict extension of the other, and controls them against the same
+long string compared with itself; long strings also reach the tenant, id, and
+owner draws. That covers two specific shapes of long input, not every
+arrangement, so the cap still bounds what the general properties can reach.
+
+The example count the module prints is the budget passed to Hypothesis, not a
+measured execution count. Hypothesis can stop before reaching it, including
+when it exhausts a finite strategy, so the output reports neither an execution
+count nor exhaustive coverage.
 
 The module shares its definitions with `validate_design.py` rather than
 restating them, so it tests the harness the other check runs rather than a
