@@ -30,17 +30,36 @@ machine-readable result is [design-validation.json](design-validation.json).
 searches the admitted input domain for counterexamples, with Hypothesis
 shrinking any it finds while keeping the value valid. It checks that concrete
 and abstract evaluation agree, that abstraction reads the declared comparisons
-rather than merely the declared key names, that concretization is a right
-inverse for the abstraction, that `unlocked` is derived from the locked fact
-rather than an independent sixth fact, that the six claims permit exactly the
-intended decision, and that rendering is injective inside the profile bounds.
-It also decodes rendered text back to its rule list, which is what a
-de-duplicating or reordering renderer violates while still being injective on
-distinct inputs. It shares its definitions with `validate_design.py` rather
-than restating them, so it tests the harness the other check runs rather than a
+rather than merely the declared key names, that only whole-string equality
+drives a decision (pinned by explicit shared-prefix and over-cap boundary
+cases), that concretization is a right inverse for the abstraction, that
+`unlocked` is derived from the locked fact rather than an independent sixth
+fact, that the six claims permit exactly the intended decision, and that
+rendering is injective inside the profile bounds. It also decodes rendered text
+back to its rule list, which is what a de-duplicating or reordering renderer
+violates, and it requires the region between the default declaration and the
+first rule to be exactly the expected template, so stray text there cannot
+escape inspection.
+
+The two renderer properties are not independent. The round trip is a left
+inverse, which implies injectivity outright: if `render(r1) = render(r2)` then
+`r1 = decode(render(r1)) = decode(render(r2)) = r2`. The sampled pair
+comparison is retained because a collision it finds is a direct counterexample,
+but it is the weaker of the two and adds no guarantee the round trip does not
+already give.
+
+The string domains are capped for search cost. A cap is a restriction, not a
+completeness argument: distinct strings can share more than the cap in leading
+characters, and an implementation fault could activate only beyond it. The
+boundary cases above cover where such a fault would first appear, but the cap
+still bounds what the general properties can reach.
+
+The module shares its definitions with `validate_design.py` rather than
+restating them, so it tests the harness the other check runs rather than a
 parallel copy, and it asserts that each property is Hypothesis-wrapped before
 running it, so a property that lost its `@given` decorator fails rather than
-sampling no examples and reporting a false pass.
+sampling no examples and reporting a false pass. The example count it prints is
+the budget passed to Hypothesis, not a measured execution count.
 
 It is a search, not a proof, and it does not replace the enumeration: a
 property suite can miss a fault that the fixed vectors happen to cover, and the

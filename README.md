@@ -86,8 +86,12 @@ The property check searches the admitted input domain rather than the frozen
 vectors. It asserts that concrete and abstract evaluation agree, that every
 fact vector has a concrete request, that `unlocked` is derived from the locked
 fact, that the six claims pin the intended decision, and that rendering is
-injective inside the profile bounds. Hypothesis shrinks any counterexample it
-finds.
+injective inside the profile bounds. It also decodes rendered text back to its
+rule list, which is the stronger renderer guarantee: a left inverse implies
+injectivity, so the sampled pair comparison adds nothing the round trip does
+not already give. Hypothesis shrinks any counterexample it finds. The example
+count printed is Hypothesis's budget, not a measured execution count, and the
+string domains are capped, so the search bounds what it reaches.
 
 Neither check parses Rego with OPA or Regorus, and neither invokes Lean. The
 model obligations `abstraction_preserves`, `check_sound`, and `witness_sound`
