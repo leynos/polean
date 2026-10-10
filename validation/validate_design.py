@@ -44,9 +44,106 @@ PROFILE_EXCLUDED = (
 )
 NEGATIVE_CONTROL_HELP = "a negative control did not detect its injected fault"
 WITNESS_DIR = ROOT / "validation/witnesses"
+# Module-level documentation for the seven source fixtures. Ordinary comments
+# carry no semantics in the admitted profile, so this text documents each
+# fixture without widening the grammar or the policy contract. The harness
+# holds the reviewed text and re-renders it into every check, which is why a
+# fixture whose comment drifts from this mapping fails the source check rather
+# than being silently tolerated.
+SOURCE_HEADERS = {
+    "baseline": (
+        "# Polean tenant-write v0 baseline policy fixture.\n"
+        "#\n"
+        "# Purpose: the admitted reference module for profile polean.tenant-write.v0.\n"
+        "# It satisfies all six claims registered in examples/tenant-write/claims.json,\n"
+        "# so it defines the intended decision that each mutation fixture departs from.\n"
+        "#\n"
+        "# examples/tenant-write/policy.json holds the equivalent rule-list IR.\n"
+        "# validation/validate_design.py re-renders that IR into this text and fails on\n"
+        "# any byte difference between the two.\n"
+        "\n"
+    ),
+    "admin-only": (
+        "# Polean tenant-write v0 mutation fixture: admin-only.\n"
+        "#\n"
+        "# Purpose: a deliberately weakened policy that drops the owner rule, so\n"
+        "# owner-write-available must fail while the other five claims still hold.\n"
+        "#\n"
+        "# examples/tenant-write/mutations/admin-only/policy.json holds the equivalent\n"
+        "# rule-list IR. validation/validate_design.py re-renders that IR into this\n"
+        "# text, requires the variant to differ from the baseline only inside its rule\n"
+        "# list, and records the counterexample in validation/witnesses/admin-only.json.\n"
+        "\n"
+    ),
+    "cross-tenant-admin": (
+        "# Polean tenant-write v0 mutation fixture: cross-tenant-admin.\n"
+        "#\n"
+        "# Purpose: a deliberately weakened policy that drops the administrator tenant\n"
+        "# guard, so tenant-isolation must fail while the other five claims still hold.\n"
+        "#\n"
+        "# examples/tenant-write/mutations/cross-tenant-admin/policy.json holds the\n"
+        "# equivalent rule-list IR. validation/validate_design.py re-renders that IR into\n"
+        "# this text, requires the variant to differ from the baseline only inside its\n"
+        "# rule list, and records the counterexample in\n"
+        "# validation/witnesses/cross-tenant-admin.json.\n"
+        "\n"
+    ),
+    "deny-all": (
+        "# Polean tenant-write v0 mutation fixture: deny-all.\n"
+        "#\n"
+        "# Purpose: a deliberately weakened policy that keeps no non-default rules, so\n"
+        "# both availability claims must fail while the four safety claims still hold.\n"
+        "# This fixture is what stops the remaining claims from passing by vacuity.\n"
+        "#\n"
+        "# examples/tenant-write/mutations/deny-all/policy.json holds the equivalent\n"
+        "# rule-list IR. validation/validate_design.py re-renders that IR into this\n"
+        "# text, requires the variant to differ from the baseline only inside its rule\n"
+        "# list, and records the counterexample in validation/witnesses/deny-all.json.\n"
+        "\n"
+    ),
+    "locked-owner": (
+        "# Polean tenant-write v0 mutation fixture: locked-owner.\n"
+        "#\n"
+        "# Purpose: a deliberately weakened policy that drops the owner lock guard, so\n"
+        "# locked-requires-admin must fail while the other five claims still hold.\n"
+        "#\n"
+        "# examples/tenant-write/mutations/locked-owner/policy.json holds the equivalent\n"
+        "# rule-list IR. validation/validate_design.py re-renders that IR into this\n"
+        "# text, requires the variant to differ from the baseline only inside its rule\n"
+        "# list, and records the counterexample in validation/witnesses/locked-owner.json.\n"
+        "\n"
+    ),
+    "non-write-admin": (
+        "# Polean tenant-write v0 mutation fixture: non-write-admin.\n"
+        "#\n"
+        "# Purpose: a deliberately weakened policy that drops the administrator action\n"
+        "# guard, so write-only must fail while the other five claims still hold.\n"
+        "#\n"
+        "# examples/tenant-write/mutations/non-write-admin/policy.json holds the\n"
+        "# equivalent rule-list IR. validation/validate_design.py re-renders that IR into\n"
+        "# this text, requires the variant to differ from the baseline only inside its\n"
+        "# rule list, and records the counterexample in\n"
+        "# validation/witnesses/non-write-admin.json.\n"
+        "\n"
+    ),
+    "unowned-unlocked": (
+        "# Polean tenant-write v0 mutation fixture: unowned-unlocked.\n"
+        "#\n"
+        "# Purpose: a deliberately weakened policy that drops the owner identity guard,\n"
+        "# so admin-or-owner must fail while the other five claims still hold.\n"
+        "#\n"
+        "# examples/tenant-write/mutations/unowned-unlocked/policy.json holds the\n"
+        "# equivalent rule-list IR. validation/validate_design.py re-renders that IR into\n"
+        "# this text, requires the variant to differ from the baseline only inside its\n"
+        "# rule list, and records the counterexample in\n"
+        "# validation/witnesses/unowned-unlocked.json.\n"
+        "\n"
+    ),
+}
 
 
 def load(path: Path) -> Any:
+    """Read one JSON document as UTF-8 without repairing its contents."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -59,6 +156,14 @@ def extract(path: Path, name: str) -> Any:
 
 
 def facts_of(request: dict[str, Any]) -> dict[str, bool]:
+    """Compute the five abstract facts by comparison, without a rule list.
+
+    This is the design-stage stand-in for the abstraction α the technical
+    design defines over typed request fields: equality of the two tenant names,
+    the literal write action, the literal administrator role, equality of
+    subject and owner identifiers, and the locked flag. It reads the request
+    directly so that ``eval_request`` remains a separate concrete evaluator.
+    """
     subject, resource = request["subject"], request["resource"]
     return {
         "same_tenant": subject["tenant"] == resource["tenant"],
@@ -70,6 +175,14 @@ def facts_of(request: dict[str, Any]) -> dict[str, bool]:
 
 
 def concretize(facts: dict[str, bool]) -> dict[str, Any]:
+    """Choose one schema-valid request whose facts are exactly the given ones.
+
+    The design calls this γ. It fixes two tenant names, two subject
+    identifiers, administrator versus member, write versus read, and the locked
+    flag, so that ``facts_of(concretize(f)) == f`` for every fact vector. The
+    check that this holds is what lets a witness for an abstract counterexample
+    be replayed as a concrete request.
+    """
     return {
         "subject": {
             "tenant": "tenant-a", "id": "subject-a",
@@ -85,7 +198,14 @@ def concretize(facts: dict[str, bool]) -> dict[str, Any]:
 
 
 def eval_facts(rules: list[list[str]], facts: dict[str, bool]) -> bool:
+    """Evaluate a rule list against facts directly. This is ``evalFacts``.
+
+    ``unlocked`` is the derived negation of the locked fact rather than an
+    independent sixth fact, matching the rule that a rule says ``allow`` when
+    any one of its bodies holds and every comparison in that body holds.
+    """
     def atom(name: str) -> bool:
+        """Decide one named atom, deriving ``unlocked`` from the locked fact."""
         return not facts["locked"] if name == "unlocked" else facts[name]
     return any(all(atom(name) for name in rule) for rule in rules)
 
@@ -93,6 +213,7 @@ def eval_facts(rules: list[list[str]], facts: dict[str, bool]) -> bool:
 def eval_request(rules: list[list[str]], r: dict[str, Any]) -> bool:
     """A direct concrete interpretation, separate from facts_of."""
     def atom(name: str) -> bool:
+        """Decide one named atom from the request's own fields."""
         if name == "same_tenant":
             return r["subject"]["tenant"] == r["resource"]["tenant"]
         if name == "write_action":
@@ -110,6 +231,13 @@ def eval_request(rules: list[list[str]], r: dict[str, Any]) -> bool:
 
 
 def claims(f: dict[str, bool], allowed: bool) -> dict[str, bool]:
+    """Report which of the six registered claims one fact vector satisfies.
+
+    A safety claim holds when the decision does not grant the access the claim
+    forbids, so a denial discharges it. An availability claim instead demands
+    that a stated positive combination is allowed, which is what stops the
+    safety claims from being satisfied by a policy that denies everything.
+    """
     t, w, a, o, locked = (f[k] for k in FACT_KEYS)
     return {
         "tenant-isolation": not allowed or t,
@@ -122,6 +250,7 @@ def claims(f: dict[str, bool], allowed: bool) -> dict[str, bool]:
 
 
 def require(condition: bool, message: str) -> None:
+    """Fail the run with a named diagnostic when a design check does not hold."""
     if not condition:
         raise AssertionError(message)
 
@@ -129,6 +258,7 @@ def require(condition: bool, message: str) -> None:
 def strict_json(raw: bytes) -> Any:
     """Exercise the proposed ingress rules independently of the JSON schema."""
     def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        """Reject a document that repeats a key instead of keeping the last."""
         result: dict[str, Any] = {}
         for key, value in pairs:
             if key in result:
@@ -137,12 +267,14 @@ def strict_json(raw: bytes) -> Any:
         return result
 
     def no_constant(value: str) -> None:
+        """Reject the non-JSON constants NaN, Infinity, and -Infinity."""
         raise ValueError(f"Non-JSON numeric constant: {value}")
 
     result = json.loads(raw.decode("utf-8", errors="strict"),
                         object_pairs_hook=unique, parse_constant=no_constant)
 
     def inspect(value: Any) -> None:
+        """Reject any string containing an unpaired Unicode surrogate."""
         if isinstance(value, str):
             if any(0xD800 <= ord(ch) <= 0xDFFF for ch in value):
                 raise ValueError("Unpaired Unicode surrogate")
@@ -201,9 +333,35 @@ def rule_rendering_reason(rule: list[str], atoms: dict[str, str]) -> str | None:
     return None
 
 
-def render_source(rules: list[list[str]], atoms: dict[str, str]) -> str:
-    """Render the reviewed Rego template for a policy's rule list."""
-    text = "package authz\n\nimport rego.v1\n\ndefault allow := false\n"
+def header_reason(name: str, header: str) -> str | None:
+    """Return why a module documentation header is unusable for a fixture.
+
+    The header is the only part of a rendered fixture that is not derived from
+    the rule-list IR, so it is checked structurally: it must be a single
+    comment block naming its own fixture, and it must end with the blank line
+    that separates documentation from the module body. A header copied from
+    another fixture satisfies every other check while describing the wrong
+    policy, which is why the name is part of the requirement.
+    """
+    if not header:
+        return "empty header"
+    if not header.endswith("\n\n"):
+        return "header must end with a blank separator line"
+    # The separator is a blank line, so it is excluded before the per-line walk
+    # rather than being reported as an interior blank line.
+    for line in header.rstrip("\n").splitlines():
+        if not line:
+            return "header must not contain a blank line"
+        if not line.startswith("#"):
+            return f"header line is not a comment: {line!r}"
+    if name not in header.splitlines()[0]:
+        return f"header does not name its fixture {name!r} on its first line"
+    return None
+
+
+def render_source(name: str, rules: list[list[str]], atoms: dict[str, str]) -> str:
+    """Render the reviewed Rego template for a named policy's rule list."""
+    text = SOURCE_HEADERS[name] + "package authz\n\nimport rego.v1\n\ndefault allow := false\n"
     for rule in rules:
         text += "\nallow if {\n" + "".join(f"    {atoms[a]}\n" for a in rule) + "}\n"
     return text
@@ -326,7 +484,7 @@ def validate_policies(validators: dict[str, Draft202012Validator],
         for rule in rules:
             reason = rule_rendering_reason(rule, atoms)
             require(reason is None, f"Unrenderable rule in {name}: {reason}")
-        require(render_source(rules, atoms) == (folder / "policy.rego").read_text(),
+        require(render_source(name, rules, atoms) == (folder / "policy.rego").read_text(),
                 f"Source/fixture text drift: {name}")
 
         failures: dict[str, Any] = {}
@@ -453,12 +611,15 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
         ROOT / "examples/tenant-write/mutations/deny-all/policy.json")["rules"]
 
     def request_accepted(r: dict[str, Any]) -> bool:
+        """Report whether the request contract admits a document."""
         return validators["request"].is_valid(r)
 
     def render_accepted(rules: list[list[str]]) -> bool:
-        return render_source(rules, atoms) == baseline_source
+        """Report whether a rule list renders to the baseline source text."""
+        return render_source("baseline", rules, atoms) == baseline_source
 
     def witness_accepted(w: dict[str, Any]) -> bool:
+        """Report whether a stored witness still refutes its named claim."""
         try:
             check_witness("deny-all", w, deny_all_rules, EXPECTED_FAILURES["deny-all"])
         except (AssertionError, ValueError):
@@ -466,16 +627,23 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
         return True
 
     def variant_accepted(variant: dict[str, Any]) -> bool:
+        """Report whether a variant keeps the profile and every non-rule entry."""
         if variant.get("profile") != baseline.get("profile"):
             return False
         return not [path for path in contract_differences(baseline, variant)
                     if not path.startswith("rules")]
 
     def sweep_accepted(generated: set[str]) -> bool:
+        """Report whether a generated set covers every stored witness."""
         return bool(generated) and not stale_witness_names(WITNESS_DIR, generated)
 
     def profile_schema_accepted(p: dict[str, Any]) -> bool:
+        """Report whether the profile contract admits a document."""
         return validators["profile"].is_valid(p)
+
+    def header_accepted(name: str, header: str) -> bool:
+        """Report whether a fixture's module documentation is usable."""
+        return header_reason(name, header) is None
 
     denied = {"same_tenant": False, "write_action": True, "admin_role": True,
               "owns_resource": False, "locked": False}
@@ -534,6 +702,15 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
          profile_schema_accepted(profile), profile_schema_accepted(unadmitted_atom)),
         ("profile schema rejects an unreviewed top-level entry",
          profile_schema_accepted(profile), profile_schema_accepted(extra_profile_entry)),
+        ("module documentation accepts the baseline header",
+         header_accepted("baseline", SOURCE_HEADERS["baseline"]),
+         header_accepted("baseline", SOURCE_HEADERS["admin-only"])),
+        ("module documentation rejects a bodyless header",
+         header_accepted("baseline", SOURCE_HEADERS["baseline"]),
+         header_accepted("baseline", "package authz\n")),
+        ("module documentation rejects unseparated prose",
+         header_accepted("baseline", SOURCE_HEADERS["baseline"]),
+         header_accepted("baseline", SOURCE_HEADERS["baseline"].rstrip("\n") + "\n")),
         ("witness re-derivation accepts the stored witness",
          witness_accepted(witness),
          witness_accepted(tampered_decision) or witness_accepted(tampered_facts)),
@@ -550,6 +727,17 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
 
 
 def main() -> None:
+    """Run every design-fixture check and record the machine-readable result.
+
+    Each check raises AssertionError with a named diagnostic on failure, so a
+    non-zero exit means the recorded summary was not written for the fixture
+    set that was read.
+    """
+    require(set(SOURCE_HEADERS) == set(EXPECTED_FAILURES),
+            "Every policy variant needs exactly one module documentation header")
+    for name, header in SOURCE_HEADERS.items():
+        reason = header_reason(name, header)
+        require(reason is None, f"Unusable module documentation for {name}: {reason}")
     validators = load_schemas()
     profile = check_profile(validators)
     claim_count = check_claims_registry(validators)
@@ -567,6 +755,7 @@ def main() -> None:
     summary = {
         "scope": "design-fixture validation only",
         "json_schemas_checked": len(validators),
+        "source_headers_documented": len(SOURCE_HEADERS),
         "profile_schema_validated": True,
         "fact_vectors_per_policy": len(facts),
         "policy_variants": len(rows),

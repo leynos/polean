@@ -71,12 +71,28 @@ make design-check
 ```
 
 The design check validates JSON contracts, including the profile against its
-own schema and reviewed vocabulary; enumerates the 32 abstract fact vectors for
+own schema and reviewed vocabulary; renders each fixture from its rule-list IR
+under a reviewed module header; enumerates the 32 abstract fact vectors for
 seven policy variants; compares concrete and abstract fixture interpretations;
 checks that the six requirements characterize the intended decision; replays
 each mutation witness against its rule list; and fails if
-`validation/witnesses/` holds a witness the current run did not generate. It
-does not parse Rego with OPA or Regorus and does not invoke Lean.
+`validation/witnesses/` holds a witness the current run did not generate.
+
+```bash
+make design-properties
+```
+
+The property check searches the admitted input domain rather than the frozen
+vectors. It asserts that concrete and abstract evaluation agree, that every
+fact vector has a concrete request, that `unlocked` is derived from the locked
+fact, that the six claims pin the intended decision, and that rendering is
+injective inside the profile bounds. Hypothesis shrinks any counterexample it
+finds.
+
+Neither check parses Rego with OPA or Regorus, and neither invokes Lean. The
+model obligations `abstraction_preserves`, `check_sound`, and `witness_sound`
+remain unproved design targets; a passing property run is sampling, and it does
+not upgrade the explicitly trusted source frontend to a checked translation.
 
 The Rust scaffold gates are:
 

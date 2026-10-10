@@ -9,7 +9,8 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - Git;
 - the Rust toolchain pinned by `rust-toolchain.toml`;
 - Python 3.11 or later; and
-- `jsonschema` from `validation/requirements.txt` for design checks.
+- `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
+  checks.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
 `mdtablefix` 0.6.0 or later and `markdownlint-cli2` to reproduce every
@@ -24,12 +25,20 @@ make typecheck
 make lint
 make test
 make design-check
+make design-properties
 make all
 ```
 
 `make design-check` may rewrite the committed validation summary and witness
 files after verifying them. Review those changes rather than assuming any
-regeneration is harmless.
+regeneration is harmless. `make design-properties` only reads the repository
+and writes nothing.
+
+The seven source fixtures are generated from their rule-list IR plus a reviewed
+module header held in `validate_design.py`, and the design check fails on any
+byte difference between the rendered text and the committed file. Edit the rule
+list or the header and regenerate; do not hand-edit a `.rego` fixture, because
+the check will reject the result.
 
 ## Change discipline
 

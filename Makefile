@@ -5,11 +5,11 @@ MDLINT ?= markdownlint-cli2
 CARGO ?= cargo
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check audit
+.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties audit
 
 SHELL := bash
 
-all: check-fmt typecheck lint test design-check ## Run every local commit gate
+all: check-fmt typecheck lint test design-check design-properties ## Run every local commit gate
 
 build: ## Build the Rust scaffold
 	$(CARGO) build --all-targets --all-features
@@ -43,6 +43,9 @@ markdownlint: ## Lint Markdown sources
 
 design-check: ## Validate schemas, policy fixtures, abstractions, and witnesses
 	$(PYTHON) validation/validate_design.py
+
+design-properties: ## Search the admitted domain for model-side counterexamples
+	$(PYTHON) validation/property_fixtures.py
 
 audit: ## Audit Rust dependencies for known vulnerabilities
 	$(CARGO) audit

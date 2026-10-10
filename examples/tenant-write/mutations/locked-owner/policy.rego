@@ -1,3 +1,13 @@
+# Polean tenant-write v0 mutation fixture: locked-owner.
+#
+# Purpose: a deliberately weakened policy that drops the owner lock guard, so
+# locked-requires-admin must fail while the other five claims still hold.
+#
+# examples/tenant-write/mutations/locked-owner/policy.json holds the equivalent
+# rule-list IR. validation/validate_design.py re-renders that IR into this
+# text, requires the variant to differ from the baseline only inside its rule
+# list, and records the counterexample in validation/witnesses/locked-owner.json.
+
 package authz
 
 import rego.v1

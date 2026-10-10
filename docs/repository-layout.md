@@ -14,7 +14,7 @@ The module split proposed by the technical design is not yet implemented.
 | `lean/`                        | Reserved home of the pinned Lean package once experiment E0 resolves its toolchain.    |
 | `contracts/`                   | Versioned profile, profile schema, request, policy, claims, result, and CLI contracts. |
 | `examples/tenant-write/`       | Baseline Rego source, canonical IR, claims, requests, and mutations.                   |
-| `validation/`                  | Design-fixture checks and concrete witnesses; not the production checker.              |
+| `validation/`                  | Design-fixture checks, property checks, and witnesses; not the production checker.     |
 | `docs/`                        | Terms of reference, technical design, guides, vocabulary, and decisions.               |
 | `docs/contents.md`             | Canonical documentation index.                                                         |
 | `.github/workflows/ci.yml`     | Hosted Rust, Markdown, and basic repository gate.                                      |
@@ -38,8 +38,11 @@ tests or documentation.
 
 The Python validation harness owns design-fixture consistency only. It must not
 claim proof discharge, Rego semantic equivalence, or production runtime
-correctness. Once the Rust frontend or Lean package exists, their checks belong
-in separate lanes with distinct result language.
+correctness. Its properties are stated in the shape of the model obligations so
+a false statement is caught early, but a passing search is sampling rather than
+kernel-checked quantification, and it cannot stand in for the Lean development.
+Once the Rust frontend or Lean package exists, their checks belong in separate
+lanes with distinct result language.
 
 Update [documentation contents](contents.md) when adding, removing, or renaming
 durable documents. Prefer Make targets for contributor entry points. Generated
