@@ -3,12 +3,25 @@
 
 Run from any directory with Python 3.11+ and jsonschema 4.x installed.
 This script does not parse Rego, execute OPA/Regorus, or invoke Lean.
+
+The reviewed documents are read through the read-only ``Repository`` boundary
+and handed to the checks as data, so an ordinary check cannot reach the
+filesystem at all; ``check_boundaries`` is the one exception, and it reads the
+repository only to prove that the other checks changed nothing. The publishing
+command is the only holder of the ``Workspace`` write boundary. A read or write
+that fails is reported as one ``HarnessIOError`` naming the file, a run that
+fails a check publishes nothing, and any other exception keeps its traceback
+because it is a defect in the harness rather than a finding about a fixture.
 """
 from __future__ import annotations
 
 import copy
 import itertools
 import json
+import sys
+import tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +56,10 @@ PROFILE_EXCLUDED = (
     "numeric expressions", "collections", "arbitrary Lean source", "custom invariants",
 )
 NEGATIVE_CONTROL_HELP = "a negative control did not detect its injected fault"
-WITNESS_DIR = ROOT / "validation/witnesses"
+# Repository-relative, so the boundary classes below are the only place a path
+# is turned into a filesystem operation.
+WITNESS_DIRECTORY = "validation/witnesses"
+SUMMARY_DOCUMENT = "validation/design-validation.json"
 # Module-level documentation for the seven source fixtures. Ordinary comments
 # carry no semantics in the admitted profile, so this text documents each
 # fixture without widening the grammar or the policy contract. The harness
@@ -142,16 +158,115 @@ SOURCE_HEADERS = {
 }
 
 
-def load(path: Path) -> Any:
-    """Read one JSON document as UTF-8 without repairing its contents."""
-    return json.loads(path.read_text(encoding="utf-8"))
+class HarnessIOError(RuntimeError):
+    """One filesystem failure at the harness boundary, naming the file involved.
+
+    A missing document, an unreadable one, malformed JSON, or a failed write is
+    reported in this one shape, so the command can report it without guessing
+    which library raised what.
+    """
 
 
-def extract(path: Path, name: str) -> Any:
-    """Read one folder's contract document and reject any unknown entry."""
-    document = load(path / name)
+@dataclass(frozen=True)
+class Repository:
+    """Read-only access to the reviewed documents the checks consume.
+
+    Every method either returns a value or raises ``HarnessIOError`` naming the
+    document, and every path is built here from a repository-relative name, so
+    a check names a document and receives its contents rather than reaching for
+    a path of its own.
+    """
+
+    root: Path
+
+    def path(self, relative: str) -> Path:
+        """Return the absolute path of one repository-relative document."""
+        return self.root / relative
+
+    def read_text(self, relative: str) -> str:
+        """Read one document as strict UTF-8, without repairing its contents."""
+        try:
+            return self.path(relative).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise HarnessIOError(f"cannot read {relative}: {error}") from error
+
+    def read_json(self, relative: str) -> Any:
+        """Read one JSON document without repairing or normalising it."""
+        try:
+            return json.loads(self.read_text(relative))
+        except json.JSONDecodeError as error:
+            raise HarnessIOError(f"invalid JSON in {relative}: {error}") from error
+
+    def list_json(self, directory: str) -> list[str]:
+        """List the JSON documents in one directory, sorted by file name."""
+        try:
+            names = sorted(entry.name for entry in self.path(directory).glob("*.json"))
+        except OSError as error:
+            raise HarnessIOError(f"cannot list {directory}: {error}") from error
+        return [f"{directory}/{name}" for name in names]
+
+    def state(self, relative: str) -> tuple[int, int]:
+        """Return a document's size and modification time for seam comparisons.
+
+        Content alone cannot show whether a check rewrote a document with the
+        same bytes, so the modification time is compared as well.
+        """
+        try:
+            stat = self.path(relative).stat()
+        except OSError as error:
+            raise HarnessIOError(f"cannot stat {relative}: {error}") from error
+        return stat.st_size, stat.st_mtime_ns
+
+
+class Workspace(Repository):
+    """The read-write boundary the publishing command alone receives.
+
+    A workspace can do everything a repository can, plus the two writes the
+    command needs, so the capability to change the tree appears in the
+    command's parameter list instead of being implied by a module constant.
+    """
+
+    def write_json(self, relative: str, value: Any) -> None:
+        """Write one JSON document, creating its directory if necessary."""
+        try:
+            path = self.path(relative)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8")
+        except OSError as error:
+            raise HarnessIOError(f"cannot write {relative}: {error}") from error
+
+    def remove(self, relative: str) -> None:
+        """Remove one document if it is present; absence is not a failure."""
+        try:
+            self.path(relative).unlink(missing_ok=True)
+        except OSError as error:
+            raise HarnessIOError(f"cannot remove {relative}: {error}") from error
+
+
+def policy_folder(name: str) -> str:
+    """Return the repository-relative folder holding one variant's contracts."""
+    if name == "baseline":
+        return "examples/tenant-write"
+    return f"examples/tenant-write/mutations/{name}"
+
+
+def load_schemas(repo: Repository) -> dict[str, Draft202012Validator]:
+    """Meta-validate every contract schema and index it by contract name."""
+    validators: dict[str, Draft202012Validator] = {}
+    for relative in repo.list_json("contracts"):
+        if not relative.endswith(".schema.json"):
+            continue
+        schema = repo.read_json(relative)
+        Draft202012Validator.check_schema(schema)
+        validators[Path(relative).stem.removesuffix(".schema")] = Draft202012Validator(schema)
+    return validators
+
+
+def extract(document: Any, label: str) -> Any:
+    """Accept one folder's contract document and reject any unknown entry."""
     require(set(document) <= {"rules", "profile"},
-            f"Unknown top-level entry in {path / name}: {sorted(set(document))}")
+            f"Unknown top-level entry in {label}: {sorted(set(document))}")
     return document
 
 
@@ -413,25 +528,53 @@ def check_witness(name: str, witnesses: dict[str, Any], rules: list[list[str]],
                 f"Witness does not refute {name}/{claim_id}")
 
 
-def stale_witness_names(directory: Path, generated: set[str]) -> list[str]:
-    """List witness files the current run did not generate."""
-    return sorted(path.name for path in directory.glob("*.json")
-                  if path.name not in generated)
+def stale_witness_names(stored: set[str], generated: set[str]) -> list[str]:
+    """List stored witness file names the current run did not generate."""
+    return sorted(stored - generated)
 
 
-def load_schemas() -> dict[str, Draft202012Validator]:
-    """Meta-validate every contract schema and index it by contract name."""
-    validators: dict[str, Draft202012Validator] = {}
-    for path in sorted((ROOT / "contracts").glob("*.schema.json")):
-        schema = load(path)
-        Draft202012Validator.check_schema(schema)
-        validators[path.stem.removesuffix(".schema")] = Draft202012Validator(schema)
-    return validators
+@dataclass(frozen=True)
+class Fixtures:
+    """Every reviewed document the checks read, loaded once at the boundary.
+
+    Loading is a separate step from checking so the checks receive data: a check
+    that wanted a file would have to take it as an argument, which keeps the
+    seam visible to a reviewer instead of hiding a read inside a query.
+    """
+
+    validators: dict[str, Draft202012Validator]
+    profile: dict[str, Any]
+    claims_manifest: dict[str, Any]
+    policies: dict[str, dict[str, Any]]
+    sources: dict[str, str]
+    request: dict[str, Any]
+    stored_witnesses: dict[str, dict[str, Any]]
+
+    @classmethod
+    def load(cls, repo: Repository) -> Fixtures:
+        """Read the schemas, contracts, fixtures, and stored witnesses."""
+        policies: dict[str, dict[str, Any]] = {}
+        sources: dict[str, str] = {}
+        for name in EXPECTED_FAILURES:
+            folder = policy_folder(name)
+            policies[name] = extract(repo.read_json(f"{folder}/policy.json"),
+                                     f"{folder}/policy.json")
+            sources[name] = repo.read_text(f"{folder}/policy.rego")
+        return cls(
+            validators=load_schemas(repo),
+            profile=repo.read_json("contracts/profile.json"),
+            claims_manifest=repo.read_json("examples/tenant-write/claims.json"),
+            policies=policies,
+            sources=sources,
+            request=repo.read_json("examples/tenant-write/request.json"),
+            stored_witnesses={Path(relative).name: repo.read_json(relative)
+                              for relative in repo.list_json(WITNESS_DIRECTORY)},
+        )
 
 
-def check_profile(validators: dict[str, Draft202012Validator]) -> dict[str, Any]:
+def check_profile(validators: dict[str, Draft202012Validator],
+                  profile: dict[str, Any]) -> None:
     """Validate the profile document and its closed vocabulary."""
-    profile = load(ROOT / "contracts/profile.json")
     validators["profile"].validate(profile)
     require(tuple(profile["atoms"]) == PROFILE_ATOM_NAMES, "Profile atoms mismatch")
     require(tuple(profile["facts"]) == FACT_KEYS, "Profile facts mismatch")
@@ -443,32 +586,52 @@ def check_profile(validators: dict[str, Draft202012Validator]) -> dict[str, Any]
             "Profile must forbid network access")
     require(profile["assurance"]["source_binding"] == "trusted frontend",
             "Profile must keep the source frontend explicitly trusted")
-    return profile
 
 
-def check_claims_registry(validators: dict[str, Draft202012Validator]) -> int:
+def check_claims_registry(validators: dict[str, Draft202012Validator],
+                          manifest: dict[str, Any]) -> int:
     """Validate the claim manifest and require it to list every fixed claim."""
-    manifest = load(ROOT / "examples/tenant-write/claims.json")
     validators["claims"].validate(manifest)
     require(set(manifest["claims"]) == set(CLAIM_IDS), "Claim registry mismatch")
     return len(manifest["claims"])
 
 
-def validate_policies(validators: dict[str, Draft202012Validator],
-                      profile: dict[str, Any],
-                      facts: list[dict[str, bool]]) -> tuple[list[dict[str, Any]], int, int]:
-    """Compare every variant's fixtures, witnesses, and rendered source."""
-    atoms = profile["atoms"]
-    baseline = extract(ROOT / "examples/tenant-write", "policy.json")
-    WITNESS_DIR.mkdir(exist_ok=True)
+@dataclass(frozen=True)
+class PolicyReview:
+    """What a pure review of every policy variant produced.
+
+    ``witnesses`` maps a variant name to the counterexamples it generated, keyed
+    by claim and shaped exactly as the published document; a variant that
+    refutes nothing maps to an empty document, which is what removes its witness
+    on publication. ``rules`` echoes the rule list each witness was derived
+    from, so the publishing command can replay a persisted witness without
+    reading the policy contracts a second time.
+    """
+
+    rows: list[dict[str, Any]]
+    evaluations: int
+    witnesses: dict[str, dict[str, dict[str, Any]]]
+    rules: dict[str, list[list[str]]]
+
+
+def validate_policies(validators: dict[str, Draft202012Validator], fixtures: Fixtures,
+                      facts: list[dict[str, bool]]) -> PolicyReview:
+    """Compare every variant's fixtures, witnesses, and rendered source.
+
+    Pure with respect to storage: it reads only the already-loaded ``fixtures``
+    and returns the counterexamples it generated, so nothing reaches the
+    filesystem and a caller can inspect exactly what a run would publish. The
+    variant set and each expected failure set are reviewed constants, so neither
+    can be widened by editing a contract document.
+    """
+    atoms = fixtures.profile["atoms"]
+    baseline = fixtures.policies["baseline"]
     rows: list[dict[str, Any]] = []
     evaluations = 0
-    replays = 0
-    generated: set[str] = set()
+    witnesses: dict[str, dict[str, dict[str, Any]]] = {}
+    rules_by_name: dict[str, list[list[str]]] = {}
     for name, expected_failures in EXPECTED_FAILURES.items():
-        folder = (ROOT / "examples/tenant-write" if name == "baseline"
-                  else ROOT / "examples/tenant-write/mutations" / name)
-        policy = extract(folder, "policy.json")
+        policy = fixtures.policies[name]
         validators["policy"].validate(policy)
         # A variant may differ from the baseline only in its rule list, which is
         # what its reviewed mutation entry describes. Any other changed leaf
@@ -484,7 +647,7 @@ def validate_policies(validators: dict[str, Draft202012Validator],
         for rule in rules:
             reason = rule_rendering_reason(rule, atoms)
             require(reason is None, f"Unrenderable rule in {name}: {reason}")
-        require(render_source(name, rules, atoms) == (folder / "policy.rego").read_text(),
+        require(render_source(name, rules, atoms) == fixtures.sources[name],
                 f"Source/fixture text drift: {name}")
 
         failures: dict[str, Any] = {}
@@ -506,25 +669,50 @@ def validate_policies(validators: dict[str, Draft202012Validator],
         if name == "baseline":
             require(allow_count == 5, "Baseline expected to allow 5 of 32 vectors")
 
-        witness_path = WITNESS_DIR / f"{name}.json"
-        if failures:
-            witness_path.write_text(
-                json.dumps(failures, ensure_ascii=False, indent=2) + "\n")
-            generated.add(witness_path.name)
-            check_witness(name, load(witness_path), rules, expected_failures)
-            replays += 1
-        elif witness_path.exists():
-            witness_path.unlink()
+        witnesses[name] = failures
+        rules_by_name[name] = rules
         rows.append({"policy": name, "vectors": len(facts), "allowed_vectors": allow_count,
                      "failed_claims": sorted(failures)})
-    stale = stale_witness_names(WITNESS_DIR, generated)
+    return PolicyReview(rows=rows, evaluations=evaluations,
+                        witnesses=witnesses, rules=rules_by_name)
+
+
+def publish_witnesses(workspace: Workspace, review: PolicyReview) -> int:
+    """Persist a review's witnesses, then replay them from the same boundary.
+
+    Each witness is written, read back, and re-derived from its recorded request
+    and rule list, so the replay checks the persisted document rather than the
+    structure still held in memory. A variant that refutes nothing has its
+    witness removed, and any file left in the witness directory that this run
+    did not generate fails the command, so a retired mutation cannot leave a
+    stale counterexample behind.
+    """
+    kept: set[str] = set()
+    for name, failures in review.witnesses.items():
+        relative = f"{WITNESS_DIRECTORY}/{name}.json"
+        if failures:
+            workspace.write_json(relative, failures)
+            kept.add(f"{name}.json")
+        else:
+            workspace.remove(relative)
+    present = {Path(relative).name for relative in workspace.list_json(WITNESS_DIRECTORY)}
+    stale = stale_witness_names(present, kept)
     require(not stale, f"Stale witness files not generated by this run: {stale}")
-    return rows, evaluations, replays
+
+    replays = 0
+    for name, failures in review.witnesses.items():
+        if not failures:
+            continue
+        check_witness(name,
+                      workspace.read_json(f"{WITNESS_DIRECTORY}/{name}.json"),
+                      review.rules[name], EXPECTED_FAILURES[name])
+        replays += 1
+    return replays
 
 
-def check_request_ingress(validators: dict[str, Draft202012Validator]) -> int:
+def check_request_ingress(validators: dict[str, Draft202012Validator],
+                          good: dict[str, Any]) -> int:
     """Require the request schema to reject malformed shapes."""
-    good = load(ROOT / "examples/tenant-write/request.json")
     validators["request"].validate(good)
     bad_requests = []
     r = copy.deepcopy(good); r["resource"]["locked"] = "false"; bad_requests.append(r)
@@ -550,9 +738,9 @@ def check_strict_decoding() -> int:
     return len(bad_bytes)
 
 
-def check_unicode_handling(validators: dict[str, Draft202012Validator]) -> None:
+def check_unicode_handling(validators: dict[str, Draft202012Validator],
+                           good: dict[str, Any]) -> None:
     """Require Unicode text to survive ingress without normalization."""
-    good = load(ROOT / "examples/tenant-write/request.json")
     for text in ("", "Edinburgh", "é", "é", "🦉"):
         r = copy.deepcopy(good)
         r["subject"]["tenant"] = r["resource"]["tenant"] = text
@@ -593,38 +781,35 @@ def check_result_schema(validators: dict[str, Draft202012Validator]) -> None:
     validators["result"].validate(report_sample)
 
 
-def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
-    """Require fixture checks to reject one targeted injected fault each.
+def request_controls(validators: dict[str, Draft202012Validator],
+                     good: dict[str, Any]) -> list[tuple[str, bool, bool]]:
+    """Pair the accepted request with mutations the contract must reject."""
 
-    Each control pairs an accepted fixture with one mutation of it and demands
-    that the same predicate accept the first and reject the second. A check
-    that rejects both is as broken as one that accepts both, and a control
-    whose fault goes unnoticed would prove nothing.
-    """
-    profile = load(ROOT / "contracts/profile.json")
-    atoms = profile["atoms"]
-    baseline = load(ROOT / "examples/tenant-write/policy.json")
-    good = load(ROOT / "examples/tenant-write/request.json")
-    witness = load(WITNESS_DIR / "deny-all.json")
-    baseline_source = (ROOT / "examples/tenant-write/policy.rego").read_text()
-    deny_all_rules = load(
-        ROOT / "examples/tenant-write/mutations/deny-all/policy.json")["rules"]
-
-    def request_accepted(r: dict[str, Any]) -> bool:
+    def accepted(r: dict[str, Any]) -> bool:
         """Report whether the request contract admits a document."""
         return validators["request"].is_valid(r)
+
+    return [
+        ("request rejects a non-Boolean locked value", accepted(good),
+         accepted({**good, "resource": {**good["resource"], "locked": 0}})),
+        ("request rejects an unknown top-level field", accepted(good),
+         accepted({**good, "admin": True})),
+        ("request rejects a missing required entry", accepted(good),
+         accepted({k: v for k, v in good.items() if k != "action"})),
+    ]
+
+
+def contract_controls(validators: dict[str, Draft202012Validator],
+                      fixtures: Fixtures) -> list[tuple[str, bool, bool]]:
+    """Pair each accepted contract with a mutation the harness must notice."""
+    profile = fixtures.profile
+    atoms = profile["atoms"]
+    baseline = fixtures.policies["baseline"]
+    baseline_source = fixtures.sources["baseline"]
 
     def render_accepted(rules: list[list[str]]) -> bool:
         """Report whether a rule list renders to the baseline source text."""
         return render_source("baseline", rules, atoms) == baseline_source
-
-    def witness_accepted(w: dict[str, Any]) -> bool:
-        """Report whether a stored witness still refutes its named claim."""
-        try:
-            check_witness("deny-all", w, deny_all_rules, EXPECTED_FAILURES["deny-all"])
-        except (AssertionError, ValueError):
-            return False
-        return True
 
     def variant_accepted(variant: dict[str, Any]) -> bool:
         """Report whether a variant keeps the profile and every non-rule entry."""
@@ -633,30 +818,14 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
         return not [path for path in contract_differences(baseline, variant)
                     if not path.startswith("rules")]
 
-    def sweep_accepted(generated: set[str]) -> bool:
-        """Report whether a generated set covers every stored witness."""
-        return bool(generated) and not stale_witness_names(WITNESS_DIR, generated)
-
     def profile_schema_accepted(p: dict[str, Any]) -> bool:
         """Report whether the profile contract admits a document."""
         return validators["profile"].is_valid(p)
 
-    def header_accepted(name: str, header: str) -> bool:
-        """Report whether a fixture's module documentation is usable."""
-        return header_reason(name, header) is None
-
-    denied = {"same_tenant": False, "write_action": True, "admin_role": True,
-              "owns_resource": False, "locked": False}
-    renamed = copy.deepcopy(baseline)
-    renamed["rules"][0][0] = "write_action"
     extra_rule = copy.deepcopy(baseline)
     extra_rule["rules"].append(["locked"])
     widened = copy.deepcopy(profile)
     widened["atoms"]["same_tenant"] = "input.resource.owner == input.subject.id"
-    tampered_decision = copy.deepcopy(witness)
-    tampered_decision["admin-write-available"]["decision"] = True
-    tampered_facts = copy.deepcopy(witness)
-    tampered_facts["admin-write-available"]["facts"]["same_tenant"] = False
     drifted_identity = copy.deepcopy(profile)
     drifted_identity["id"] = "polean.other-profile.v0"
     drifted_bounds = copy.deepcopy(profile)
@@ -667,16 +836,7 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
     unadmitted_atom["atoms"]["same_tenant"] = "input.tenant == input.tenant"
     extra_profile_entry = copy.deepcopy(profile)
     extra_profile_entry["mode"] = "permissive"
-    names = {path.name for path in WITNESS_DIR.glob("*.json")}
-    checks: list[tuple[str, bool, bool]] = [
-        ("request rejects a non-Boolean locked value",
-         request_accepted(good),
-         request_accepted({**good, "resource": {**good["resource"], "locked": 0}})),
-        ("request rejects an unknown top-level field",
-         request_accepted(good), request_accepted({**good, "admin": True})),
-        ("request rejects a missing required entry",
-         request_accepted(good),
-         request_accepted({k: v for k, v in good.items() if k != "action"})),
+    return [
         ("source template accepts the reviewed rules",
          render_accepted(baseline["rules"]), render_accepted(extra_rule["rules"])),
         ("variant probe accepts a reviewed rule-list-only change",
@@ -702,6 +862,40 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
          profile_schema_accepted(profile), profile_schema_accepted(unadmitted_atom)),
         ("profile schema rejects an unreviewed top-level entry",
          profile_schema_accepted(profile), profile_schema_accepted(extra_profile_entry)),
+    ]
+
+
+def witness_controls(fixtures: Fixtures) -> list[tuple[str, bool, bool]]:
+    """Pair the accepted witnesses and headers with mutated counterparts."""
+    profile = fixtures.profile
+    baseline = fixtures.policies["baseline"]
+    witness = fixtures.stored_witnesses["deny-all.json"]
+    deny_all_rules = fixtures.policies["deny-all"]["rules"]
+    stored_witnesses = set(fixtures.stored_witnesses)
+
+    def witness_accepted(w: dict[str, Any]) -> bool:
+        """Report whether a stored witness still refutes its named claim."""
+        try:
+            check_witness("deny-all", w, deny_all_rules, EXPECTED_FAILURES["deny-all"])
+        except (AssertionError, ValueError):
+            return False
+        return True
+
+    def sweep_accepted(generated: set[str]) -> bool:
+        """Report whether a generated set covers every stored witness."""
+        return not stale_witness_names(stored_witnesses, generated)
+
+    def header_accepted(name: str, header: str) -> bool:
+        """Report whether a fixture's module documentation is usable."""
+        return header_reason(name, header) is None
+
+    tampered_decision = copy.deepcopy(witness)
+    tampered_decision["admin-write-available"]["decision"] = True
+    tampered_facts = copy.deepcopy(witness)
+    tampered_facts["admin-write-available"]["facts"]["same_tenant"] = False
+    denied = {"same_tenant": False, "write_action": True, "admin_role": True,
+              "owns_resource": False, "locked": False}
+    return [
         ("module documentation accepts the baseline header",
          header_accepted("baseline", SOURCE_HEADERS["baseline"]),
          header_accepted("baseline", SOURCE_HEADERS["admin-only"])),
@@ -715,10 +909,27 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
          witness_accepted(witness),
          witness_accepted(tampered_decision) or witness_accepted(tampered_facts)),
         ("witness sweep accepts its own output",
-         sweep_accepted(names), sweep_accepted(names - {"deny-all.json"})),
+         sweep_accepted(stored_witnesses),
+         sweep_accepted(stored_witnesses - {"deny-all.json"})),
         ("contract pairs requirements with the decision",
          decision_matches(denied, False, claims(denied, False)),
          decision_matches(denied, False, claims(denied, True))),
+    ]
+
+
+def negative_controls(validators: dict[str, Draft202012Validator],
+                      fixtures: Fixtures) -> int:
+    """Require fixture checks to reject one targeted injected fault each.
+
+    Each control pairs an accepted fixture with one mutation of it and demands
+    that the same predicate accept the first and reject the second. A check
+    that rejects both is as broken as one that accepts both, and a control
+    whose fault goes unnoticed would prove nothing.
+    """
+    checks = [
+        *request_controls(validators, fixtures.request),
+        *contract_controls(validators, fixtures),
+        *witness_controls(fixtures),
     ]
     for description, accepted, still_accepted in checks:
         require(accepted, f"{description}: the reviewed fixture was rejected")
@@ -726,11 +937,50 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
     return len(checks)
 
 
-def main() -> None:
-    """Run every design-fixture check and record the machine-readable result.
+def check_boundaries(repo: Repository,
+                     produce: Callable[[], PolicyReview]) -> tuple[PolicyReview, int]:
+    """Prove validation is pure and publishing follows the given workspace.
 
-    Each check raises AssertionError with a named diagnostic on failure, so a
-    non-zero exit means the recorded summary was not written for the fixture
+    Two seams are asserted rather than trusted. Producing the review through
+    ``produce`` must leave every published witness exactly as it was, in size
+    and modification time as well as contents, so a check that reached for the
+    filesystem would be caught here. Publishing that same review through a
+    workspace rooted in a temporary directory must put the witnesses under that
+    root and leave the repository alone, so the command persists through the
+    boundary it was handed rather than through a module-level path.
+
+    The review is returned so the caller publishes the very run that was
+    measured, rather than a second run whose purity would go unobserved.
+    """
+    def published() -> dict[str, tuple[int, int]]:
+        """Snapshot the published witnesses' size and modification time."""
+        return {relative: repo.state(relative)
+                for relative in repo.list_json(WITNESS_DIRECTORY)}
+
+    before = published()
+    review = produce()
+    require(before == published(), "A pure check modified the published witnesses")
+
+    with tempfile.TemporaryDirectory(prefix="polean-boundary-") as directory:
+        workspace = Workspace(Path(directory))
+        replays = publish_witnesses(workspace, review)
+        written = {Path(relative).name
+                   for relative in workspace.list_json(WITNESS_DIRECTORY)}
+        expected_names = {f"{name}.json" for name, failures in review.witnesses.items()
+                          if failures}
+        require(written == expected_names and replays == len(expected_names),
+                "Publishing did not write every witness through the given root")
+        require(before == published(),
+                "Publishing through a temporary root modified the repository")
+    return review, 2
+
+
+def run_checks(repo: Repository, workspace: Workspace) -> dict[str, Any]:
+    """Run every fixture check and publish the result through the boundary.
+
+    Each check raises AssertionError with a named diagnostic on failure, and a
+    read or write at the boundary raises HarnessIOError naming the document, so
+    a non-zero exit means the recorded summary was not written for the fixture
     set that was read.
     """
     require(set(SOURCE_HEADERS) == set(EXPECTED_FAILURES),
@@ -738,19 +988,22 @@ def main() -> None:
     for name, header in SOURCE_HEADERS.items():
         reason = header_reason(name, header)
         require(reason is None, f"Unusable module documentation for {name}: {reason}")
-    validators = load_schemas()
-    profile = check_profile(validators)
-    claim_count = check_claims_registry(validators)
+    fixtures = Fixtures.load(repo)
+    validators = fixtures.validators
+    check_profile(validators, fixtures.profile)
+    claim_count = check_claims_registry(validators, fixtures.claims_manifest)
     facts = [dict(zip(FACT_KEYS, values, strict=True))
              for values in itertools.product((False, True), repeat=len(FACT_KEYS))]
     require(len(facts) == 2 ** len(FACT_KEYS), "Expected the full five-fact product")
     decisions_checked = contract_completeness(facts)
-    rows, evaluations, replays = validate_policies(validators, profile, facts)
-    malformed = check_request_ingress(validators)
+    review, boundaries = check_boundaries(
+        repo, lambda: validate_policies(validators, fixtures, facts))
+    malformed = check_request_ingress(validators, fixtures.request)
     negatives = check_strict_decoding()
-    check_unicode_handling(validators)
+    check_unicode_handling(validators, fixtures.request)
     check_result_schema(validators)
-    controls = negative_controls(validators)
+    controls = negative_controls(validators, fixtures)
+    replays = publish_witnesses(workspace, review)
 
     summary = {
         "scope": "design-fixture validation only",
@@ -758,22 +1011,44 @@ def main() -> None:
         "source_headers_documented": len(SOURCE_HEADERS),
         "profile_schema_validated": True,
         "fact_vectors_per_policy": len(facts),
-        "policy_variants": len(rows),
-        "concrete_abstract_comparisons": evaluations,
+        "policy_variants": len(review.rows),
+        "concrete_abstract_comparisons": review.evaluations,
         "full_contract_decision_checks": decisions_checked,
         "claim_registry_entries": claim_count,
         "witnesses_replayed": replays,
         "negative_controls_passed": controls,
+        "boundary_seam_checks_passed": boundaries,
         "malformed_request_shapes_rejected": malformed,
         "strict_decoding_negatives_rejected": negatives,
         "lean_proofs_checked": False,
         "rego_parsed_by_opa_or_regorus": False,
         "runtime_conformance_executed": False,
-        "policies": rows,
+        "policies": review.rows,
     }
-    (ROOT / "validation/design-validation.json").write_text(json.dumps(summary, indent=2) + "\n")
+    workspace.write_json(SUMMARY_DOCUMENT, summary)
+    return summary
+
+
+def main(repo: Repository | None = None, workspace: Workspace | None = None) -> int:
+    """Run the checks at the command boundary and report one diagnostic on failure.
+
+    The boundaries are parameters so a caller can inject a different repository
+    or a temporary workspace; the defaults are the repository this script lives
+    in. A boundary failure or a failed check is reported as a single named
+    diagnostic. Any other exception is a defect in the harness rather than a
+    finding about the fixtures, so it keeps its traceback.
+    """
+    try:
+        summary = run_checks(repo or Repository(ROOT), workspace or Workspace(ROOT))
+    except HarnessIOError as error:
+        print(f"design validation I/O failure: {error}", file=sys.stderr)
+        return 1
+    except AssertionError as error:
+        print(f"design validation check failed: {error}", file=sys.stderr)
+        return 1
     print(json.dumps(summary, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

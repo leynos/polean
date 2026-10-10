@@ -6,25 +6,26 @@ implementation certification.
 `validate_design.py` ran successfully in the authoring environment. Its
 machine-readable result is [design-validation.json](design-validation.json).
 
-| Check performed                       | Result                                                                                                                                                                  |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| JSON Schema meta-validation           | Five schemas accepted by the installed Draft 2020-12 validator.                                                                                                         |
-| Profile contract                      | The profile document conforms to its schema, and its atom, fact, claim, exclusion, limit, and assurance entries match the reviewed constants.                           |
-| Claim registry                        | The claim manifest lists exactly the six fixed requirements.                                                                                                            |
-| Baseline and mutation IR              | Seven policy variants conform to the proposed policy schema, and each variant differs from the baseline only inside its rule list.                                      |
-| Module documentation                  | Each of the seven fixtures is rendered with the reviewed module header that names it, and that header is checked structurally before use.                               |
-| Concrete/abstract fixture comparison  | 224 comparisons: 32 vectors for each of seven policies.                                                                                                                 |
-| Requirement completeness sanity check | All 64 combinations of five facts and an allow/deny decision match the intended decision exactly when all six requirements hold.                                        |
-| Concretization                        | Every enumerated fact vector has a schema-valid request with the same facts.                                                                                            |
-| Baseline                              | All six requirements pass; five of 32 vectors allow.                                                                                                                    |
-| Six policy mutations                  | Each fails precisely the intended requirement(s); concrete witnesses appear in `witnesses/`.                                                                            |
-| Witness replay                        | Every stored witness is re-derived from its request and rule list, and must still refute its named requirement.                                                         |
-| Witness sweep                         | A witness file the current run did not generate fails the check, so a retired mutation cannot leave a stale counterexample behind.                                      |
-| Malformed request shape               | Five malformed variants rejected.                                                                                                                                       |
-| Strict ingress examples               | Duplicate keys, unpaired surrogates, invalid UTF-8, and non-JSON `NaN` rejected.                                                                                        |
-| Unicode examples                      | Empty, ASCII, composed/decomposed accented, and supplementary-plane strings accepted; composed and decomposed tenant names remain distinct, with a same-tenant control. |
-| Example result structure              | An explicitly inconclusive, unproved report satisfies the result schema.                                                                                                |
-| Negative controls                     | Nineteen injected fixture faults each detected by the check meant to catch them.                                                                                        |
+| Check performed                       | Result                                                                                                                                                                            |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JSON Schema meta-validation           | Five schemas accepted by the installed Draft 2020-12 validator.                                                                                                                   |
+| Profile contract                      | The profile document conforms to its schema, and its atom, fact, claim, exclusion, limit, and assurance entries match the reviewed constants.                                     |
+| Claim registry                        | The claim manifest lists exactly the six fixed requirements.                                                                                                                      |
+| Baseline and mutation IR              | Seven policy variants conform to the proposed policy schema, and each variant differs from the baseline only inside its rule list.                                                |
+| Module documentation                  | Each of the seven fixtures is rendered with the reviewed module header that names it, and that header is checked structurally before use.                                         |
+| Concrete/abstract fixture comparison  | 224 comparisons: 32 vectors for each of seven policies.                                                                                                                           |
+| Requirement completeness sanity check | All 64 combinations of five facts and an allow/deny decision match the intended decision exactly when all six requirements hold.                                                  |
+| Concretization                        | Every enumerated fact vector has a schema-valid request with the same facts.                                                                                                      |
+| Baseline                              | All six requirements pass; five of 32 vectors allow.                                                                                                                              |
+| Six policy mutations                  | Each fails precisely the intended requirement(s); concrete witnesses appear in `witnesses/`.                                                                                      |
+| Witness replay                        | Every stored witness is re-derived from its request and rule list, and must still refute its named requirement.                                                                   |
+| Witness sweep                         | A witness file the current run did not generate fails the check, so a retired mutation cannot leave a stale counterexample behind.                                                |
+| Malformed request shape               | Five malformed variants rejected.                                                                                                                                                 |
+| Strict ingress examples               | Duplicate keys, unpaired surrogates, invalid UTF-8, and non-JSON `NaN` rejected.                                                                                                  |
+| Unicode examples                      | Empty, ASCII, composed/decomposed accented, and supplementary-plane strings accepted; composed and decomposed tenant names remain distinct, with a same-tenant control.           |
+| Example result structure              | An explicitly inconclusive, unproved report satisfies the result schema.                                                                                                          |
+| Negative controls                     | Nineteen injected fixture faults each detected by the check meant to catch them.                                                                                                  |
+| Storage-boundary seams                | Two seams: reviewing the loaded fixtures leaves every witness byte and timestamp unchanged, and publishing through a temporary root writes there and leaves the repository alone. |
 
 `property_fixtures.py` states the same model-side obligations as properties and
 searches the admitted input domain for counterexamples, with Hypothesis
@@ -75,6 +76,24 @@ establishes model-side consistency only. Neither parses Rego, compares OPA or
 Regorus behaviour, or checks a Lean theorem, so neither supports a
 source-to-model or runtime-refinement claim.
 
+Validation and storage are separated by an explicit boundary. The reviewed
+documents are read once through a read-only `Repository`, and the checks
+receive them as data, so no check can reach the filesystem and none of them can
+write. Only the publishing command holds the `Workspace` write boundary, and it
+receives that workspace as an argument rather than reaching for a module-level
+path. A read or write that fails is reported as one `HarnessIOError` naming the
+document, and a run that fails a check exits non-zero without publishing:
+`design-validation.json` and the witnesses are left exactly as they were. Two
+seam checks make this observable rather than aspirational. Producing a review
+must leave every published witness unchanged in bytes and modification time,
+which catches a check that reached for the filesystem; and publishing that same
+review through a temporary workspace must write the witnesses under that root
+and leave the repository alone, which catches a command that ignored the
+boundary it was handed. Importing `property_fixtures.py` reads no document: the
+admitted profile and schemas are read by one explicit `configure()` call in
+`main`, and a property invoked before that fails with a `ConfigurationError`
+rather than drawing against stale state.
+
 The source-fixture check compares prepared Rego text with the proposed atom
 mapping. It is a consistency check, **not an independently verified parser or
 proof of Rego semantics**. Each fixture is re-rendered from its rule-list IR
@@ -122,11 +141,12 @@ python validation/validate_design.py
 python validation/property_fixtures.py
 ```
 
-The script rewrites the JSON validation summary and witness files. It removes a
-witness file whose variant no longer refutes anything, and fails the run if any
-witness file in `validation/witnesses/` was not generated by that run, so the
-committed witness set cannot drift away from the mutation set. It does not edit
-either design document, call the network, or modify a GitHub repository.
+The publishing command rewrites the JSON validation summary and witness files
+through its workspace boundary. It removes a witness file whose variant no
+longer refutes anything, and fails the run if any witness file in
+`validation/witnesses/` was not generated by that run, so the committed witness
+set cannot drift away from the mutation set. It does not edit either design
+document, call the network, or modify a GitHub repository.
 
 The design workflow runs the same target and then requires a clean working tree
 with `git status --porcelain`, so a validator run that changes or adds a

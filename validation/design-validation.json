@@ -10,6 +10,7 @@
   "claim_registry_entries": 6,
   "witnesses_replayed": 6,
   "negative_controls_passed": 19,
+  "boundary_seam_checks_passed": 2,
   "malformed_request_shapes_rejected": 5,
   "strict_decoding_negatives_rejected": 4,
   "lean_proofs_checked": false,

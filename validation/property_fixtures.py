@@ -33,11 +33,18 @@ This module does not parse Rego, execute OPA or Regorus, or invoke Lean, and it
 claims nothing about source-to-model correspondence or runtime refinement. It
 passes ``derandomize=True`` and ``database=None`` so a run is reproducible and
 writes no example database.
+
+Importing this module reads nothing. The admitted profile and the contract
+schemas are read through the harness's read-only repository boundary by one
+explicit :func:`configure` call in ``main``, before any property runs, so the
+documents the properties depend on are named in one place and a property cannot
+silently draw against constants left over from an earlier setup.
 """
 from __future__ import annotations
 
 import importlib.util
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -68,13 +75,55 @@ def _load_design_harness() -> Any:
 
 
 VD = _load_design_harness()
-# Loaded once: the schemas are meta-validated and the profile is constant, so
-# re-reading them per generated example would dominate the search budget.
-VALIDATORS = VD.load_schemas()
-ATOMS = VD.load(ROOT / "contracts/profile.json")["atoms"]
-# Inverse of ATOMS, for decoding rendered text back to a rule list.
-ATOM_SOURCES = {source: name for name, source in ATOMS.items()}
-assert len(ATOM_SOURCES) == len(ATOMS), "Atom sources must be distinct to decode"
+
+
+class ConfigurationError(RuntimeError):
+    """Raised when a property runs before the fixtures have been loaded."""
+
+
+@dataclass(frozen=True)
+class Admitted:
+    """The admitted profile and schemas the properties are stated against.
+
+    Loaded once by an explicit :func:`configure` call rather than during module
+    import, so importing this module reads nothing and the documents the
+    properties depend on appear in one place. Loading once matters for cost as
+    well as clarity: the schemas are meta-validated and the profile is
+    constant, so re-reading them per generated example would dominate the
+    search budget.
+    """
+
+    validators: dict[str, Any]
+    atoms: dict[str, str]
+    # Inverse of ``atoms``, for decoding rendered text back to a rule list.
+    atom_sources: dict[str, str]
+
+
+_ADMITTED: Admitted | None = None
+
+
+def configure(repo: Any) -> Admitted:
+    """Read and validate the profile the properties are stated against.
+
+    Called by ``main`` before any property runs. A property invoked without it
+    fails with :class:`ConfigurationError` rather than drawing against
+    undefined constants.
+    """
+    global _ADMITTED
+    atoms = repo.read_json("contracts/profile.json")["atoms"]
+    atom_sources = {source: name for name, source in atoms.items()}
+    assert len(atom_sources) == len(atoms), "Atom sources must be distinct to decode"
+    _ADMITTED = Admitted(validators=VD.load_schemas(repo), atoms=atoms,
+                         atom_sources=atom_sources)
+    return _ADMITTED
+
+
+def admitted() -> Admitted:
+    """Return the configured profile, or fail when setup has not run."""
+    if _ADMITTED is None:
+        raise ConfigurationError(
+            "Property fixtures are not configured; call configure() first")
+    return _ADMITTED
 
 # Free-text domains, deliberately wider than the fixtures. The profile compares
 # strings for equality and does not normalize them, so equality of distinct
@@ -111,6 +160,10 @@ ACTIONS = st.sampled_from(["write", "read"]) | TEXT
 # admitted on purpose: the policy schema sets no uniqueItems, so a grammar-
 # legal body may name the same comparison twice, and a strategy that forbade
 # repeats would search a strict subset of the bounds these properties claim.
+# The vocabulary comes from the harness's reviewed constant rather than from
+# contracts/profile.json, so this strategy is defined without reading a file
+# and the properties search the admitted domain even if the profile document
+# were edited to widen it.
 RULES = st.lists(
     st.lists(
         st.sampled_from(VD.PROFILE_ATOM_NAMES),
@@ -165,7 +218,7 @@ def test_abstraction_reads_the_declared_comparisons(
     Checking key names alone would pass for any value at all, so each fact is
     compared against an independently written expression over the request.
     """
-    VALIDATORS["request"].validate(request)
+    admitted().validators["request"].validate(request)
     subject, resource = request["subject"], request["resource"]
     expected = {
         "same_tenant": subject["tenant"] == resource["tenant"],
@@ -202,7 +255,7 @@ def test_equality_ignores_length_and_shared_prefix(
         "resource": {"tenant": right, "owner": right, "locked": locked},
         "action": "write",
     }
-    VALIDATORS["request"].validate(request)
+    admitted().validators["request"].validate(request)
     facts = VD.facts_of(request)
     # Strict extensions must compare unequal in both compared positions.
     assert facts["same_tenant"] is False, request
@@ -216,7 +269,7 @@ def test_equality_ignores_length_and_shared_prefix(
         "resource": {"tenant": left, "owner": left, "locked": locked},
         "action": "write",
     }
-    VALIDATORS["request"].validate(identical)
+    admitted().validators["request"].validate(identical)
     equal_facts = VD.facts_of(identical)
     assert equal_facts["same_tenant"] is True, identical
     assert equal_facts["owns_resource"] is True, identical
@@ -233,7 +286,7 @@ def test_concretization_is_a_right_inverse(values: list[bool]) -> None:
     """``α(γ(f)) = f``, so every abstract counterexample has a real request."""
     facts = dict(zip(VD.FACT_KEYS, values, strict=True))
     concretized = VD.concretize(facts)
-    VALIDATORS["request"].validate(concretized)
+    admitted().validators["request"].validate(concretized)
     assert VD.facts_of(concretized) == facts, f"γ is not a section for {facts!r}"
 
 
@@ -277,8 +330,8 @@ def test_rendering_is_injective_within_profile_bounds(
     independent, and this one adds no strength the round trip does not
     already have.
     """
-    assert rules == other or VD.render_source("baseline", rules, ATOMS) != (
-        VD.render_source("baseline", other, ATOMS)
+    assert rules == other or VD.render_source("baseline", rules, admitted().atoms) != (
+        VD.render_source("baseline", other, admitted().atoms)
     ), f"renderer collided on {rules!r} and {other!r}"
 
 
@@ -295,7 +348,7 @@ def test_rendered_text_preserves_the_rule_list(rules: list[list[str]]) -> None:
     every admitted rule list, so this property implies injectivity rather
     than merely sampling it.
     """
-    text = VD.render_source("baseline", rules, ATOMS)
+    text = VD.render_source("baseline", rules, admitted().atoms)
     body = [line for line in text.splitlines() if not line.startswith("#")]
     while body and not body[0]:  # the documented header ends with a blank line
         body.pop(0)
@@ -324,7 +377,7 @@ def test_rendered_text_preserves_the_rule_list(rules: list[list[str]]) -> None:
         body_lines = chunk[:-2].splitlines()
         for line in body_lines:
             assert line.startswith(indent), chunk
-        recovered.append([ATOM_SOURCES[line[len(indent):]] for line in body_lines])
+        recovered.append([admitted().atom_sources[line[len(indent):]] for line in body_lines])
     assert recovered == rules, f"round trip changed {rules!r} into {recovered!r}"
     assert VD.header_reason("baseline", text[:text.index("package authz")]) is None
 
@@ -332,15 +385,18 @@ def test_rendered_text_preserves_the_rule_list(rules: list[list[str]]) -> None:
 def main() -> int:
     """Run each property over the admitted domain and report the coverage.
 
-    Every entry is asserted to be a Hypothesis-wrapped test, so a property
-    accidentally stripped of its ``@given`` decorator fails here instead of
-    silently running once against no examples and reporting a false pass.
+    The admitted profile and schemas are read here, once, through the harness's
+    read-only repository boundary, before any property runs. Every entry is
+    asserted to be a Hypothesis-wrapped test, so a property accidentally
+    stripped of its ``@given`` decorator fails here instead of silently running
+    once against no examples and reporting a false pass.
 
     The printed figure is the *budget* passed to Hypothesis, not a measured
     execution count. Hypothesis can stop before reaching the budget, including
     when it exhausts a finite strategy. This output does not report an
     execution count or establish exhaustive coverage.
     """
+    configure(VD.Repository(ROOT))
     properties = [
         test_concrete_and_abstract_evaluation_agree,
         test_abstraction_reads_the_declared_comparisons,
