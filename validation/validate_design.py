@@ -597,9 +597,9 @@ def negative_controls(validators: dict[str, Draft202012Validator]) -> int:
     """Require fixture checks to reject one targeted injected fault each.
 
     Each control pairs an accepted fixture with one mutation of it and demands
-    that the same predicate accept the first and still accept the second. A
-    check that rejects both is as broken as one that accepts both, and a
-    control whose fault goes unnoticed would prove nothing.
+    that the same predicate accept the first and reject the second. A check
+    that rejects both is as broken as one that accepts both, and a control
+    whose fault goes unnoticed would prove nothing.
     """
     profile = load(ROOT / "contracts/profile.json")
     atoms = profile["atoms"]
