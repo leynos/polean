@@ -273,7 +273,8 @@ def test_stale_witnesses_are_rejected_before_anything_is_written() -> None:
 
     The stale set is computed from the directory as it was found, so a
     workspace holding a retired mutation's counterexample must be rejected
-    before the run writes its own witnesses over the top.
+    before the run writes its own witnesses over the top. The seeded name
+    belongs to no reviewed variant, which is what makes it stale.
     """
     with tempfile.TemporaryDirectory(prefix="polean-boundary-") as directory:
         workspace = VD.Workspace(Path(directory))
@@ -288,6 +289,39 @@ def test_stale_witnesses_are_rejected_before_anything_is_written() -> None:
             raise TestFailure(f"the run published over a stale workspace: {written}")
         if stale.read_bytes() != before:
             raise TestFailure("the run rewrote the stale witness it rejected")
+
+
+def test_a_corrected_variant_has_its_witness_removed_not_rejected() -> None:
+    """A witness whose variant stopped refuting must be removed, not called stale.
+
+    A reviewed variant whose failures disappear is scheduled for removal. If
+    staleness were computed from the variants that still refute something, that
+    surviving file would be reported as stale and the run would fail before
+    reaching the removal — losing the behaviour that keeps a corrected
+    mutation from leaving its counterexample behind.
+    """
+    with tempfile.TemporaryDirectory(prefix="polean-boundary-") as directory:
+        workspace = VD.Workspace(Path(directory))
+        review = fixture_review(VD.Repository(ROOT))
+        VD.publish_witnesses(workspace, review)
+        published = sorted(path.name for path
+                           in workspace.path(VD.WITNESS_DIRECTORY).glob("*.json"))
+        if "admin-only.json" not in published:
+            raise TestFailure(f"the fixture witness set is unexpected: {published}")
+
+        corrected = dataclasses.replace(
+            review,
+            witnesses={**review.witnesses, "admin-only": []},
+        )
+        replays = VD.publish_witnesses(workspace, corrected)
+        remaining = sorted(path.name for path
+                           in workspace.path(VD.WITNESS_DIRECTORY).glob("*.json"))
+        if "admin-only.json" in remaining:
+            raise TestFailure("a corrected variant kept its witness")
+        if remaining != [name for name in published if name != "admin-only.json"]:
+            raise TestFailure(f"removal disturbed another witness: {remaining}")
+        if replays != len(remaining):
+            raise TestFailure(f"replayed {replays}, expected {len(remaining)}")
 
 
 def test_the_property_suite_needs_no_global_configuration() -> None:
@@ -344,6 +378,7 @@ def main() -> int:
         test_a_failed_run_leaves_the_tree_untouched,
         test_publication_uses_the_workspace_it_is_given,
         test_stale_witnesses_are_rejected_before_anything_is_written,
+        test_a_corrected_variant_has_its_witness_removed_not_rejected,
         test_the_property_suite_needs_no_global_configuration,
         test_the_property_suite_reads_the_profile_it_is_handed,
     ]

@@ -26,7 +26,7 @@ machine-readable result is [design-validation.json](design-validation.json).
 | Example result structure              | An explicitly inconclusive, unproved report satisfies the result schema.                                                                                                                                                      |
 | Negative controls                     | Nineteen injected fixture faults each detected by the check meant to catch them.                                                                                                                                              |
 | Storage-boundary seams                | Two seams: reviewing the loaded fixtures leaves every witness in `witnesses/` unchanged in size, modification time, and SHA-256 digest, and publishing through a temporary root writes there and leaves the repository alone. |
-| Boundary tests                        | Ten independent tests of the orchestration and storage boundary, each falsified against a targeted injected fault.                                                                                                            |
+| Boundary tests                        | Eleven independent tests of the orchestration and storage boundary, each falsified against a targeted injected fault.                                                                                                         |
 
 `property_fixtures.py` states the same model-side obligations as properties and
 searches the admitted input domain for counterexamples, with Hypothesis
@@ -81,16 +81,18 @@ Validation and storage are separated by an explicit boundary. The reviewed
 documents are read once through a read-only `Repository`, and the checks
 receive them as data, so the ordinary checks have no storage dependency to
 exercise. Python does not prevent a function from opening a file, so what the
-boundary establishes is architectural separation, not enforced isolation: the
-observed functions did not reach for the filesystem. Only the publishing
-command holds the `Workspace` write boundary, and it receives that workspace as
-an argument rather than reaching for a module-level path. A read or write that
-fails is reported as one `HarnessIOError` naming the document, and a document
-that does not satisfy its contract is reported as one named diagnostic rather
-than as a `jsonschema` traceback. A run that fails a check before publication
-writes nothing at all; a failure inside publication can leave the witnesses it
-had already written, but never `design-validation.json`, which is written only
-after every check and the publication itself have returned.
+boundary establishes is architectural separation, not enforced isolation, and a
+snapshot comparison cannot establish that no function reached for the
+filesystem: all it shows is that the snapshots found no change in the observed
+witness state. Only the publishing command holds the `Workspace` write
+boundary, and it receives that workspace as an argument rather than reaching
+for a module-level path. A read or write that fails is reported as one
+`HarnessIOError` naming the document, and a document that does not satisfy its
+contract is reported as one named diagnostic rather than as a `jsonschema`
+traceback. A run that fails a check before publication writes nothing at all; a
+failure inside publication can leave the witnesses it had already written, but
+never `design-validation.json`, which is written only after every check and the
+publication itself have returned.
 
 Two seam checks make the boundary observable rather than aspirational.
 Producing a review must leave every file in `validation/witnesses/` unchanged
@@ -102,11 +104,13 @@ same review through a temporary workspace must write the witnesses under that
 root, replay them from there, and leave the repository alone, which catches a
 command that ignored the boundary it was handed. The stale-witness set is
 computed from the directory as it was found, before anything is written, so a
-run rejected for a stale file leaves the tree untouched. Rejection is not
-removal: an unexpected file is reported and left where it is for a person to
-delete, because the run stops before writing anything. Only a reviewed variant
-that no longer refutes anything has its own witness removed, and only in a run
-that passes the sweep.
+run rejected for a stale file leaves the tree untouched. A file is stale when
+its name belongs to no reviewed variant at all — that is what a retired
+mutation leaves behind. A surviving witness whose own variant no longer refutes
+anything is not stale: it is scheduled for removal, so correcting a mutation
+deletes its counterexample rather than stopping the run. Rejection is not
+removal, and an unexpected file is reported and left where it is for a person
+to delete, because the run stops before writing anything.
 
 Importing `property_fixtures.py` reads no profile or schema document, though it
 does execute the sibling harness to reuse its definitions. The admitted profile
@@ -122,7 +126,7 @@ documents rather than from the fixtures it was handed, because publication
 replays whatever review it is given. The boundary tests call the real entry
 points with deliberately altered inputs and require the result to change or be
 rejected, and they snapshot the tree to observe both storage seams directly.
-Each of the ten was falsified against a targeted injected fault before being
+Each of the eleven was falsified against a targeted injected fault before being
 relied on.
 
 The source-fixture check compares prepared Rego text with the proposed atom
