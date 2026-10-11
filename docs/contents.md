@@ -15,6 +15,8 @@ already exist.
 - [Technical design](technical-design.md): semantic profile, finite abstraction,
   proof obligations, Rust and Lean boundaries, evidence, CLI outcomes, and
   vertical experiments.
+- [Implementation roadmap](roadmap.md): GIST delivery phases, dependencies,
+  acceptance gates, and conditional extensions.
 - [Bootstrap decision](adr-001-repository-bootstrap.md): repository provenance,
   selected Combobulate scaffold elements, and deliberate deferrals.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
