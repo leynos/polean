@@ -720,9 +720,8 @@ def publish_witnesses(workspace: Workspace, review: PolicyReview) -> int:
     Each witness is written, read back, and re-derived from its recorded request
     and rule list, so the replay checks the persisted document rather than the
     structure still held in memory. A variant that refutes nothing has its
-    witness removed, and any file left in the witness directory that this run
-    did not generate fails the command, so a retired mutation cannot leave a
-    stale counterexample behind.
+    witness removed. A file whose name belongs to no reviewed variant fails
+    preflight and remains in place for manual removal.
 
     The stale set is computed from the names on disk before anything is
     written, so a run that fails that check leaves the directory untouched; the
