@@ -29,6 +29,8 @@ jobs:
         run: make design-check
       - name: Search the admitted domain by property
         run: make design-properties
+      - name: Test the harness boundaries
+        run: make design-boundary
       - name: Require a clean generated result
         run: |
           git status --porcelain

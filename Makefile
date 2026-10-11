@@ -5,11 +5,11 @@ MDLINT ?= markdownlint-cli2
 CARGO ?= cargo
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties audit
+.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties design-boundary audit
 
 SHELL := bash
 
-all: check-fmt typecheck lint test design-check design-properties ## Run every local commit gate
+all: check-fmt typecheck lint test design-check design-properties design-boundary ## Run every local commit gate
 
 build: ## Build the Rust scaffold
 	$(CARGO) build --all-targets --all-features
@@ -46,6 +46,9 @@ design-check: ## Validate schemas, policy fixtures, abstractions, and witnesses
 
 design-properties: ## Search the admitted domain for model-side counterexamples
 	$(PYTHON) validation/property_fixtures.py
+
+design-boundary: ## Test the harness's orchestration and storage boundaries
+	$(PYTHON) validation/test_boundary.py
 
 audit: ## Audit Rust dependencies for known vulnerabilities
 	$(CARGO) audit

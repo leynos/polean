@@ -5,17 +5,21 @@ Run from any directory with Python 3.11+ and jsonschema 4.x installed.
 This script does not parse Rego, execute OPA/Regorus, or invoke Lean.
 
 The reviewed documents are read through the read-only ``Repository`` boundary
-and handed to the checks as data, so an ordinary check cannot reach the
-filesystem at all; ``check_boundaries`` is the one exception, and it reads the
-repository only to prove that the other checks changed nothing. The publishing
-command is the only holder of the ``Workspace`` write boundary. A read or write
-that fails is reported as one ``HarnessIOError`` naming the file, a run that
-fails a check publishes nothing, and any other exception keeps its traceback
-because it is a defect in the harness rather than a finding about a fixture.
+and handed to the checks as data, so the ordinary checks have no storage
+dependency to exercise; Python does not stop a function from opening a file,
+so ``check_boundaries`` observes that they did not rather than forbidding it.
+The publishing command is the only holder of the ``Workspace`` write boundary.
+A read or write that fails is reported as one ``HarnessIOError`` naming the
+file, a run that fails a check before publication writes nothing at all, and a
+failure inside publication can leave the witnesses it had already written but
+never the summary, which is written only after every check has passed. Any
+other exception keeps its traceback, because it is a defect in the harness
+rather than a finding about a fixture.
 """
 from __future__ import annotations
 
 import copy
+import hashlib
 import itertools
 import json
 import sys
@@ -26,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 
 ROOT = Path(__file__).resolve().parents[1]
 FACT_KEYS = ("same_tenant", "write_action", "admin_role", "owns_resource", "locked")
@@ -205,17 +210,23 @@ class Repository:
             raise HarnessIOError(f"cannot list {directory}: {error}") from error
         return [f"{directory}/{name}" for name in names]
 
-    def state(self, relative: str) -> tuple[int, int]:
-        """Return a document's size and modification time for seam comparisons.
+    def state(self, relative: str) -> tuple[int, int, str]:
+        """Return a document's size, modification time, and content digest.
 
-        Content alone cannot show whether a check rewrote a document with the
-        same bytes, so the modification time is compared as well.
+        No one of the three implies the others. A same-size rewrite that
+        restores the timestamp changes only the digest, a rewrite to identical
+        bytes changes only the timestamp, and the digest and size alone cannot
+        show that a document was rewritten at all. Comparing all three is what
+        makes ``check_boundaries`` able to say the witnesses were left alone.
         """
         try:
-            stat = self.path(relative).stat()
+            path = self.path(relative)
+            stat = path.stat()
+            content = path.read_bytes()
         except OSError as error:
-            raise HarnessIOError(f"cannot stat {relative}: {error}") from error
-        return stat.st_size, stat.st_mtime_ns
+            raise HarnessIOError(f"cannot read {relative}: {error}") from error
+        digest = hashlib.sha256(content).hexdigest()
+        return stat.st_size, stat.st_mtime_ns, digest
 
 
 class Workspace(Repository):
@@ -249,6 +260,24 @@ def policy_folder(name: str) -> str:
     if name == "baseline":
         return "examples/tenant-write"
     return f"examples/tenant-write/mutations/{name}"
+
+
+def check_schema(validators: dict[str, Draft202012Validator], name: str,
+                 value: Any, label: str) -> None:
+    """Require a document to satisfy its contract, naming it on rejection.
+
+    ``jsonschema`` raises a ``ValidationError`` whose message is a paragraph of
+    schema internals. A rejected document is a finding about a fixture or a
+    contract, not a defect in the harness, so it is reported in the same one
+    shape as every other check rather than as a traceback.
+    """
+    try:
+        validators[name].validate(value)
+    except ValidationError as error:
+        path = "/".join(str(part) for part in error.absolute_path) or "<root>"
+        raise AssertionError(
+            f"{label} does not satisfy the {name} contract at {path}: "
+            f"{error.message}") from error
 
 
 def load_schemas(repo: Repository) -> dict[str, Draft202012Validator]:
@@ -575,7 +604,7 @@ class Fixtures:
 def check_profile(validators: dict[str, Draft202012Validator],
                   profile: dict[str, Any]) -> None:
     """Validate the profile document and its closed vocabulary."""
-    validators["profile"].validate(profile)
+    check_schema(validators, "profile", profile, "contracts/profile.json")
     require(tuple(profile["atoms"]) == PROFILE_ATOM_NAMES, "Profile atoms mismatch")
     require(tuple(profile["facts"]) == FACT_KEYS, "Profile facts mismatch")
     require(tuple(profile["claims"]) == CLAIM_IDS, "Profile claims mismatch")
@@ -591,7 +620,7 @@ def check_profile(validators: dict[str, Draft202012Validator],
 def check_claims_registry(validators: dict[str, Draft202012Validator],
                           manifest: dict[str, Any]) -> int:
     """Validate the claim manifest and require it to list every fixed claim."""
-    validators["claims"].validate(manifest)
+    check_schema(validators, "claims", manifest, "examples/tenant-write/claims.json")
     require(set(manifest["claims"]) == set(CLAIM_IDS), "Claim registry mismatch")
     return len(manifest["claims"])
 
@@ -632,7 +661,7 @@ def validate_policies(validators: dict[str, Draft202012Validator], fixtures: Fix
     rules_by_name: dict[str, list[list[str]]] = {}
     for name, expected_failures in EXPECTED_FAILURES.items():
         policy = fixtures.policies[name]
-        validators["policy"].validate(policy)
+        check_schema(validators, "policy", policy, f"{policy_folder(name)}/policy.json")
         # A variant may differ from the baseline only in its rule list, which is
         # what its reviewed mutation entry describes. Any other changed leaf
         # means a coordinated edit accompanied the mutation and needs review.
@@ -654,7 +683,7 @@ def validate_policies(validators: dict[str, Draft202012Validator], fixtures: Fix
         allow_count = 0
         for f in facts:
             r = concretize(f)
-            validators["request"].validate(r)
+            check_schema(validators, "request", r, f"concretized request for {name}")
             require(facts_of(r) == f, "Concretization is not a right inverse")
             abstract = eval_facts(rules, f)
             require(eval_request(rules, r) == abstract,
@@ -686,18 +715,28 @@ def publish_witnesses(workspace: Workspace, review: PolicyReview) -> int:
     witness removed, and any file left in the witness directory that this run
     did not generate fails the command, so a retired mutation cannot leave a
     stale counterexample behind.
+
+    The stale set is computed from the names on disk before anything is
+    written, so a run that fails that check leaves the directory untouched; the
+    check is a property of the review and the directory as they were found, not
+    of the writes this call has already made. Only a failure in the replay
+    below, or in a write itself, can leave a partially published set, and the
+    caller writes the summary only after publication returns.
     """
     kept: set[str] = set()
+    for name, failures in review.witnesses.items():
+        if failures:
+            kept.add(f"{name}.json")
+    present = {Path(relative).name for relative in workspace.list_json(WITNESS_DIRECTORY)}
+    stale = stale_witness_names(present, kept)
+    require(not stale, f"Stale witness files not generated by this run: {stale}")
+
     for name, failures in review.witnesses.items():
         relative = f"{WITNESS_DIRECTORY}/{name}.json"
         if failures:
             workspace.write_json(relative, failures)
-            kept.add(f"{name}.json")
         else:
             workspace.remove(relative)
-    present = {Path(relative).name for relative in workspace.list_json(WITNESS_DIRECTORY)}
-    stale = stale_witness_names(present, kept)
-    require(not stale, f"Stale witness files not generated by this run: {stale}")
 
     replays = 0
     for name, failures in review.witnesses.items():
@@ -713,7 +752,7 @@ def publish_witnesses(workspace: Workspace, review: PolicyReview) -> int:
 def check_request_ingress(validators: dict[str, Draft202012Validator],
                           good: dict[str, Any]) -> int:
     """Require the request schema to reject malformed shapes."""
-    validators["request"].validate(good)
+    check_schema(validators, "request", good, "examples/tenant-write/request.json")
     bad_requests = []
     r = copy.deepcopy(good); r["resource"]["locked"] = "false"; bad_requests.append(r)
     r = copy.deepcopy(good); r["resource"]["locked"] = 0; bad_requests.append(r)
@@ -866,10 +905,19 @@ def contract_controls(validators: dict[str, Draft202012Validator],
 
 
 def witness_controls(fixtures: Fixtures) -> list[tuple[str, bool, bool]]:
-    """Pair the accepted witnesses and headers with mutated counterparts."""
+    """Pair the accepted witnesses and headers with mutated counterparts.
+
+    The committed ``deny-all.json`` witness is the accepted member of every
+    witness control, so its absence is a boundary failure reported in the same
+    shape as a missing document rather than a ``KeyError`` traceback.
+    """
     profile = fixtures.profile
     baseline = fixtures.policies["baseline"]
-    witness = fixtures.stored_witnesses["deny-all.json"]
+    witness = fixtures.stored_witnesses.get("deny-all.json")
+    if witness is None:
+        raise HarnessIOError(
+            f"cannot check witnesses: {WITNESS_DIRECTORY}/deny-all.json is "
+            "required by the witness controls and is not committed")
     deny_all_rules = fixtures.policies["deny-all"]["rules"]
     stored_witnesses = set(fixtures.stored_witnesses)
 
@@ -939,21 +987,30 @@ def negative_controls(validators: dict[str, Draft202012Validator],
 
 def check_boundaries(repo: Repository,
                      produce: Callable[[], PolicyReview]) -> tuple[PolicyReview, int]:
-    """Prove validation is pure and publishing follows the given workspace.
+    """Check witness-state preservation and publication through the given root.
 
-    Two seams are asserted rather than trusted. Producing the review through
-    ``produce`` must leave every published witness exactly as it was, in size
-    and modification time as well as contents, so a check that reached for the
-    filesystem would be caught here. Publishing that same review through a
-    workspace rooted in a temporary directory must put the witnesses under that
-    root and leave the repository alone, so the command persists through the
-    boundary it was handed rather than through a module-level path.
+    Two storage seams are observed rather than trusted, and the claims are
+    limited to what is observed. Producing the review through ``produce`` must
+    leave the committed witness files unchanged in size, modification time, and
+    SHA-256 digest, so a check that rewrote one would be caught here. This
+    covers the JSON files in ``validation/witnesses/`` around
+    ``validate_policies`` alone, not every repository file and not every check,
+    and it cannot see a read or a transient change that was undone before the
+    second snapshot. Publishing that same review through a workspace rooted in
+    a temporary directory must put the witnesses under that root, replay from
+    there, and leave the repository as it was, so the command persists through
+    the boundary it was handed rather than through a module-level path.
+
+    This is architectural separation, not enforced filesystem isolation:
+    Python does not prevent a function from opening a file, so what these
+    checks show is that the inspected functions did not.
 
     The review is returned so the caller publishes the very run that was
-    measured, rather than a second run whose purity would go unobserved.
+    measured, rather than a second run whose storage behaviour would go
+    unobserved.
     """
-    def published() -> dict[str, tuple[int, int]]:
-        """Snapshot the published witnesses' size and modification time."""
+    def published() -> dict[str, tuple[int, int, str]]:
+        """Snapshot the committed witnesses' names, metadata, and digests."""
         return {relative: repo.state(relative)
                 for relative in repo.list_json(WITNESS_DIRECTORY)}
 

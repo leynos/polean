@@ -34,11 +34,14 @@ claims nothing about source-to-model correspondence or runtime refinement. It
 passes ``derandomize=True`` and ``database=None`` so a run is reproducible and
 writes no example database.
 
-Importing this module reads nothing. The admitted profile and the contract
-schemas are read through the harness's read-only repository boundary by one
-explicit :func:`configure` call in ``main``, before any property runs, so the
-documents the properties depend on are named in one place and a property cannot
-silently draw against constants left over from an earlier setup.
+Importing this module reads no profile or schema documents. It does execute the
+sibling harness to reuse its definitions, so importing is not free of file
+access. The admitted profile and the contract schemas are read through the
+harness's read-only repository boundary by one explicit :func:`load_admitted`
+call in ``main``, and the result is passed to :class:`Suite` as a constructor
+argument. A property therefore receives the data it is stated against rather
+than reaching for a module-level value, and there is no configured global for
+one to be left over from an earlier setup.
 """
 from __future__ import annotations
 
@@ -77,20 +80,17 @@ def _load_design_harness() -> Any:
 VD = _load_design_harness()
 
 
-class ConfigurationError(RuntimeError):
-    """Raised when a property runs before the fixtures have been loaded."""
-
-
 @dataclass(frozen=True)
 class Admitted:
     """The admitted profile and schemas the properties are stated against.
 
-    Loaded once by an explicit :func:`configure` call rather than during module
-    import, so importing this module reads nothing and the documents the
-    properties depend on appear in one place. Loading once matters for cost as
-    well as clarity: the schemas are meta-validated and the profile is
-    constant, so re-reading them per generated example would dominate the
-    search budget.
+    Loaded once by an explicit :func:`load_admitted` call rather than during
+    module import, and handed to :class:`Suite` as a constructor argument. A
+    property is a method of that object, so it reads ``self.admitted`` rather
+    than a module-level value and there is no ambient state for a run to
+    inherit. Loading once matters for cost as well as clarity: the schemas are
+    meta-validated and the profile is constant, so re-reading them per
+    generated example would dominate the search budget.
     """
 
     validators: dict[str, Any]
@@ -99,31 +99,17 @@ class Admitted:
     atom_sources: dict[str, str]
 
 
-_ADMITTED: Admitted | None = None
-
-
-def configure(repo: Any) -> Admitted:
+def load_admitted(repo: Any) -> Admitted:
     """Read and validate the profile the properties are stated against.
 
-    Called by ``main`` before any property runs. A property invoked without it
-    fails with :class:`ConfigurationError` rather than drawing against
-    undefined constants.
+    Called by ``main`` before any property runs, and by a test that wants a
+    suite without running the whole command.
     """
-    global _ADMITTED
     atoms = repo.read_json("contracts/profile.json")["atoms"]
     atom_sources = {source: name for name, source in atoms.items()}
     assert len(atom_sources) == len(atoms), "Atom sources must be distinct to decode"
-    _ADMITTED = Admitted(validators=VD.load_schemas(repo), atoms=atoms,
-                         atom_sources=atom_sources)
-    return _ADMITTED
-
-
-def admitted() -> Admitted:
-    """Return the configured profile, or fail when setup has not run."""
-    if _ADMITTED is None:
-        raise ConfigurationError(
-            "Property fixtures are not configured; call configure() first")
-    return _ADMITTED
+    return Admitted(validators=VD.load_schemas(repo), atoms=atoms,
+                    atom_sources=atom_sources)
 
 # Free-text domains, deliberately wider than the fixtures. The profile compares
 # strings for equality and does not normalize them, so equality of distinct
@@ -200,194 +186,223 @@ def requests(draw: st.DrawFn) -> dict[str, Any]:
     }
 
 
-@given(rules=RULES, request=requests())
-@SETTINGS
-def test_concrete_and_abstract_evaluation_agree(
-        rules: list[list[str]], request: dict[str, Any]) -> None:
-    """``evalRequest`` and ``evalFacts ∘ α`` must decide the same way."""
-    assert VD.eval_request(rules, request) == VD.eval_facts(
-        rules, VD.facts_of(request)), f"abstraction mismatch for {request!r}"
+class Suite:
+    """The eight model-side properties, bound to one admitted profile.
 
-
-@given(request=requests())
-@SETTINGS
-def test_abstraction_reads_the_declared_comparisons(
-        request: dict[str, Any]) -> None:
-    """Every drawn request is ingress-valid, and α computes the stated facts.
-
-    Checking key names alone would pass for any value at all, so each fact is
-    compared against an independently written expression over the request.
+    Holding the admitted data in an instance rather than a module global is
+    what lets a property run in isolation: constructing the suite is the only
+    way to supply its inputs, so there is no configured global to leak between
+    runs and no ordering requirement between properties.
     """
-    admitted().validators["request"].validate(request)
-    subject, resource = request["subject"], request["resource"]
-    expected = {
-        "same_tenant": subject["tenant"] == resource["tenant"],
-        "write_action": request["action"] == "write",
-        "admin_role": subject["role"] == "admin",
-        "owns_resource": subject["id"] == resource["owner"],
-        "locked": resource["locked"],
-    }
-    assert VD.facts_of(request) == expected, request
+
+    def __init__(self, admitted: Admitted) -> None:
+        self.admitted = admitted
+
+    @given(rules=RULES, request=requests())
+    @SETTINGS
+    def test_concrete_and_abstract_evaluation_agree(
+            self, rules: list[list[str]], request: dict[str, Any]) -> None:
+        """``evalRequest`` and ``evalFacts ∘ α`` must decide the same way."""
+        assert VD.eval_request(rules, request) == VD.eval_facts(
+            rules, VD.facts_of(request)), f"abstraction mismatch for {request!r}"
+
+    @given(request=requests())
+    @SETTINGS
+    def test_abstraction_reads_the_declared_comparisons(
+            self, request: dict[str, Any]) -> None:
+        """Every drawn request is ingress-valid, and α computes the stated facts.
+
+        Checking key names alone would pass for any value at all, so each fact
+        is compared against an independently written expression over the
+        request.
+        """
+        self.admitted.validators["request"].validate(request)
+        subject, resource = request["subject"], request["resource"]
+        expected = {
+            "same_tenant": subject["tenant"] == resource["tenant"],
+            "write_action": request["action"] == "write",
+            "admin_role": subject["role"] == "admin",
+            "owns_resource": subject["id"] == resource["owner"],
+            "locked": resource["locked"],
+        }
+        assert VD.facts_of(request) == expected, request
+
+    @given(pair=SHARED_PREFIXES, locked=st.booleans())
+    @SETTINGS
+    def test_equality_ignores_length_and_shared_prefix(
+            self, pair: tuple[str, str], locked: bool) -> None:
+        """Only whole-string equality may drive a decision, not length or prefix.
+
+        The general string cap bounds the search, so the cases that cross it are
+        drawn explicitly here. Each member of the pair is longer than the cap and
+        the shorter (by construction) is a strict prefix of the longer, so an
+        implementation that truncated, prefix-compared, or branched on length
+        diverges on these draws. Both compared pairs are exercised: the tenants
+        drive ``same_tenant`` and the ids drive ``owns_resource``.
+
+        Coverage is still bounded. These are two specific shapes of long input
+        among many, so a fault needing some other long-string arrangement may
+        escape both this property and the capped domain.
+        """
+        left, right = pair
+        assert len(left) > 64 and len(right) > 64, pair
+        assert right.startswith(left) and right != left, pair
+        request = {
+            "subject": {"tenant": left, "id": left, "role": "member"},
+            "resource": {"tenant": right, "owner": right, "locked": locked},
+            "action": "write",
+        }
+        self.admitted.validators["request"].validate(request)
+        facts = VD.facts_of(request)
+        # Strict extensions must compare unequal in both compared positions.
+        assert facts["same_tenant"] is False, request
+        assert facts["owns_resource"] is False, request
+        assert VD.eval_request([["same_tenant"]], request) is False, request
+        assert VD.eval_request([["owns_resource"]], request) is False, request
+        # Control: the same long string against itself must compare equal, so the
+        # assertions above cannot be satisfied by an operator that always denies.
+        identical = {
+            "subject": {"tenant": left, "id": left, "role": "member"},
+            "resource": {"tenant": left, "owner": left, "locked": locked},
+            "action": "write",
+        }
+        self.admitted.validators["request"].validate(identical)
+        equal_facts = VD.facts_of(identical)
+        assert equal_facts["same_tenant"] is True, identical
+        assert equal_facts["owns_resource"] is True, identical
+        assert VD.eval_request([["same_tenant"]], identical) is True, identical
+        assert VD.eval_request([["owns_resource"]], identical) is True, identical
 
 
-@given(pair=SHARED_PREFIXES, locked=st.booleans())
-@SETTINGS
-def test_equality_ignores_length_and_shared_prefix(
-        pair: tuple[str, str], locked: bool) -> None:
-    """Only whole-string equality may drive a decision, not length or prefix.
-
-    The general string cap bounds the search, so the cases that cross it are
-    drawn explicitly here. Each member of the pair is longer than the cap and
-    the shorter (by construction) is a strict prefix of the longer, so an
-    implementation that truncated, prefix-compared, or branched on length
-    diverges on these draws. Both compared pairs are exercised: the tenants
-    drive ``same_tenant`` and the ids drive ``owns_resource``.
-
-    Coverage is still bounded. These are two specific shapes of long input
-    among many, so a fault needing some other long-string arrangement may
-    escape both this property and the capped domain.
-    """
-    left, right = pair
-    assert len(left) > 64 and len(right) > 64, pair
-    assert right.startswith(left) and right != left, pair
-    request = {
-        "subject": {"tenant": left, "id": left, "role": "member"},
-        "resource": {"tenant": right, "owner": right, "locked": locked},
-        "action": "write",
-    }
-    admitted().validators["request"].validate(request)
-    facts = VD.facts_of(request)
-    # Strict extensions must compare unequal in both compared positions.
-    assert facts["same_tenant"] is False, request
-    assert facts["owns_resource"] is False, request
-    assert VD.eval_request([["same_tenant"]], request) is False, request
-    assert VD.eval_request([["owns_resource"]], request) is False, request
-    # Control: the same long string against itself must compare equal, so the
-    # assertions above cannot be satisfied by an operator that always denies.
-    identical = {
-        "subject": {"tenant": left, "id": left, "role": "member"},
-        "resource": {"tenant": left, "owner": left, "locked": locked},
-        "action": "write",
-    }
-    admitted().validators["request"].validate(identical)
-    equal_facts = VD.facts_of(identical)
-    assert equal_facts["same_tenant"] is True, identical
-    assert equal_facts["owns_resource"] is True, identical
-    assert VD.eval_request([["same_tenant"]], identical) is True, identical
-    assert VD.eval_request([["owns_resource"]], identical) is True, identical
+    @given(
+        values=st.lists(st.booleans(), min_size=len(VD.FACT_KEYS),
+                        max_size=len(VD.FACT_KEYS))
+    )
+    @SETTINGS
+    def test_concretization_is_a_right_inverse(
+            self, values: list[bool]) -> None:
+        """``α(γ(f)) = f``, so every abstract counterexample has a real request."""
+        facts = dict(zip(VD.FACT_KEYS, values, strict=True))
+        concretized = VD.concretize(facts)
+        self.admitted.validators["request"].validate(concretized)
+        assert VD.facts_of(concretized) == facts, f"γ is not a section for {facts!r}"
 
 
-@given(
-    values=st.lists(st.booleans(), min_size=len(VD.FACT_KEYS),
-                    max_size=len(VD.FACT_KEYS))
+    @given(facts=FACT_VECTORS)
+    @SETTINGS
+    def test_unlocked_is_derived_not_independent(
+            self, facts: dict[str, bool]) -> None:
+        """``unlocked`` must negate the locked fact rather than stand alone."""
+        assert VD.eval_facts([["unlocked"]], facts) is (not facts["locked"])
+        assert VD.eval_facts([["locked"]], facts) is facts["locked"]
+
+
+    @given(facts=FACT_VECTORS)
+    @SETTINGS
+    def test_the_six_claims_characterize_the_intended_decision(
+            self, facts: dict[str, bool]) -> None:
+        """Some decision satisfies all six claims only when it is the intended one."""
+        satisfying = [allowed for allowed in (False, True)
+                      if all(VD.claims(facts, allowed).values())]
+        intended = (facts["same_tenant"] and facts["write_action"]
+                    and (facts["admin_role"]
+                         or (facts["owns_resource"] and not facts["locked"])))
+        assert satisfying == [intended], f"claims do not pin the decision for {facts!r}"
+
+
+    @given(rules=RULES, other=RULES)
+    @SETTINGS
+    def test_rendering_is_injective_within_profile_bounds(
+            self, rules: list[list[str]], other: list[list[str]]) -> None:
+        """Distinct admitted rule lists must not render to identical source text.
+
+        Only distinct pairs are constrained. This samples pairs rather than
+        searching for a collision, so it is the weaker of the two renderer
+        properties: a colliding pair the draw does not happen to select passes
+        here. It is retained because a collision it does find is a direct
+        counterexample, but the round-trip property below is the real guarantee.
+        A de-duplicating renderer maps ``[["same_tenant"]]`` and
+        ``[["same_tenant", "same_tenant"]]`` to the same text, so it is not
+        injective; and a left inverse implies injectivity outright, since
+        ``render(r1) = render(r2)`` gives ``r1 = decode(render(r1)) =
+        decode(render(r2)) = r2``. The two properties are therefore not
+        independent, and this one adds no strength the round trip does not
+        already have.
+        """
+        atoms = self.admitted.atoms
+        assert rules == other or VD.render_source("baseline", rules, atoms) != (
+            VD.render_source("baseline", other, atoms)
+        ), f"renderer collided on {rules!r} and {other!r}"
+
+    @given(rules=RULES)
+    @SETTINGS
+    def test_rendered_text_preserves_the_rule_list(
+            self, rules: list[list[str]]) -> None:
+        """The rendered text must decode back to exactly the rule list given.
+
+        Splitting on the fixed template recovers the atom sources, so the rule
+        list is recoverable from the text. This is what a de-duplicating or
+        reordering renderer violates, and it asserts the template, the atom
+        order, and every atom's presence rather than a subset of them. Unlike the
+        sampled pair comparison above, a left inverse of the renderer holds for
+        every admitted rule list, so this property implies injectivity rather
+        than merely sampling it.
+        """
+        atoms = self.admitted.atoms
+        text = VD.render_source("baseline", rules, atoms)
+        body = [line for line in text.splitlines() if not line.startswith("#")]
+        while body and not body[0]:  # the documented header ends with a blank line
+            body.pop(0)
+        assert body[:5] == ["package authz", "", "import rego.v1", "",
+                            "default allow := false"], body[:5]
+        # Decode from the raw text rather than the re-joined lines, which would
+        # drop the trailing newline each rule block ends with.
+        prefix = "default allow := false\n"
+        rest = text[text.index(prefix) + len(prefix):]
+        delimiter = "\nallow if {\n"
+        # Everything between the default declaration and the first rule must be
+        # accounted for, or arbitrary text -- a stray declaration, say -- could sit
+        # there unnoticed; with zero rules there would be no chunk to inspect at
+        # all. So the region must be empty when there are no rules, and otherwise
+        # must begin with the delimiter and contain exactly one per rule, which
+        # leaves no room for unexamined text before, between, or after the blocks.
+        if not rules:
+            assert rest == "", repr(rest[:60])
+        else:
+            assert rest.startswith(delimiter), repr(rest[:60])
+            assert rest.count(delimiter) == len(rules), repr(rest[:60])
+        recovered: list[list[str]] = []
+        indent = "    "
+        for chunk in rest.split(delimiter)[1:]:
+            assert chunk.endswith("}\n"), chunk
+            body_lines = chunk[:-2].splitlines()
+            for line in body_lines:
+                assert line.startswith(indent), chunk
+            recovered.append([self.admitted.atom_sources[line[len(indent):]]
+                              for line in body_lines])
+        assert recovered == rules, f"round trip changed {rules!r} into {recovered!r}"
+        assert VD.header_reason("baseline", text[:text.index("package authz")]) is None
+
+
+PROPERTY_NAMES = (
+    "test_concrete_and_abstract_evaluation_agree",
+    "test_abstraction_reads_the_declared_comparisons",
+    "test_equality_ignores_length_and_shared_prefix",
+    "test_concretization_is_a_right_inverse",
+    "test_unlocked_is_derived_not_independent",
+    "test_the_six_claims_characterize_the_intended_decision",
+    "test_rendering_is_injective_within_profile_bounds",
+    "test_rendered_text_preserves_the_rule_list",
 )
-@SETTINGS
-def test_concretization_is_a_right_inverse(values: list[bool]) -> None:
-    """``α(γ(f)) = f``, so every abstract counterexample has a real request."""
-    facts = dict(zip(VD.FACT_KEYS, values, strict=True))
-    concretized = VD.concretize(facts)
-    admitted().validators["request"].validate(concretized)
-    assert VD.facts_of(concretized) == facts, f"γ is not a section for {facts!r}"
-
-
-@given(facts=FACT_VECTORS)
-@SETTINGS
-def test_unlocked_is_derived_not_independent(facts: dict[str, bool]) -> None:
-    """``unlocked`` must negate the locked fact rather than stand alone."""
-    assert VD.eval_facts([["unlocked"]], facts) is (not facts["locked"])
-    assert VD.eval_facts([["locked"]], facts) is facts["locked"]
-
-
-@given(facts=FACT_VECTORS)
-@SETTINGS
-def test_the_six_claims_characterize_the_intended_decision(
-        facts: dict[str, bool]) -> None:
-    """Some decision satisfies all six claims only when it is the intended one."""
-    satisfying = [allowed for allowed in (False, True)
-                  if all(VD.claims(facts, allowed).values())]
-    intended = (facts["same_tenant"] and facts["write_action"]
-                and (facts["admin_role"]
-                     or (facts["owns_resource"] and not facts["locked"])))
-    assert satisfying == [intended], f"claims do not pin the decision for {facts!r}"
-
-
-@given(rules=RULES, other=RULES)
-@SETTINGS
-def test_rendering_is_injective_within_profile_bounds(
-        rules: list[list[str]], other: list[list[str]]) -> None:
-    """Distinct admitted rule lists must not render to identical source text.
-
-    Only distinct pairs are constrained. This samples pairs rather than
-    searching for a collision, so it is the weaker of the two renderer
-    properties: a colliding pair the draw does not happen to select passes
-    here. It is retained because a collision it does find is a direct
-    counterexample, but the round-trip property below is the real guarantee.
-    A de-duplicating renderer maps ``[["same_tenant"]]`` and
-    ``[["same_tenant", "same_tenant"]]`` to the same text, so it is not
-    injective; and a left inverse implies injectivity outright, since
-    ``render(r1) = render(r2)`` gives ``r1 = decode(render(r1)) =
-    decode(render(r2)) = r2``. The two properties are therefore not
-    independent, and this one adds no strength the round trip does not
-    already have.
-    """
-    assert rules == other or VD.render_source("baseline", rules, admitted().atoms) != (
-        VD.render_source("baseline", other, admitted().atoms)
-    ), f"renderer collided on {rules!r} and {other!r}"
-
-
-@given(rules=RULES)
-@SETTINGS
-def test_rendered_text_preserves_the_rule_list(rules: list[list[str]]) -> None:
-    """The rendered text must decode back to exactly the rule list given.
-
-    Splitting on the fixed template recovers the atom sources, so the rule
-    list is recoverable from the text. This is what a de-duplicating or
-    reordering renderer violates, and it asserts the template, the atom
-    order, and every atom's presence rather than a subset of them. Unlike the
-    sampled pair comparison above, a left inverse of the renderer holds for
-    every admitted rule list, so this property implies injectivity rather
-    than merely sampling it.
-    """
-    text = VD.render_source("baseline", rules, admitted().atoms)
-    body = [line for line in text.splitlines() if not line.startswith("#")]
-    while body and not body[0]:  # the documented header ends with a blank line
-        body.pop(0)
-    assert body[:5] == ["package authz", "", "import rego.v1", "",
-                        "default allow := false"], body[:5]
-    # Decode from the raw text rather than the re-joined lines, which would
-    # drop the trailing newline each rule block ends with.
-    prefix = "default allow := false\n"
-    rest = text[text.index(prefix) + len(prefix):]
-    delimiter = "\nallow if {\n"
-    # Everything between the default declaration and the first rule must be
-    # accounted for, or arbitrary text -- a stray declaration, say -- could sit
-    # there unnoticed; with zero rules there would be no chunk to inspect at
-    # all. So the region must be empty when there are no rules, and otherwise
-    # must begin with the delimiter and contain exactly one per rule, which
-    # leaves no room for unexamined text before, between, or after the blocks.
-    if not rules:
-        assert rest == "", repr(rest[:60])
-    else:
-        assert rest.startswith(delimiter), repr(rest[:60])
-        assert rest.count(delimiter) == len(rules), repr(rest[:60])
-    recovered: list[list[str]] = []
-    indent = "    "
-    for chunk in rest.split(delimiter)[1:]:
-        assert chunk.endswith("}\n"), chunk
-        body_lines = chunk[:-2].splitlines()
-        for line in body_lines:
-            assert line.startswith(indent), chunk
-        recovered.append([admitted().atom_sources[line[len(indent):]] for line in body_lines])
-    assert recovered == rules, f"round trip changed {rules!r} into {recovered!r}"
-    assert VD.header_reason("baseline", text[:text.index("package authz")]) is None
 
 
 def main() -> int:
     """Run each property over the admitted domain and report the coverage.
 
     The admitted profile and schemas are read here, once, through the harness's
-    read-only repository boundary, before any property runs. Every entry is
-    asserted to be a Hypothesis-wrapped test, so a property accidentally
+    read-only repository boundary, and the resulting suite carries them into
+    every property, so no property depends on a configured global. Every entry
+    is asserted to be a Hypothesis-wrapped test, so a property accidentally
     stripped of its ``@given`` decorator fails here instead of silently running
     once against no examples and reporting a false pass.
 
@@ -396,17 +411,8 @@ def main() -> int:
     when it exhausts a finite strategy. This output does not report an
     execution count or establish exhaustive coverage.
     """
-    configure(VD.Repository(ROOT))
-    properties = [
-        test_concrete_and_abstract_evaluation_agree,
-        test_abstraction_reads_the_declared_comparisons,
-        test_equality_ignores_length_and_shared_prefix,
-        test_concretization_is_a_right_inverse,
-        test_unlocked_is_derived_not_independent,
-        test_the_six_claims_characterize_the_intended_decision,
-        test_rendering_is_injective_within_profile_bounds,
-        test_rendered_text_preserves_the_rule_list,
-    ]
+    suite = Suite(load_admitted(VD.Repository(ROOT)))
+    properties = [getattr(suite, name) for name in PROPERTY_NAMES]
     for property_check in properties:
         assert getattr(property_check, "is_hypothesis_test", False), (
             f"{property_check.__name__} is not Hypothesis-wrapped, so it would "
