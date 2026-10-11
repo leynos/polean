@@ -306,8 +306,11 @@ technical-design.md §8 and §10, V8.
   - See technical-design.md §10.1, V7–V10; terms-of-reference.md §7, SC4–SC6.
   - Success: substitutions of each bound identity, unchanged IR with changed
     source, altered profiles, omitted claims, corrupt worker output, missing
-    tools, false/missing oracle decisions, and timeout after partial proof all
-    yield the specified non-success outcome across command/output combinations.
+    tools, missing oracle decisions (always a failure for valid admitted
+    requests), false oracle decisions on model-allowed requests, and timeout
+    after partial proof all yield the specified non-success outcome across
+    command/output combinations. A false decision matching a model denial
+    passes conformance.
 
 ### 4.3. Demonstrate replay within enforced local budgets
 
