@@ -19,7 +19,7 @@ machine-readable result is [design-validation.json](design-validation.json).
 | Baseline                              | All six requirements pass; five of 32 vectors allow.                                                                                                                                                                          |
 | Six policy mutations                  | Each fails precisely the intended requirement(s); concrete witnesses appear in `witnesses/`.                                                                                                                                  |
 | Witness replay                        | Every stored witness is re-derived from its request and rule list, and must still refute its named requirement.                                                                                                               |
-| Witness sweep                         | A witness file the current run did not generate fails the check, so a retired mutation cannot leave a stale counterexample behind.                                                                                            |
+| Witness sweep                         | A witness file the current run did not generate fails the check and is reported rather than deleted, so a retired mutation cannot leave an unnoticed stale counterexample behind.                                             |
 | Malformed request shape               | Five malformed variants rejected.                                                                                                                                                                                             |
 | Strict ingress examples               | Duplicate keys, unpaired surrogates, invalid UTF-8, and non-JSON `NaN` rejected.                                                                                                                                              |
 | Unicode examples                      | Empty, ASCII, composed/decomposed accented, and supplementary-plane strings accepted; composed and decomposed tenant names remain distinct, with a same-tenant control.                                                       |
@@ -102,7 +102,11 @@ same review through a temporary workspace must write the witnesses under that
 root, replay them from there, and leave the repository alone, which catches a
 command that ignored the boundary it was handed. The stale-witness set is
 computed from the directory as it was found, before anything is written, so a
-run rejected for a stale file leaves the tree untouched.
+run rejected for a stale file leaves the tree untouched. Rejection is not
+removal: an unexpected file is reported and left where it is for a person to
+delete, because the run stops before writing anything. Only a reviewed variant
+that no longer refutes anything has its own witness removed, and only in a run
+that passes the sweep.
 
 Importing `property_fixtures.py` reads no profile or schema document, though it
 does execute the sibling harness to reuse its definitions. The admitted profile
