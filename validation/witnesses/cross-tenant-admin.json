@@ -1,0 +1,25 @@
+{
+  "tenant-isolation": {
+    "request": {
+      "subject": {
+        "tenant": "tenant-a",
+        "id": "subject-a",
+        "role": "admin"
+      },
+      "resource": {
+        "tenant": "tenant-b",
+        "owner": "subject-b",
+        "locked": false
+      },
+      "action": "write"
+    },
+    "decision": true,
+    "facts": {
+      "same_tenant": false,
+      "write_action": true,
+      "admin_role": true,
+      "owns_resource": false,
+      "locked": false
+    }
+  }
+}

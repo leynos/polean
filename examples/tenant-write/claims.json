@@ -1,0 +1,12 @@
+{
+  "schema_version": "polean.claims.v0",
+  "profile": "polean.tenant-write.v0",
+  "claims": [
+    "tenant-isolation",
+    "write-only",
+    "locked-requires-admin",
+    "admin-or-owner",
+    "admin-write-available",
+    "owner-write-available"
+  ]
+}

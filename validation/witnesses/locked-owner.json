@@ -1,0 +1,25 @@
+{
+  "locked-requires-admin": {
+    "request": {
+      "subject": {
+        "tenant": "tenant-a",
+        "id": "subject-a",
+        "role": "member"
+      },
+      "resource": {
+        "tenant": "tenant-a",
+        "owner": "subject-a",
+        "locked": true
+      },
+      "action": "write"
+    },
+    "decision": true,
+    "facts": {
+      "same_tenant": true,
+      "write_action": true,
+      "admin_role": false,
+      "owns_resource": true,
+      "locked": true
+    }
+  }
+}

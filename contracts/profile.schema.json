@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Polean tenant-write v0 profile",
+  "description": "Shape and admitted-value checks for the closed tenant-write profile. Schema validity does not establish that the profile agrees with the policy, request, claims, and result contracts; the design validator checks those cross-contract relations separately.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "const": "polean.tenant-write.v0"
+    },
+    "status": {
+      "enum": [
+        "proposed"
+      ]
+    },
+    "package": {
+      "const": "authz"
+    },
+    "entrypoint": {
+      "const": "data.authz.allow"
+    },
+    "rego_language": {
+      "enum": [
+        "v1"
+      ]
+    },
+    "import": {
+      "enum": [
+        "rego.v1"
+      ]
+    },
+    "default": {
+      "const": false
+    },
+    "input_schema": {
+      "const": "request.schema.json"
+    },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "const": 0
+        },
+        "max": {
+          "const": 16
+        },
+        "body_min": {
+          "const": 1
+        },
+        "body_max": {
+          "const": 16
+        }
+      },
+      "required": [
+        "min",
+        "max",
+        "body_min",
+        "body_max"
+      ],
+      "additionalProperties": false
+    },
+    "atoms": {
+      "type": "object",
+      "properties": {
+        "same_tenant": {
+          "const": "input.subject.tenant == input.resource.tenant"
+        },
+        "write_action": {
+          "const": "input.action == \"write\""
+        },
+        "admin_role": {
+          "const": "input.subject.role == \"admin\""
+        },
+        "owns_resource": {
+          "const": "input.subject.id == input.resource.owner"
+        },
+        "locked": {
+          "const": "input.resource.locked == true"
+        },
+        "unlocked": {
+          "const": "input.resource.locked == false"
+        }
+      },
+      "required": [
+        "same_tenant",
+        "write_action",
+        "admin_role",
+        "owns_resource",
+        "locked",
+        "unlocked"
+      ],
+      "additionalProperties": false
+    },
+    "facts": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "same_tenant",
+          "write_action",
+          "admin_role",
+          "owns_resource",
+          "locked"
+        ]
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "tenant-isolation",
+          "write-only",
+          "locked-requires-admin",
+          "admin-or-owner",
+          "admin-write-available",
+          "owner-write-available"
+        ]
+      }
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "source_bytes": {
+          "const": 65536
+        },
+        "input_bytes": {
+          "const": 65536
+        },
+        "result_bytes": {
+          "const": 1048576
+        },
+        "wall_seconds": {
+          "const": 60
+        },
+        "memory_bytes": {
+          "const": 2147483648
+        },
+        "concurrent_proof_jobs": {
+          "const": 1
+        }
+      },
+      "required": [
+        "source_bytes",
+        "input_bytes",
+        "result_bytes",
+        "wall_seconds",
+        "memory_bytes",
+        "concurrent_proof_jobs"
+      ],
+      "additionalProperties": false
+    },
+    "runtime_options": {
+      "type": "object",
+      "properties": {
+        "strict_builtin_errors": {
+          "const": true
+        },
+        "external_data": {
+          "const": false
+        },
+        "network": {
+          "const": false
+        }
+      },
+      "required": [
+        "strict_builtin_errors",
+        "external_data",
+        "network"
+      ],
+      "additionalProperties": false
+    },
+    "assurance": {
+      "type": "object",
+      "properties": {
+        "logic": {
+          "const": "kernel-checked model theorem required"
+        },
+        "source_binding": {
+          "const": "trusted frontend"
+        },
+        "runtime_correspondence": {
+          "const": "differential tests, not proof"
+        }
+      },
+      "required": [
+        "logic",
+        "source_binding",
+        "runtime_correspondence"
+      ],
+      "additionalProperties": false
+    },
+    "excluded": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "other packages",
+          "other imports",
+          "additional modules",
+          "metadata annotations",
+          "other rules",
+          "variables",
+          "unification",
+          "negation",
+          "else",
+          "with",
+          "some",
+          "every",
+          "built-in calls",
+          "functions",
+          "data references",
+          "dynamic references",
+          "numeric expressions",
+          "collections",
+          "arbitrary Lean source",
+          "custom invariants"
+        ]
+      }
+    }
+  },
+  "required": [
+    "id",
+    "status",
+    "package",
+    "entrypoint",
+    "rego_language",
+    "import",
+    "default",
+    "input_schema",
+    "rules",
+    "atoms",
+    "facts",
+    "claims",
+    "limits",
+    "runtime_options",
+    "assurance",
+    "excluded"
+  ],
+  "additionalProperties": false
+}

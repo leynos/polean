@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Polean tenant-write v0 request",
+  "description": "Shape only. The ingress contract also rejects duplicate keys, invalid UTF-8 and unpaired Unicode surrogates without coercion.",
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "object",
+      "properties": {
+        "tenant": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant",
+        "id",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "resource": {
+      "type": "object",
+      "properties": {
+        "tenant": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "locked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "tenant",
+        "owner",
+        "locked"
+      ],
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "subject",
+    "resource",
+    "action"
+  ],
+  "additionalProperties": false
+}

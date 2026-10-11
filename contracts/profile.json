@@ -1,0 +1,79 @@
+{
+  "id": "polean.tenant-write.v0",
+  "status": "proposed",
+  "package": "authz",
+  "entrypoint": "data.authz.allow",
+  "rego_language": "v1",
+  "import": "rego.v1",
+  "default": false,
+  "input_schema": "request.schema.json",
+  "rules": {
+    "min": 0,
+    "max": 16,
+    "body_min": 1,
+    "body_max": 16
+  },
+  "atoms": {
+    "same_tenant": "input.subject.tenant == input.resource.tenant",
+    "write_action": "input.action == \"write\"",
+    "admin_role": "input.subject.role == \"admin\"",
+    "owns_resource": "input.subject.id == input.resource.owner",
+    "locked": "input.resource.locked == true",
+    "unlocked": "input.resource.locked == false"
+  },
+  "facts": [
+    "same_tenant",
+    "write_action",
+    "admin_role",
+    "owns_resource",
+    "locked"
+  ],
+  "claims": [
+    "tenant-isolation",
+    "write-only",
+    "locked-requires-admin",
+    "admin-or-owner",
+    "admin-write-available",
+    "owner-write-available"
+  ],
+  "limits": {
+    "source_bytes": 65536,
+    "input_bytes": 65536,
+    "result_bytes": 1048576,
+    "wall_seconds": 60,
+    "memory_bytes": 2147483648,
+    "concurrent_proof_jobs": 1
+  },
+  "runtime_options": {
+    "strict_builtin_errors": true,
+    "external_data": false,
+    "network": false
+  },
+  "assurance": {
+    "logic": "kernel-checked model theorem required",
+    "source_binding": "trusted frontend",
+    "runtime_correspondence": "differential tests, not proof"
+  },
+  "excluded": [
+    "other packages",
+    "other imports",
+    "additional modules",
+    "metadata annotations",
+    "other rules",
+    "variables",
+    "unification",
+    "negation",
+    "else",
+    "with",
+    "some",
+    "every",
+    "built-in calls",
+    "functions",
+    "data references",
+    "dynamic references",
+    "numeric expressions",
+    "collections",
+    "arbitrary Lean source",
+    "custom invariants"
+  ]
+}

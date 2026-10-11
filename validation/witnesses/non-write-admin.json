@@ -1,0 +1,25 @@
+{
+  "write-only": {
+    "request": {
+      "subject": {
+        "tenant": "tenant-a",
+        "id": "subject-a",
+        "role": "admin"
+      },
+      "resource": {
+        "tenant": "tenant-a",
+        "owner": "subject-b",
+        "locked": false
+      },
+      "action": "read"
+    },
+    "decision": true,
+    "facts": {
+      "same_tenant": true,
+      "write_action": false,
+      "admin_role": true,
+      "owns_resource": false,
+      "locked": false
+    }
+  }
+}
