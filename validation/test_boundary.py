@@ -291,6 +291,12 @@ def test_stale_witnesses_are_rejected_before_anything_is_written() -> None:
             raise TestFailure("the run rewrote the stale witness it rejected")
 
 
+def published_witnesses(workspace: VD.Workspace) -> dict[str, bytes]:
+    """Record every published witness under a workspace by name and content."""
+    directory = workspace.path(VD.WITNESS_DIRECTORY)
+    return {path.name: path.read_bytes() for path in directory.glob("*.json")}
+
+
 def test_a_corrected_variant_has_its_witness_removed_not_rejected() -> None:
     """A witness whose variant stopped refuting must be removed, not called stale.
 
@@ -299,27 +305,33 @@ def test_a_corrected_variant_has_its_witness_removed_not_rejected() -> None:
     surviving file would be reported as stale and the run would fail before
     reaching the removal — losing the behaviour that keeps a corrected
     mutation from leaving its counterexample behind.
+
+    The surviving witnesses are compared by content, not only by name: their
+    bytes must match what the first publication wrote, so removing one variant
+    cannot quietly rewrite another. Their modification times are not compared,
+    because publication rewrites every refuting witness on each run.
     """
     with tempfile.TemporaryDirectory(prefix="polean-boundary-") as directory:
         workspace = VD.Workspace(Path(directory))
         review = fixture_review(VD.Repository(ROOT))
         VD.publish_witnesses(workspace, review)
-        published = sorted(path.name for path
-                           in workspace.path(VD.WITNESS_DIRECTORY).glob("*.json"))
+        published = published_witnesses(workspace)
         if "admin-only.json" not in published:
-            raise TestFailure(f"the fixture witness set is unexpected: {published}")
+            raise TestFailure(
+                f"the fixture witness set is unexpected: {sorted(published)}")
 
         corrected = dataclasses.replace(
             review,
             witnesses={**review.witnesses, "admin-only": []},
         )
         replays = VD.publish_witnesses(workspace, corrected)
-        remaining = sorted(path.name for path
-                           in workspace.path(VD.WITNESS_DIRECTORY).glob("*.json"))
+        remaining = published_witnesses(workspace)
         if "admin-only.json" in remaining:
             raise TestFailure("a corrected variant kept its witness")
-        if remaining != [name for name in published if name != "admin-only.json"]:
-            raise TestFailure(f"removal disturbed another witness: {remaining}")
+        if remaining != {name: body for name, body in published.items()
+                         if name != "admin-only.json"}:
+            raise TestFailure(
+                f"removal disturbed another witness: {sorted(remaining)}")
         if replays != len(remaining):
             raise TestFailure(f"replayed {replays}, expected {len(remaining)}")
 
