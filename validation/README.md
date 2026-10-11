@@ -6,27 +6,27 @@ implementation certification.
 `validate_design.py` ran successfully in the authoring environment. Its
 machine-readable result is [design-validation.json](design-validation.json).
 
-| Check performed                       | Result                                                                                                                                                                                                                        |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| JSON Schema meta-validation           | Five schemas accepted by the installed Draft 2020-12 validator.                                                                                                                                                               |
-| Profile contract                      | The profile document conforms to its schema, and its atom, fact, claim, exclusion, limit, and assurance entries match the reviewed constants.                                                                                 |
-| Claim registry                        | The claim manifest lists exactly the six fixed requirements.                                                                                                                                                                  |
-| Baseline and mutation IR              | Seven policy variants conform to the proposed policy schema, and each variant differs from the baseline only inside its rule list.                                                                                            |
-| Module documentation                  | Each of the seven fixtures is rendered with the reviewed module header that names it, and that header is checked structurally before use.                                                                                     |
-| Concrete/abstract fixture comparison  | 224 comparisons: 32 vectors for each of seven policies.                                                                                                                                                                       |
-| Requirement completeness sanity check | All 64 combinations of five facts and an allow/deny decision match the intended decision exactly when all six requirements hold.                                                                                              |
-| Concretization                        | Every enumerated fact vector has a schema-valid request with the same facts.                                                                                                                                                  |
-| Baseline                              | All six requirements pass; five of 32 vectors allow.                                                                                                                                                                          |
-| Six policy mutations                  | Each fails precisely the intended requirement(s); concrete witnesses appear in `witnesses/`.                                                                                                                                  |
-| Witness replay                        | Every stored witness is re-derived from its request and rule list, and must still refute its named requirement.                                                                                                               |
-| Witness sweep                         | A witness file the current run did not generate fails the check and is reported rather than deleted, so a retired mutation's counterexample cannot pass unnoticed, though the file stays for manual removal.                  |
-| Malformed request shape               | Five malformed variants rejected.                                                                                                                                                                                             |
-| Strict ingress examples               | Duplicate keys, unpaired surrogates, invalid UTF-8, and non-JSON `NaN` rejected.                                                                                                                                              |
-| Unicode examples                      | Empty, ASCII, composed/decomposed accented, and supplementary-plane strings accepted; composed and decomposed tenant names remain distinct, with a same-tenant control.                                                       |
-| Example result structure              | An explicitly inconclusive, unproved report satisfies the result schema.                                                                                                                                                      |
-| Negative controls                     | Nineteen injected fixture faults each detected by the check meant to catch them.                                                                                                                                              |
-| Storage-boundary seams                | Two seams: reviewing the loaded fixtures leaves every witness in `witnesses/` unchanged in size, modification time, and SHA-256 digest, and publishing through a temporary root writes there and leaves the repository alone. |
-| Boundary tests                        | Eleven independent tests of the orchestration and storage boundary, each falsified against a targeted injected fault.                                                                                                         |
+| Check performed                       | Result                                                                                                                                                                                                                                                                             |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JSON Schema meta-validation           | Five schemas accepted by the installed Draft 2020-12 validator.                                                                                                                                                                                                                    |
+| Profile contract                      | The profile document conforms to its schema, and its atom, fact, claim, exclusion, limit, and assurance entries match the reviewed constants.                                                                                                                                      |
+| Claim registry                        | The claim manifest lists exactly the six fixed requirements.                                                                                                                                                                                                                       |
+| Baseline and mutation IR              | Seven policy variants conform to the proposed policy schema, and each variant differs from the baseline only inside its rule list.                                                                                                                                                 |
+| Module documentation                  | Each of the seven fixtures is rendered with the reviewed module header that names it, and that header is checked structurally before use.                                                                                                                                          |
+| Concrete/abstract fixture comparison  | 224 comparisons: 32 vectors for each of seven policies.                                                                                                                                                                                                                            |
+| Requirement completeness sanity check | All 64 combinations of five facts and an allow/deny decision match the intended decision exactly when all six requirements hold.                                                                                                                                                   |
+| Concretization                        | Every enumerated fact vector has a schema-valid request with the same facts.                                                                                                                                                                                                       |
+| Baseline                              | All six requirements pass; five of 32 vectors allow.                                                                                                                                                                                                                               |
+| Six policy mutations                  | Each fails precisely the intended requirement(s); concrete witnesses appear in `witnesses/`.                                                                                                                                                                                       |
+| Witness replay                        | Every stored witness is re-derived from its request and rule list, and must still refute its named requirement.                                                                                                                                                                    |
+| Witness sweep                         | A witness file the current run did not generate fails the check and is reported rather than deleted, so a retired mutation's counterexample cannot pass unnoticed, though the file stays for manual removal.                                                                       |
+| Malformed request shape               | Five malformed variants rejected.                                                                                                                                                                                                                                                  |
+| Strict ingress examples               | Duplicate keys, unpaired surrogates, invalid UTF-8, and non-JSON `NaN` rejected.                                                                                                                                                                                                   |
+| Unicode examples                      | Empty, ASCII, composed/decomposed accented, and supplementary-plane strings accepted; composed and decomposed tenant names remain distinct, with a same-tenant control.                                                                                                            |
+| Example result structure              | An explicitly inconclusive, unproved report satisfies the result schema.                                                                                                                                                                                                           |
+| Negative controls                     | Nineteen injected fixture faults each detected by the check meant to catch them.                                                                                                                                                                                                   |
+| Storage-boundary seams                | Two seams: reviewing the loaded fixtures leaves every witness in `witnesses/` unchanged in size, modification time, and SHA-256 digest, and publishing through a temporary root writes there and leaves the observed repository documents — the witnesses and the summary — alone. |
+| Boundary tests                        | Eleven independent tests of the orchestration and storage boundary, each falsified against a targeted injected fault.                                                                                                                                                              |
 
 `property_fixtures.py` states the same model-side obligations as properties and
 searches the admitted input domain for counterexamples, with Hypothesis
@@ -101,16 +101,17 @@ rewrote one. This covers those JSON files around `validate_policies` alone, not
 every repository file and not every check, and it cannot see a read or a
 transient change that was undone before the second snapshot. Publishing that
 same review through a temporary workspace must write the witnesses under that
-root, replay them from there, and leave the repository alone, which catches a
-command that ignored the boundary it was handed. The stale-witness set is
-computed from the directory as it was found, before anything is written, so a
-run rejected for a stale file leaves the tree untouched. A file is stale when
-its name belongs to no reviewed variant at all — that is what a retired
-mutation leaves behind. A surviving witness whose own variant no longer refutes
-anything is not stale: it is scheduled for removal, so correcting a mutation
-deletes its counterexample rather than stopping the run. Rejection is not
-removal, and an unexpected file is reported and left where it is for a person
-to delete, because the run stops before writing anything.
+root, replay them from there, and leave the observed witness files and summary
+document alone, which catches a command that ignored the boundary it was
+handed. The stale-witness set is computed from the directory as it was found,
+before anything is written, so a run rejected for a stale file leaves the tree
+untouched. A file is stale when its name belongs to no reviewed variant at all
+— that is what a retired mutation leaves behind. A surviving witness whose own
+variant no longer refutes anything is not stale: it is scheduled for removal,
+so correcting a mutation deletes its counterexample rather than stopping the
+run. Rejection is not removal, and an unexpected file is reported and left
+where it is for a person to delete because the run stops before writing
+anything.
 
 Importing `property_fixtures.py` reads no profile or schema document, though it
 does execute the sibling harness to reuse its definitions. The admitted profile
@@ -122,7 +123,7 @@ global for a run to inherit.
 `test_boundary.py` tests the harness the other checks run. The negative
 controls exercise lower-level predicates, so on their own they would not notice
 a `validate_policies` replaced by one producing the review from the committed
-documents rather than from the fixtures it was handed, because publication
+documents rather than from the fixtures it was handed because publication
 replays whatever review it is given. The boundary tests call the real entry
 points with deliberately altered inputs and require the result to change or be
 rejected, and they snapshot the tree to observe both storage seams directly.

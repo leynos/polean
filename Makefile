@@ -9,7 +9,7 @@ PYTHON ?= python3
 
 SHELL := bash
 
-all: check-fmt typecheck lint test design-check design-properties design-boundary ## Run every local commit gate
+all: check-fmt markdownlint typecheck lint test design-check design-properties design-boundary ## Run every local commit gate
 
 build: ## Build the Rust scaffold
 	$(CARGO) build --all-targets --all-features

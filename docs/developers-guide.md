@@ -82,7 +82,11 @@ the check will reject the result.
 ## The validation harness
 
 `validation/validate_design.py` checks the design fixtures. It separates
-reading from publishing so a check cannot reach storage by accident:
+reading from publishing, so the checks receive reviewed documents as data
+through `Repository` rather than reaching for a path of their own. This is
+architectural separation, not enforced filesystem isolation: Python does not
+prevent a check from opening a file, and only the checks' signatures and the
+boundary tests give evidence that they do not.
 
 - `Repository` is the read-only input boundary. Every method either returns a
   value or raises `HarnessIOError` naming the document, and every path is built
@@ -117,10 +121,10 @@ controls, so it cannot rescue a missing witness.
 
 `validation/test_boundary.py` tests that orchestration and storage boundary
 rather than the fixtures, and `make design-boundary` runs it in the design
-workflow alongside the other two. It snapshots the tree to observe both storage
-seams directly and calls the real entry points with deliberately altered
-inputs, which is what catches a `validate_policies` that returned a constant
-review.
+workflow alongside the other two. It snapshots the witness JSON files and the
+summary document — not the whole tree — to observe both storage seams directly,
+and calls the real entry points with deliberately altered inputs, which is what
+catches a `validate_policies` that returned a constant review.
 
 ## Change discipline
 
