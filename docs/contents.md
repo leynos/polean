@@ -31,6 +31,25 @@ already exist.
 - [Documentation style guide](documentation-style-guide.md): prose, Markdown,
   decision-record, and assurance-language conventions.
 
+## Shared engineering guidance
+
+- [Reliable testing in Rust via dependency injection][di-testing]: isolate
+  system dependencies for deterministic tests.
+- [Mastering test fixtures in Rust with `rstest`][rstest-fixtures]: compose
+  fixtures and parameterized tests.
+- [A systematic guide to effective Rust doctests][dry-doctests]:
+  structure reusable, focused Rust doctests.
+- [Navigating code complexity][complexity-guide]: recognize and refactor
+  complexity antipatterns.
+- [Scripting standards][scripting-standards]: guidance for reproducible,
+  testable scripts.
+
+[di-testing]: reliable-testing-in-rust-via-dependency-injection.md
+[rstest-fixtures]: rust-testing-with-rstest-fixtures.md
+[dry-doctests]: rust-doctest-dry-guide.md
+[complexity-guide]: complexity-antipatterns-and-refactoring-strategies.md
+[scripting-standards]: scripting-standards.md
+
 ## Machine-readable design
 
 The [contracts directory](../contracts/) contains the profile, its schema, and
