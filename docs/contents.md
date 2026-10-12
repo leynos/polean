@@ -36,10 +36,10 @@ already exist.
 - [Reliable testing in Rust via dependency injection][di-testing]: isolate
   system dependencies for deterministic tests.
 - [Mastering test fixtures in Rust with `rstest`][rstest-fixtures]: compose
-  fixtures and parameterised tests.
+  fixtures and parameterized tests.
 - [A systematic guide to effective Rust doctests][dry-doctests]:
   structure reusable, focused Rust doctests.
-- [Navigating code complexity][complexity-guide]: recognise and refactor
+- [Navigating code complexity][complexity-guide]: recognize and refactor
   complexity antipatterns.
 - [Scripting standards][scripting-standards]: guidance for reproducible,
   testable scripts.
