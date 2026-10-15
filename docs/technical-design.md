@@ -600,11 +600,12 @@ and production-runtime refinement are separate future assurance increments.
 
 The remaining prerequisites follow. E0 is an experiment on trusted repository
 inputs: it needs a working toolchain and supervised local runs, not a sandbox.
-The admission and axiom-audit spikes (1.2.2, 1.2.3) inform E0 rather than gate
-its semantics and supervisor work; the E0 command itself still admits
-fail-closed (2.1.2) and accepts its theorem only with the foundational axioms
-(2.2.4). The roadmap tasks named in the last column track each item's state. Do
-not invent an upstream API or silently weaken a prerequisite when a spike fails.
+The admission spike (1.2.2) still gates semantics and supervisor work through
+2.1.1; the axiom-audit spike (1.2.3) no longer gates the start of those tasks.
+The E0 command itself still admits fail-closed (2.1.2) and accepts its theorem
+only with the foundational axioms (2.2.4). The roadmap tasks named in the last
+column track each item's state. Do not invent an upstream API or silently
+weaken a prerequisite when a spike fails.
 
 | Prerequisite            | Role                   | E0 needs                                                                                                                                                  | Public release needs                                                                            | Roadmap             |
 | ----------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------- |

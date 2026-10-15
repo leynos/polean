@@ -129,6 +129,11 @@ validation code is added.
   them; and changed the resource row's E0 need to "not needed", because
   measurement is E2 evidence. The statement itself is unchanged. Declined:
   pointing the attribute-provenance row at 1.1.2, because 5.1.1 cites OQ1–OQ4.
+- Decision (follow-up assessment, 2026-10-15): corrected technical design §13
+  and this plan, which overstated the roadmap edits. The admission spike
+  (1.2.2) still gates E0 semantics and supervisor work through 2.1.1; only the
+  axiom-audit spike (1.2.3) and the sandbox decision (1.2.4) stopped gating
+  them. The approved dependency graph is unchanged.
 - Decision: ADR-002 follows the approved outline. Three small additions,
   reported to the user: boundary 3 states that admission is performed by the
   frontend, that `check` establishes admission only, and that admission is not
@@ -142,14 +147,16 @@ validation code is added.
 
 Post-review update (2026-10-15): hosted review of `81fe023` led to the
 corrections recorded in `Decision log`. The E0 rows now match the approved
-roadmap: the spikes no longer gate E0 work, but the E0 command (2.3.3) still
-depends on fail-closed admission (2.1.2) and axiom acceptance (2.2.4).
+roadmap: the axiom-audit spike (1.2.3) no longer gates the start of E0
+semantics and supervisor work, the admission spike (1.2.2) still does through
+2.1.1, and the E0 command (2.3.3) still depends on fail-closed admission
+(2.1.2) and axiom acceptance (2.2.4).
 
 ADR-002 records the accepted boundary, technical design §1 repeats the
 statement word for word, and §13 carries the prerequisites table. The roadmap
-now lets E0 investigate admission coverage and axiom auditing instead of
-waiting for them, and moves enforced isolation to 4.3.1. No code, schema, or
-tooling changed.
+no longer makes E0 semantics work wait for the axiom-audit spike or E0
+supervisor work wait for the sandbox decision, and it moves enforced isolation
+to 4.3.1. No code, schema, or tooling changed.
 
 Lesson: revision 2 let an expert-review panel's safeguards accumulate into a
 governance subsystem that no requirement asked for. Filter review findings
