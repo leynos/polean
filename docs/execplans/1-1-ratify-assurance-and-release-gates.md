@@ -179,6 +179,10 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 - [x] (2026-10-15 15:00Z) Drafted this ExecPlan.
 - [x] (2026-10-15 16:10Z) Community-of-experts review (six lenses across three
   reviewers); revised the plan (see `Revision notes`).
+- [x] (2026-10-15 17:30Z) Firecrawl research once credits were restored:
+  confirmed Regorus 0.13.0 metadata from the crates.io API, GitHub comment
+  edit-history behaviour, and GitHub's self-approval rule; revised the
+  ratification procedure (see `Revision notes`).
 - [ ] Plan approval by the user.
 - [ ] EP-M0: baseline gates recorded.
 - [ ] EP-M1: assurance statement bound across ADR-002 (`Proposed`), technical
@@ -211,14 +215,39 @@ These are hard invariants. Violating one requires escalation, not a workaround.
   summary). It verifies cleanly today, but nothing documents or checks it.
   Impact: EP-M2 adds a `make checksums-check` target, a design-workflow step,
   and a developers' guide paragraph.
-- Observation: Regorus has moved on from the inspected 0.12.0. The GitHub API
-  on 2026-10-15 reports `regorus-v0.13.0` with
-  `license = "MIT AND Apache-2.0 AND BSD-3-Clause"`, OPA `v1.21.2`
-  (Apache-2.0), and Lean 4 `v4.35.0` (Apache-2.0). Impact: recorded in the
-  `toolchain-pins` and `dependency-distribution` descriptions as inputs to
-  roadmap 1.2.1 and 5.2.2, not as decisions.
-- Observation: Firecrawl returned "Insufficient credits" for every request.
-  Impact: prior-art comparisons rely on the repository's own conventions.
+- Observation: Regorus has moved on from the inspected 0.12.0. The crates.io
+  API (`/api/v1/crates/regorus/0.13.0`, fetched 2026-10-15) reports 0.13.0
+  published on 2026-10-14 with licence expression
+  `MIT AND Apache-2.0 AND BSD-3-Clause`; default features `full-opa`, `arc`, and
+  `rvm`; an opt-in `ast` feature; and a `std` feature that enables `vstd/std`
+  (the Verus standard library) as a dependency. The GitHub API reports OPA
+  `v1.21.2` and Lean 4 `v4.35.0`, both Apache-2.0. Impact: recorded in the
+  `toolchain-pins` and `dependency-distribution` gate descriptions as inputs to
+  roadmap 1.2.1 and 5.2.2, not as decisions. The three-licence expression and
+  the transitive `vstd` dependency are exactly the facts the sponsor's
+  distribution decision must cover.
+- Observation: Firecrawl's model-based extraction from the docs.rs page
+  reported Regorus 0.13.0's licence as `Apache-2.0`, contradicting the registry
+  metadata. Evidence: the same day's crates.io API response above. Impact:
+  dependency facts that feed a gate must come from a registry API or the
+  package manifest, never from summarized page extraction; the developers'
+  guide states this in "Closing an acceptance gate".
+- Observation: GitHub comments are mutable. Anyone with read access can view
+  a comment's edit history, but the author and anyone with write access can
+  delete a revision's content (the editor and time remain visible), and
+  comments can be deleted outright. Evidence: GitHub Docs, "Tracking changes in
+  a comment", fetched 2026-10-15. Impact: a comment URL alone is not a stable
+  decision record. EP-M3 copies each comment's verbatim body, author login,
+  creation and update times, and identifier from the GitHub API into the
+  ledger, and the harness parses the stored body against the template
+  (obligation O6).
+- Observation: "Pull request authors cannot approve their own pull
+  requests." Evidence: GitHub Docs, "Approving a pull request with required
+  reviews", fetched 2026-10-15. Impact: the agent opens pull requests as
+  `leynos`, who is the likely sponsor, so a formal "Approve" review is
+  unavailable to that holder. The plan uses templated conversation comments
+  (`#issuecomment-` anchors), which any collaborator can post, rather than
+  review approvals.
 - Observation: every phase-2 (E0) task depends transitively on 1.1.2 and
   therefore on 1.1.1, and 2.3.1 requires 1.2.4. Impact: `assurance-statement`
   and `execution-sandbox` block E0 as well as public acceptance.
@@ -442,10 +471,14 @@ obligation.
 Axioms relied on, not verified:
 
 - AX1: `jsonschema` 4.26.0 implements Draft 2020-12 correctly.
-- AX2: a GitHub comment URL recorded in an acceptance was posted by the login
-  recorded with it, and that login belongs to the role holder. The harness
-  checks the URL's shape and the login's form; it does not query GitHub or
-  authenticate a person. Reviewers confirm by opening the link.
+- AX2: a GitHub comment recorded in an acceptance was posted by the login
+  recorded with it, that login belongs to the role holder, and the comment had
+  not been edited when it was copied (`created_at` equals `updated_at` in the
+  API response). The harness checks the URL's shape, the login's form, and that
+  the stored verbatim body parses to the recorded role, decision, gate, and
+  digest; it does not query GitHub or authenticate a person. Reviewers confirm
+  by opening the link. A later edit or deletion of the comment is visible on
+  GitHub but not to the offline harness; the stored body remains the record.
 - AX3: a cited repository artefact is relevant to the gate it supports.
   Relevance is a reviewer's judgement; the harness checks existence only.
 
@@ -506,10 +539,15 @@ Obligations:
   are equal, an `Accepted` status reads
   `Accepted — single holder; no independent technical review`. The summary
   publishes `independent_review` as `null` while open and a Boolean otherwise.
-  Non-vacuity: the committed `Proposed` ledger is the pending witness; controls
-  add an acceptance with a stale digest, set the gate `closed` while the ADR
-  says `Proposed`, and use equal holders without the single-holder wording;
-  each is rejected. Scheduled in EP-M2's red step.
+  Every acceptance's `comment_body`, trimmed, is one line of the form
+  `<role>: <ACCEPT|REJECT> <gate> sha256:<64 hex digits or none> [reason]`, and
+  its parts equal the entry's `role`, `decision`, gate, `statement_sha256`, and
+  `reason`; `comment_created_at` equals `comment_updated_at`. Non-vacuity: the
+  committed `Proposed` ledger is the pending witness; controls add an
+  acceptance with a stale digest, set the gate `closed` while the ADR says
+  `Proposed`, use equal holders without the single-holder wording, store a body
+  naming a different role or digest than the entry, and store unequal creation
+  and update times; each is rejected. Scheduled in EP-M2's red step.
 - O7 readiness derivation. For each stage `s` in `{e0, public-acceptance}`,
   `blockers(s)` lists, in ledger order, the gates with `s` in `blocks` and
   status other than `closed`; `rejected` never satisfies a gate; residuals
@@ -627,8 +665,10 @@ of owners, closure rules, and status. Add one sentence to ToR §9 that the
 ledger allocates these roles to gates and residuals, leaving the OQ table
 unchanged. In `docs/developers-guide.md`, add a subsection "Closing an
 acceptance gate" (the acceptance-comment template, the anti-fabrication rule,
-the digest rule, the floor, and that agents never post acceptance comments or
-merge ratification pull requests), a `checksums-check` row, a paragraph on
+the digest rule, the floor, the verbatim API-copy rule, the rule that
+dependency facts come from registry APIs or manifests rather than summarized
+page extraction, and that agents never post acceptance comments or merge
+ratification pull requests), a `checksums-check` row, a paragraph on
 `SHA256SUMS`, and the scripting-standards exception. In
 `docs/repository-layout.md`, extend the `contracts/` row and explain that the
 ledger is governance state kept there so its schema is meta-validated with the
@@ -654,11 +694,20 @@ or `REJECT … sha256:<digest> <reason>`, and to say whether the residual
 treatment of the two provenance items stands. Point out that one person may
 hold both roles and that the ADR will disclose it.
 
-When conforming comments exist, record each as an acceptance (role, holder
-login, date, comment URL, digest), set the gate's status and `decided_on`,
-update ADR-002's Status line and Ratification record (linking each comment),
-and, if superseded, ToR §4's "individual authority not assigned" note. Run the
-gates. Never post, edit, or paraphrase a decision comment.
+Use conversation comments, not review approvals: GitHub does not let a pull
+request's author approve it, and the agent opens the pull request as `leynos`.
+
+When conforming comments exist, fetch each one with
+`gh api repos/leynos/polean/issues/comments/<id>` and copy, without paraphrase,
+its `body`, `user.login`, `created_at`, `updated_at`, `id`, and `html_url` into
+an acceptance entry, together with the role, decision, digest, and reason
+parsed from the body. Reject (do not record) a comment whose `updated_at`
+differs from `created_at`, whose author is not the person the user named for
+that role, or whose body does not match the template; ask for a fresh comment
+instead. Then set the gate's status and `decided_on`, update ADR-002's Status
+line and Ratification record (linking and quoting each comment), and, if
+superseded, ToR §4's "individual authority not assigned" note. Run the gates.
+Never post, edit, or paraphrase a decision comment.
 
 ### EP-M4: close out (same ratification pull request)
 
@@ -872,10 +921,12 @@ object with `additionalProperties: false`):
 
 An acceptance entry is
 `{"role", "holder", "decision": "ACCEPT"|"REJECT", "date", "comment_url",
+"comment_id", "comment_body", "comment_created_at", "comment_updated_at",
 "statement_sha256"?, "reason"?}`,
 with `statement_sha256` required on `assurance-statement` and `reason`
-required on `REJECT`. `closing_tasks` entries match `^[1-6](\.[0-9]+){2}$` and
-may be empty.
+required on `REJECT`. `holder` is the comment's `user.login`, lower-cased.
+`comment_body` is the verbatim API `body`, which O6 parses against the template.
+`closing_tasks` entries match `^[1-6](\.[0-9]+){2}$` and may be empty.
 
 Gates (all `open` at EP-M2). The floor equals these `blocks` and `accepted_by`
 values:
@@ -941,3 +992,13 @@ def ledger_controls(repo: Repository, validators: dict[str, Draft202012Validator
   pull requests; corrected counts and the expected I/O diagnostic. Effect on
   remaining work: fewer files, no new Make target beyond `checksums-check`,
   stronger closure rules.
+- 2026-10-15: revised after Firecrawl research became available. Confirmed
+  Regorus 0.13.0's licence expression, features, and transitive `vstd`
+  dependency from the crates.io API, and recorded that page-extraction
+  summaries are not acceptable gate evidence. Because GitHub comments can be
+  edited or have revisions deleted, and pull request authors cannot approve
+  their own pull requests, acceptances now store the verbatim comment body,
+  identifier, and timestamps fetched from the GitHub API; O6 parses the stored
+  body against the template and rejects edited comments. Effect on remaining
+  work: four more acceptance fields, one more O6 control family, and a
+  deterministic copying step in EP-M3; no change to milestones or file count.
