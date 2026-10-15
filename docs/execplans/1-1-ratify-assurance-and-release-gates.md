@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 3)
+Status: COMPLETE (revision 3)
 
 Roadmap item: [1.1](../roadmap.md), tasks 1.1.1 and 1.1.2. Branch:
 `1-1-ratify-assurance-and-release-gates`.
@@ -65,11 +65,15 @@ validation code is added.
   (revisions 1–2).
 - [x] (2026-10-15) User rejected revision 2 as over-engineered; rewrote as
   revision 3.
-- [ ] Plan approval.
-- [ ] EP-M1: ADR-002 (Proposed), technical design §§1 and 13, and wording
-  fixes.
-- [ ] EP-M2: acceptance note committed, approved roadmap edits applied, 1.1.1
-  and 1.1.2 ticked.
+- [x] (2026-10-15) Plan approved by the user, with ADR-002 accepted as
+  written in the same message; the roadmap edits were not struck.
+- [x] (2026-10-15) EP-M1 and EP-M2 delivered together, because acceptance
+  arrived with plan approval: ADR-002 written as `accepted` with its acceptance
+  note; technical design §§1 and 13; context, README, user's guide,
+  `contracts/cli.txt`, contents, and the ToR sponsor row amended; four roadmap
+  edits applied; 1.1.1 and 1.1.2 ticked; `SHA256SUMS` refreshed.
+- [x] (2026-10-15) Gates and CodeRabbit CLI review run through `scrutineer`
+  (see `Outcomes & retrospective`).
 
 ## Surprises & discoveries
 
@@ -111,13 +115,30 @@ validation code is added.
 - Decision: no JSON contract changes. A machine-readable provenance assumption
   belongs with result reporting (roadmap 4.2.1), which must render the
   assurance boundary. ADR-002 records that obligation.
-- Decision (proposed, needs approval): classify prerequisites as E0 needs or
-  public-release needs, and amend four roadmap entries accordingly (see
-  `E0 scrutiny`).
+- Decision: classify prerequisites as E0 needs or public-release needs, and
+  amend four roadmap entries accordingly (see `E0 scrutiny`). Approved with the
+  plan on 2026-10-15.
+- Decision: ADR-002 follows the approved outline. Three small additions,
+  reported to the user: boundary 3 states that admission is performed by the
+  frontend, that `check` establishes admission only, and that admission is not
+  proved (from the four-claim rule); the alternatives carry one sentence of
+  rationale each; and the consequences add that release material and user
+  documentation quote or link the ADR rather than paraphrasing a stronger
+  claim. The ToR sponsor row now reads "acceptance recorded in ADR-002" rather
+  than naming a holder.
 
 ## Outcomes & retrospective
 
-Not started.
+ADR-002 records the accepted boundary, technical design §1 repeats the
+statement word for word, and §13 carries the prerequisites table. The roadmap
+now lets E0 investigate admission coverage and axiom auditing instead of
+waiting for them, and moves enforced isolation to 4.3.1. No code, schema, or
+tooling changed.
+
+Lesson: revision 2 let an expert-review panel's safeguards accumulate into a
+governance subsystem that no requirement asked for. Filter review findings
+through proportionality before adopting them; the assurance distinctions
+deserved the effort, and the approval machinery did not.
 
 ## Context and orientation
 

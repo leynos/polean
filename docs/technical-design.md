@@ -10,6 +10,7 @@ verification workflow for a closed Rego profile.
 - [Terms of reference](terms-of-reference.md)
 - [Vocabulary](context.md)
 - [Bootstrap ADR](adr-001-repository-bootstrap.md)
+- [Assurance boundary ADR](adr-002-first-profile-assurance-boundary.md)
 - [Contracts](../contracts/profile.json)
 - [Draft-pack validation](../validation/README.md)
 
@@ -27,12 +28,19 @@ all 32 fact vectors with a proof-producing finite checker. This avoids an SMT
 solver, arbitrary theorem synthesis, a general Rego semantics, and an
 application platform while preserving a meaningful universal model claim.
 
-The first public assurance statement is:
+The first public assurance statement, accepted in
+[ADR-002](adr-002-first-profile-assurance-boundary.md), is:
 
-> The admitted policy model satisfies these six requirements for every valid
-> request. Lean checked the model evidence. The source frontend remains trusted;
-> OPA and Regorus agree on the recorded conformance cases, not by a refinement
-> theorem.
+> The admitted policy model satisfies the six registered tenant-write
+> requirements for every valid request. Lean checked the model evidence. The
+> source frontend remains trusted; OPA and Regorus agree with the model on the
+> recorded conformance cases, not by a refinement theorem. The model theorem
+> takes the request's subject, resource, and action attributes as given: it
+> does not authenticate them, establish their provenance, or certify how an
+> application enforces the decision.
+
+ADR-002 states separately what the proof trusts, what the frontend assumes,
+what differential tests establish, and what lies outside the theorem.
 
 An unqualified statement that Polean has verified production Rego execution is
 not an acceptable substitute. This boundary implements ToR goals G1–G6, subject
@@ -590,11 +598,24 @@ and production-runtime refinement are separate future assurance increments.
 | Evidence consumption     | Regenerate fixed proofs from admitted data.                          | Importing arbitrary compiled proof artefacts creates an avoidable integrity and execution boundary.                                                               |
 | Verification environment | Lean for language/model theorems.                                    | SPARK may suit a later verified imperative runtime, but a second proof tool does not itself establish cross-language correspondence.                              |
 
-Open gates: exact tested version tuple; complete Regorus admission coverage;
-axiom-root audit API; Linux sandbox implementation and availability; measured
-resource defaults; licence and distribution choice; and sponsor acceptance of
-the first-slice trust statement. Assign owners before implementation; do not
-invent an upstream API or silently weaken a gate when a spike fails.
+The remaining prerequisites follow. E0 is an experiment: it needs a working
+toolchain and supervised local runs on trusted repository inputs, and it
+investigates admission coverage and axiom auditing rather than waiting for
+them. The roadmap tasks named in the last column track each item's state. Do
+not invent an upstream API or silently weaken a prerequisite when a spike fails.
+
+| Prerequisite            | Role                   | E0 needs                                                                                        | Public release needs                                                                                   | Roadmap      |
+| ----------------------- | ---------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------ |
+| Toolchain tuple         | maintainer             | A working, recorded Rust, Regorus, Lean, and OPA tuple                                          | Lockfiles, Regorus features, and OPA digest pinned and replayed cleanly                                | 1.2.1, 4.3.2 |
+| Admission coverage      | maintainer             | Investigated: a record of what the AST exposes and where gaps are; E0 runs only on own fixtures | Complete fail-closed admission over every AST variant                                                  | 1.2.2, 2.1.2 |
+| Axiom audit             | maintainer             | Investigated: `#print axioms` on the E0 theorem shows only the foundational set                 | Automated audit in worker acceptance that rejects `sorryAx`, native-computation, and undeclared axioms | 1.2.3, 2.2.4 |
+| Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                             | Enforced offline sandbox with memory and output limits, process-group kill, and private storage        | 1.2.4, 4.3.1 |
+| Resource budgets        | maintainer             | Record what E0 measures                                                                         | Measured limits on an agreed machine                                                                   | 4.3.2        |
+| Assurance statement     | sponsor                | ADR-002 accepted                                                                                | Release wording no stronger than ADR-002                                                               | 1.1.1        |
+| Dependency distribution | sponsor                | Not needed                                                                                      | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR-001)           | 5.2.2        |
+| First user review       | sponsor, policy author | Not needed                                                                                      | SC8 proceed, revise, or stop decision                                                                  | 5.1.1        |
+| Attribute provenance    | application owner      | Outside the theorem                                                                             | Still outside the theorem; integrator documents ingress (OQ3); not a release blocker                   | 5.1.1        |
+| Design transcript (OQ7) | sponsor                | Not needed                                                                                      | Not a blocker; the transcript is already excluded from acceptance evidence (ToR §8.3)                  | none         |
 
 ## 14. Draft artefacts and provenance
 

@@ -23,7 +23,8 @@ Exit status:
 
 For prove and verify, 0 additionally requires exactly six proved claims,
 checked bindings, axiom approval, and tested runtime agreement. The displayed
-assurance remains model_proved + trusted_frontend + tested_agreement.
+outcome is model_proved, with assurance kernel_checked, trusted_frontend, and
+tested_agreement.
 
 Explicit bounds: 64 KiB source, 16 rules, 16 atoms per rule, one proof process,
 60 seconds end-to-end verification wall time, 2 GiB memory, 1 MiB result.
