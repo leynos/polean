@@ -14,143 +14,159 @@ tasks 1.1.1 and 1.1.2. Branch: `1-1-ratify-assurance-and-release-gates`.
 
 Polean is a proposed checker that proves properties of a small, closed subset
 of Rego authorization policies. Before anyone writes production code, the
-project must settle two things that later work depends on.
+project must settle two things on which every later task depends.
 
 First, it must decide exactly what a successful Polean run is allowed to claim.
 The technical design proposes a three-part answer: Lean checked a theorem about
 the policy *model*; the Rego-to-model frontend remains *trusted* rather than
-proved; and OPA and Regorus *agree on tested cases* rather than by a refinement
-proof. The roadmap also requires the statement to say plainly that the
-authenticity and provenance of request attributes lie outside the theorem. A
-named sponsor and a named technical reviewer must accept that exact wording or
-record a blocking rejection. That decision becomes Architecture Decision Record
-(ADR) 002.
+proved; and OPA and Regorus *agree with the model on tested cases* rather than
+by a refinement proof. The roadmap also requires the statement to say plainly
+that the authenticity and provenance of request attributes lie outside the
+theorem. A sponsor and a technical reviewer must accept that exact wording, or
+record a blocking rejection, in their own words on GitHub. That decision is
+Architecture Decision Record (ADR) 002.
 
 Second, the technical design lists seven "open gates" (toolchain pins,
 admission coverage, axiom audit, sandbox, budgets, licence and distribution,
 sponsor acceptance) and says "assign owners before implementation". Nobody has
 done so. This work creates an *acceptance ledger*: a machine-readable record
-that names, for every gate, the responsible role, the roles that must accept
-closure, the evidence that closes it, the roadmap task expected to produce that
-evidence, and whether it blocks the E0 development demonstration or public
-acceptance. The ledger also separates the settled fact that Polean's own source
-is ISC-licensed from the still-open decision about how Polean may be
-distributed with its dependencies.
+naming, for every gate, the responsible role, the roles whose acceptance closes
+it, the repository evidence that must exist, the roadmap tasks expected to
+produce that evidence, and whether it blocks the E0 development demonstration
+or public acceptance. The ledger also records residual assumptions that remain
+visible but block nothing, and it separates the settled fact that Polean's own
+source is ISC-licensed from the still-open decision about distributing Polean
+with its dependencies.
 
 After this change, a contributor can:
 
 1. read `docs/adr-002-first-profile-assurance-boundary.md` and see the exact
-   ratified (or rejected) assurance statement, who decided it, and when;
-2. read `contracts/acceptance-ledger.json` and see who owns each gate and what
-   evidence will close it;
-3. run `make design-check` and see the design harness confirm that the
-   statement in the ADR, the technical design, and the ledger are identical,
-   that the ledger is internally consistent, and which gates currently block E0
-   and public acceptance; and
-4. run `make design-ledger` and see the ledger checks reject a set of
-   deliberately corrupted ledgers, and see the readiness derivation agree with
-   an independent oracle over every possible assignment of gate states.
+   proposed (later ratified or rejected) assurance statement, its SHA-256
+   digest, and, once decided, who decided it, when, and where;
+2. read `contracts/acceptance-ledger.json` and see who owns each gate and
+   residual assumption and what closes it;
+3. run `make design-check` and see the design harness confirm that the ADR and
+   the technical design carry the same statement, that the ledger is internally
+   consistent and no weaker than a reviewed floor, that every recorded
+   acceptance is bound to the current statement digest, and which gates
+   currently block E0 and public acceptance; and
+4. see the same command reject a set of deliberately corrupted ledgers and
+   documents (negative controls), so a passing run is not vacuous.
 
-This work does not implement any checker behaviour, prove any theorem, pin any
-tool, or close any gate other than the assurance-statement gate. It changes no
-Rust code.
+This work does not implement checker behaviour, prove any theorem, pin any
+tool, or close any gate other than `assurance-statement`. It changes no Rust
+code.
 
 ## Constraints
 
 These are hard invariants. Violating one requires escalation, not a workaround.
 
-- Do not fabricate human decisions. The sponsor's and reviewer's acceptance or
-  rejection must come from an explicit statement by the user (or by a person
-  the user names) in this conversation or in a GitHub comment on the pull
-  request. The implementer must never write `accepted` or `rejected` on their
-  behalf, never infer acceptance from silence, plan approval, a green CI run,
-  or a merged pull request, and never fill a role holder with a guessed name.
+- Never fabricate, relay, or infer a human decision. A gate acceptance or
+  rejection counts only when the role holder posts it themselves as a GitHub
+  comment on the ratification pull request, from their own account, using the
+  template in `EP-M3`. The implementing agent must never post such a comment
+  (even though `gh` authenticates as the repository owner), never merge the
+  ratification pull request, never transcribe a decision from the conversation
+  into the ledger, and never fill a role holder with a guessed name. Plan
+  approval, silence, a green CI run, or a merged pull request is not a decision.
 - Keep the four assurance claims separate (AGENTS.md): admission, model proof,
   source-to-model translation, and runtime correspondence. No new wording may
-  imply that the frontend is proved, that OPA or Regorus are proved to
-  correspond to the model, or that the theorem authenticates attributes or
-  certifies an application.
-- Do not change the six claim identifiers or their definitions, the admitted
-  atoms, the request domain, the exit codes, or the outcome names in
-  `contracts/`. The only contract changes this plan authorizes are the additive
-  `attribute_provenance` assurance field described in
-  `Interfaces and dependencies` and the two new ledger files.
+  imply that admission or the frontend is proved, that OPA or Regorus are
+  proved to correspond to the model, or that the theorem authenticates
+  attributes or certifies an application.
+- Do not change the six claim identifiers or definitions, the admitted atoms,
+  the request domain, the exit codes, outcome names, or
+  `contracts/result.schema.json`. The only contract changes this plan
+  authorizes are the additive `assumptions` array in `contracts/profile.json`
+  and its schema, and the two new ledger files.
 - Do not modify `src/`, `tests/`, `Cargo.toml`, `Cargo.lock`, `lean/`, or
   `examples/`. This roadmap item has no Rust or Lean deliverable.
-- Do not close, waive, or weaken any gate other than `assurance-statement`. A
-  gate whose evidence does not yet exist stays `open`.
-- Do not record an owner as a named individual unless the user names that
-  person for that role. Roles are the unit of allocation (ToR §9: "Owners below
-  denote roles to allocate, not named commitments").
+- Do not close, waive, or weaken any gate other than `assurance-statement`.
+- Roles, not individuals, are the unit of allocation (ToR §9: "Owners below
+  denote roles to allocate, not named commitments"). A holder appears only in
+  an acceptance entry, and only as the GitHub login that posted the comment.
 - The Python design harness owns design-fixture consistency only
-  (`docs/repository-layout.md` §Ownership boundaries). Its new ledger checks
-  must not describe themselves as proof, release certification, or
-  authentication of a decision.
+  (`docs/repository-layout.md` §Ownership boundaries). Its ledger checks must
+  not describe themselves as proof, release certification, or authentication of
+  a person.
 - Use British English with Oxford spelling
-  (`docs/documentation-style-guide.md`). Use "licence" for the noun.
-- Keep `SHA256SUMS` passing: `sha256sum -c SHA256SUMS` must report every line
-  `OK` at each commit.
+  (`docs/documentation-style-guide.md`); "licence" is the noun.
+- Keep `SHA256SUMS` passing at every commit.
 - Run gates sequentially, never in parallel.
 
 ## Tolerances (exception triggers)
 
-- Scope: if the change needs more than 25 files or roughly 1,600 net added
-  lines (excluding the regenerated `validation/design-validation.json`), stop
-  and escalate.
-- Rust: if any file under `src/`, `tests/`, or the Cargo manifests must change,
-  stop and escalate.
-- Contracts: if any contract change beyond the additive `attribute_provenance`
-  field and the two ledger files appears necessary, stop and escalate.
-- Wording: if the sponsor or reviewer asks for wording that differs from the
-  proposed statement, apply it only if it preserves all four claim boundaries;
-  otherwise record the conflict and escalate.
-- Dependencies: if the harness needs a Python package beyond
-  `validation/requirements.txt` (`hypothesis`, `jsonschema`), stop and escalate.
-- Iterations: if a gate still fails after three fix attempts on the same
-  cause, stop and escalate with the log path.
-- Ratification: if no explicit sponsor and reviewer decision has arrived when
-  milestones EP-M1 and EP-M2 are complete, set the status to `BLOCKED`, report
-  what is needed, and wait. Do not mark roadmap 1.1.1 or 1.1.2 done.
-- Rejection: if the decision is a blocking rejection, record it (EP-M3 still
-  completes), set the status to `BLOCKED` for a revise-or-stop direction, and
-  do not begin redesign work.
+- Scope: more than 28 files or roughly 1,500 net added lines (excluding the
+  regenerated `validation/design-validation.json`): stop and escalate.
+- Rust: any change under `src/`, `tests/`, or the Cargo manifests: stop.
+- Contracts: any contract change beyond those authorized above: stop.
+- Wording: if a role holder asks for different wording, apply it only if it
+  preserves all four claim boundaries, then restart ratification against the
+  new digest; otherwise record the conflict and escalate.
+- Dependencies: any Python package beyond `validation/requirements.txt`:
+  stop.
+- Iterations: a gate still failing after three fix attempts on one cause:
+  stop and escalate with the log path.
+- Ambiguous decisions: a comment that does not match the template, names a
+  different digest, or is posted by an account other than the role holder is
+  not a decision. Ask once for a templated comment; do not record anything.
+- Residual override: if the sponsor asks for `attribute-provenance` or
+  `design-transcript-provenance` to block a stage, stop, move it to `gates`
+  with the requested `blocks`, update the floor constant, the expected blocker
+  lists in `Validation and acceptance`, and this plan, and obtain approval of
+  the changed expectations before continuing.
+- No decision: once the implementation pull request (EP-M1 and EP-M2) is
+  ready, hand it over for review and merge by a human with ADR-002 at
+  `Proposed`; set this plan to `BLOCKED` awaiting ratification. Do not tick the
+  roadmap.
+- Rejection: record it (EP-M3 completes), set this plan to `BLOCKED` for a
+  revise-or-stop direction, and begin no redesign work.
+- Summary keys: changing the meaning of an existing key in
+  `validation/design-validation.json`: stop and escalate.
 
 ## Risks
 
-- Risk: the same person holds the sponsor and technical-reviewer roles, so the
-  "two-party" acceptance is one person's decision. Severity: medium.
-  Likelihood: high (the ToR calls Polean a founder-led experiment). Mitigation:
-  permit it, but require the ADR's ratification record to say so explicitly;
-  the validator reports `independent_review: false` in the summary when both
-  holders are equal.
-- Risk: the ledger becomes a second copy of the technical design that drifts.
-  Severity: medium. Likelihood: medium. Mitigation: the ledger records only
-  ownership, closure evidence, and status; the harness binds the statement text
-  to the ADR and technical design; technical design §13 points at the ledger
-  instead of restating owners.
-- Risk: Markdown extraction of the statement from the ADR and the technical
-  design is brittle (wrapping, `>` prefixes). Severity: low. Likelihood:
-  medium. Mitigation: delimit the statement with HTML comment markers and
-  compare after a defined whitespace normalization; test the normalization with
-  explicit cases.
-- Risk: the harness grows further beyond a comfortable module size
-  (`validate_design.py` is already 1,123 lines). Severity: low. Likelihood:
-  high if checks are inlined. Mitigation: put ledger logic in a new module,
-  `validation/acceptance_ledger.py`, and call it from `run_checks`.
-- Risk: the readiness check becomes vacuous because the oracle restates the
-  implementation. Severity: medium. Likelihood: medium. Mitigation: write the
-  oracle in a different form (counting rather than set comprehension) and kill
-  a seeded mutant that treats `rejected` as satisfied.
-- Risk: an evidence URL can point anywhere and so "close" a gate with
-  unrelated material. Severity: medium. Likelihood: low. Mitigation: accept
-  only repository paths that exist or URLs under
-  `https://github.com/leynos/polean/`; the residual gap (a URL to an irrelevant
-  comment) is recorded in the verification plan.
-- Risk: Firecrawl could not be used for external research because the account
-  has no credits. Severity: low. Likelihood: certain. Mitigation: dependency
-  licence facts were taken from the GitHub API instead (see
-  `Surprises & discoveries`); they inform the distribution gate's description
-  only and are not a distribution decision.
+- Risk: an accepted statement is later edited in every copy at once, so CI
+  stays green while release material quotes unratified words. Severity: high.
+  Likelihood: medium. Mitigation: every acceptance records the SHA-256 digest
+  of the normalized statement it accepted; the harness recomputes the digest
+  from the ADR and fails if any acceptance names another digest, so any wording
+  change returns the gate to `open`.
+- Risk: later tasks (1.2.1, 4.3.2) let an agent close a gate by citing
+  repository files. Severity: high. Likelihood: medium. Mitigation: closing any
+  gate requires one templated acceptance comment per `accepted_by` role, posted
+  by the holder; the developers' guide documents the closure procedure and the
+  anti-fabrication rule so later ExecPlans inherit it.
+- Risk: a gate is silently weakened by emptying its `blocks` or trimming its
+  `accepted_by`. Severity: high. Likelihood: low. Mitigation: a reviewed
+  constant `GATE_FLOOR` in the harness sets the minimum `blocks` and
+  `accepted_by` for every gate; the ledger must be a superset.
+- Risk: one person holds both the sponsor and technical-reviewer roles, so
+  the two-party acceptance is one decision. Severity: medium. Likelihood: high
+  (ToR calls Polean founder-led). Mitigation: permitted, but the harness derives
+  `independent_review` from normalized GitHub logins and requires ADR-002's
+  Status line to read
+  `Accepted — single holder; no independent technical review` in that case;
+  release material must repeat the disclosure.
+- Risk: "ledger" already means two other things. Technical design §10 has a
+  "trust ledger" and §12 and roadmap 5.1.1 and 5.2.1 have an "assurance
+  ledger", both meaning the per-run record of residual trust. Severity: medium.
+  Likelihood: high. Mitigation: `docs/context.md` defines all three terms and
+  states that the acceptance ledger tracks release-gate ownership, not run
+  evidence.
+- Risk: Markdown formatting (`mdtablefix --wrap --ellipsis`) reflows block
+  quotes and rewrites `...`, breaking marker extraction. Severity: low.
+  Likelihood: medium. Mitigation: markers sit outside the block quote on their
+  own lines with blank lines around them; extraction is substring-based; only
+  line-anchored `^\s*>\s?` prefixes are stripped; the statement must contain no
+  `...`.
+- Risk: a ratification pull request left open indefinitely conflicts with
+  every change to `main`. Severity: medium. Likelihood: medium. Mitigation:
+  split delivery into an implementation pull request that merges at `Proposed`,
+  and a small ratification pull request.
+- Risk: Firecrawl could not be used for external research (no credits).
+  Severity: low. Likelihood: certain. Mitigation: dependency licence facts came
+  from the GitHub API; they describe the distribution gate only.
 
 ## Progress
 
@@ -161,105 +177,133 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 - [x] (2026-10-15 14:40Z) External fact check of dependency licences via the
   GitHub API (Firecrawl unavailable).
 - [x] (2026-10-15 15:00Z) Drafted this ExecPlan.
-- [ ] Community-of-experts design review and revision of this plan.
+- [x] (2026-10-15 16:10Z) Community-of-experts review (six lenses across three
+  reviewers); revised the plan (see `Revision notes`).
 - [ ] Plan approval by the user.
 - [ ] EP-M0: baseline gates recorded.
-- [ ] EP-M1: assurance statement bound across ADR-002 (proposed), technical
-  design, ledger, and result contract.
-- [ ] EP-M2: release gates allocated in the acceptance ledger with closure
-  evidence and derived blockers.
-- [ ] EP-M3: sponsor and reviewer decision recorded.
+- [ ] EP-M1: assurance statement bound across ADR-002 (`Proposed`), technical
+  design, ledger, and profile.
+- [ ] EP-M2: release gates and residuals allocated with closure rules, floor,
+  and derived blockers; implementation pull request ready for human merge.
+- [ ] EP-M3: sponsor and technical-reviewer decisions recorded from their
+  comments on the ratification pull request.
 - [ ] EP-M4: roadmap updated, conformance reconciled, retrospective written.
 
 ## Surprises & discoveries
 
-- Observation: the assurance vocabulary is spelled three ways. Evidence:
+- Observation: the assurance vocabulary is spelled three ways.
   `contracts/profile.json` uses prose (`"trusted frontend"`,
   `"differential tests, not proof"`); `contracts/result.schema.json` uses enums
   (`kernel_checked`, `trusted_frontend`, `tested_agreement`);
   `docs/users-guide.md` and `contracts/cli.txt` print
-  `model_proved + trusted_frontend + tested_agreement`, which mixes an outcome
-  name (`model_proved`) with two assurance-dimension values. Impact: EP-M1
-  fixes the mixed phrase to name the outcome and the three dimension values
-  separately.
-- Observation: the canonical statement in technical design §1 does not mention
-  attribute provenance; that exclusion appears only in §2's table, §4.2, ToR
-  A3, and the vocabulary. Impact: the roadmap success criterion requires it in
-  the ratified wording, so EP-M1 proposes a fourth sentence.
+  `model_proved + trusted_frontend + tested_agreement`, mixing the outcome name
+  `model_proved` with two dimension values. Impact: EP-M1 corrects the mixed
+  phrase.
+- Observation: the canonical statement in technical design §1 omits attribute
+  provenance; the exclusion appears only in §2's table, §4.2, ToR A3, and the
+  vocabulary. Impact: EP-M1 proposes a fourth sentence.
+- Observation: the request has three top-level parts, `subject`, `resource`,
+  and `action` (`contracts/request.schema.json`), but ToR §2 and
+  `docs/context.md` speak only of subject and resource attributes. Impact: the
+  proposed sentence names all three; `docs/context.md` is aligned.
 - Observation: `SHA256SUMS` covers `README.md`, `contracts/*`, three design
-  documents, `examples/`, and `validation/`, and currently verifies cleanly,
-  but nothing in CI checks it. Impact: each milestone refreshes the affected
-  lines and runs `sha256sum -c SHA256SUMS`.
-- Observation: Regorus has moved on from the inspected 0.12.0. Evidence:
-  GitHub API on 2026-10-15 reports latest release `regorus-v0.13.0` and
-  `Cargo.toml` `license = "MIT AND Apache-2.0 AND BSD-3-Clause"`; OPA's latest
-  release is `v1.21.2` (Apache-2.0); Lean 4's is `v4.35.0` (Apache-2.0).
-  Impact: none for this plan; recorded in the `toolchain-pins` and
-  `dependency-distribution` gate descriptions as inputs for roadmap 1.2.1 and
-  5.2.2, not as decisions.
+  documents, `examples/`, and `validation/` (including the regenerated
+  summary). It verifies cleanly today, but nothing documents or checks it.
+  Impact: EP-M2 adds a `make checksums-check` target, a design-workflow step,
+  and a developers' guide paragraph.
+- Observation: Regorus has moved on from the inspected 0.12.0. The GitHub API
+  on 2026-10-15 reports `regorus-v0.13.0` with
+  `license = "MIT AND Apache-2.0 AND BSD-3-Clause"`, OPA `v1.21.2`
+  (Apache-2.0), and Lean 4 `v4.35.0` (Apache-2.0). Impact: recorded in the
+  `toolchain-pins` and `dependency-distribution` descriptions as inputs to
+  roadmap 1.2.1 and 5.2.2, not as decisions.
 - Observation: Firecrawl returned "Insufficient credits" for every request.
-  Impact: external facts came from `gh api`; prior-art comparisons (ADR
-  formats, assurance-case notation) rely on the repository's own conventions.
+  Impact: prior-art comparisons rely on the repository's own conventions.
+- Observation: every phase-2 (E0) task depends transitively on 1.1.2 and
+  therefore on 1.1.1, and 2.3.1 requires 1.2.4. Impact: `assurance-statement`
+  and `execution-sandbox` block E0 as well as public acceptance.
 
 ## Decision log
 
-- Decision: record the acceptance ledger as a versioned JSON contract,
-  `contracts/acceptance-ledger.json`, with a JSON Schema, rather than as a
-  Markdown table. Rationale: later roadmap tasks (1.2.1–1.2.4, 4.3.2, 5.1.1,
-  5.2.2) close these gates, and AGENTS.md requires machine-readable contracts
-  to change with trust boundaries; a contract lets the existing design lane
-  reject an incomplete or self-contradictory ledger, which a table cannot.
-  Alternative considered: a Markdown table in the technical design; rejected
-  because nothing would stop a gate being marked closed without evidence.
-  Date/Author: 2026-10-15, planning agent.
-- Decision: the ledger never stores whether E0 or public acceptance is ready.
-  The harness derives the blocking set from gate states and publishes it in
-  `validation/design-validation.json`. Rationale: mirrors technical design §8,
-  "A malformed report cannot choose its own exit status by setting a JSON
-  field." Date/Author: 2026-10-15, planning agent.
-- Decision: the harness holds the gate identifiers and role identifiers as
-  reviewed constants, as it already does for claim identifiers. Rationale:
-  deleting an inconvenient gate from the JSON must fail the check, not shrink
-  the requirement. Date/Author: 2026-10-15, planning agent.
-- Decision: add a required `attribute_provenance` assurance dimension with the
-  single value `assumed` to `contracts/result.schema.json`, and a matching
-  prose entry to `contracts/profile.json`. Rationale: the ratified statement
-  places provenance outside the theorem; a report that omits that fact would
-  let a reader assume otherwise. The field is additive, pre-1.0, has no
-  implemented producer or consumer, and holds whether the sponsor accepts or
-  rejects A2, because A3 is independent of A2. Compatibility decision: none
-  required (no released API, no consumer). Date/Author: 2026-10-15, planning
-  agent; subject to expert review.
-- Decision: implement ledger checks in Python inside the existing design lane,
-  not in Rust. Rationale: phase 1 must "preserve … independent design
-  validation rather than rebuilding the scaffold"; the Rust crate is a
-  disposable scaffold with no dependencies, and adding `serde_json` and a JSON
-  Schema crate to it for a governance document would create the first Rust
-  dependency for a non-product reason. Consequence: `rstest`, `rstest-bdd`,
-  `googletest`, `pretty_assertions`, `insta`, `proptest`, Kani, and Verus are
-  not used; see `Verification plan` for the justification and substitutes.
-  Date/Author: 2026-10-15, planning agent.
-- Decision: the new harness files follow the sibling scripts' conventions
-  (`#!/usr/bin/env python3`, `validation/requirements.txt`, plain `main()`
-  returning an exit code) rather than `docs/scripting-standards.md`'s `uv`, PEP
-  723, Cyclopts, and pytest defaults. Rationale: the design workflow installs
-  `requirements.txt` with `pip` and runs plain scripts; one lane with two
-  conventions is worse than a documented local exception. Date/Author:
-  2026-10-15, planning agent; subject to expert review.
-- Decision: ledger gates are the seven technical-design §13 gates plus
-  `attribute-provenance` (ToR OQ3, A3), `design-transcript-provenance` (ToR
-  OQ7), and `first-user-review` (ToR SC8, OQ1; technical design §12). OQ6
-  (bidirectional authoring) is not a release gate; roadmap 6.1.1 owns it.
-  Rationale: the roadmap names "unresolved provenance", which covers both OQ3
-  and OQ7, and §12 makes the first user review an exit gate. Date/Author:
-  2026-10-15, planning agent.
-- Decision: `attribute-provenance` and `design-transcript-provenance` do not
-  block public acceptance; they carry `blocks: []` and remain visible residual
-  assumptions. Rationale: the ratified statement already excludes attribute
-  provenance from the theorem, so closing OQ3 changes what an integrator knows,
-  not what Polean claims; ToR §8.3 already excludes the unseen transcript from
-  acceptance evidence. The sponsor may override this at ratification.
-  Date/Author: 2026-10-15, planning agent; explicitly offered to the sponsor.
+- Decision: record the acceptance ledger as a versioned JSON contract with a
+  JSON Schema, checked by the existing design lane. Rationale: later tasks
+  (1.2.1–1.2.4, 4.3.2, 5.1.1, 5.2.2) close these gates, and AGENTS.md requires
+  machine-readable contracts to track trust boundaries; a contract lets the
+  harness reject a gate closed without acceptances, which a Markdown table
+  cannot. Alternatives: a Markdown-only ledger in ADR-002 (half the files, but
+  no enforcement of closure rules; viable only if the sponsor prefers prose);
+  Rust ledger types tested with `rstest` and `proptest` (rejected: first crate
+  dependencies for a non-product reason, against phase 1's "preserve …
+  independent design validation", and roadmap 4.2.1 checks a single run's
+  gates, not release governance, so no code would be reused); a separate
+  ADR-003 for allocation (rejected: allocation is governance state, not an
+  architectural decision). Date/Author: 2026-10-15, planning agent after expert
+  review.
+- Decision: the ledger never stores readiness. The harness derives the
+  blocker set and publishes it in `validation/design-validation.json`.
+  Rationale: technical design §8, "A malformed report cannot choose its own
+  exit status by setting a JSON field." Date/Author: 2026-10-15.
+- Decision: gate identifiers, residual identifiers, role identifiers, and a
+  per-gate floor of `blocks` and `accepted_by` are reviewed harness constants,
+  as `CLAIM_IDS` already is. Rationale: deleting or weakening an inconvenient
+  gate must fail the check. Date/Author: 2026-10-15.
+- Decision: ADR-002 is the authoritative copy of the statement. Technical
+  design §1 carries a marker-bound copy. The ledger stores only the ADR path
+  and the statement's SHA-256 digest; each acceptance repeats the digest it
+  accepted. `README.md` and `docs/users-guide.md` link to ADR-002 rather than
+  restating it. Rationale: two bound copies and a digest are enough; a third
+  free-text copy would drift. Date/Author: 2026-10-15.
+- Decision: attribute provenance becomes a profile-level `assumptions` array
+  in `contracts/profile.json`
+  (`["attribute_provenance", "application_enforcement", "state_changes"]`, from
+  technical design §2's "Application to request" row), not a result field.
+  Rationale: the value never varies between runs, so it is a property of the
+  profile, and a fifth result "dimension" would blur the four-claim separation.
+  Forward obligation recorded in ADR-002: roadmap 4.2.1 and 4.2.2 must render
+  the profile's assumptions in every report and test that no producer omits
+  them. Compatibility decision: none (no released API, no consumer).
+  Date/Author: 2026-10-15, after expert review rejected the draft's
+  `attribute_provenance: assumed` result field.
+- Decision: ledger negative controls run inside `make design-check` through
+  `validate_design.negative_controls`, not in a new script or Make target.
+  Rationale: content controls already live there; `test_boundary.py` is for
+  orchestration and storage seams. Date/Author: 2026-10-15.
+- Decision: the readiness derivation is verified by a 12-row truth table
+  (three statuses × four `blocks` shapes), golden blocker lists over the
+  committed ledger, and two seeded mutants, not by enumerating every
+  assignment. Rationale: blocker membership depends only on each gate's own
+  status and `blocks`, so the per-gate table is exhaustive for the function;
+  the draft's 59,049-state enumeration re-checked the same rule at exponential
+  cost. Date/Author: 2026-10-15.
+- Decision: the new Python module follows its siblings' conventions
+  (`validation/requirements.txt`, standard library plus `jsonschema`, no CLI)
+  rather than `docs/scripting-standards.md`'s `uv`, PEP 723, Cyclopts, and
+  pytest defaults. Rationale: it is an imported module of an existing lane, not
+  a new script. Date/Author: 2026-10-15.
+- Decision: eight gates (the seven technical design §13 gates plus
+  `first-user-review` from §12 and ToR SC8) and two residual assumptions
+  (`attribute-provenance`, ToR OQ3 and A3; `design-transcript-provenance`, ToR
+  OQ7). OQ6 is not a release gate; roadmap 6.1.1 owns it. Rationale: the
+  roadmap's "unresolved provenance" covers OQ3 and OQ7; the ratified statement
+  already excludes attribute provenance from the theorem and ToR §8.3 already
+  excludes the unseen transcript from acceptance evidence, so neither changes
+  what Polean may claim. Residuals stay visible in the published summary. The
+  sponsor may override (see `Tolerances`). Date/Author: 2026-10-15.
+- Decision: a gate blocks E0 if and only if a phase-2 roadmap task depends
+  transitively on its closing task. Rationale: one stated rule replaces the
+  draft's inconsistent reading of technical design §12. Result: E0 blockers are
+  `toolchain-pins` (1.2.1), `admission-coverage` (1.2.2), `axiom-audit` (1.2.3),
+  `execution-sandbox` (1.2.4), and `assurance-statement` (1.1.1). Date/Author:
+  2026-10-15.
+- Decision: deliver in two pull requests. The implementation pull request
+  (EP-M1, EP-M2) merges with ADR-002 `Proposed` and claims nothing it has not
+  earned. A small ratification pull request (EP-M3, EP-M4) carries the holders'
+  comments and the recorded decision and is merged by a human. Rationale: makes
+  "approved but never ratified" a coherent stopping point and keeps the
+  decision trail on one small diff. Date/Author: 2026-10-15.
+- Decision: `checksums-check` joins the design workflow. Rationale: the
+  manifest covers files this work and every later gate closure change; an
+  unchecked manifest drifts. Date/Author: 2026-10-15.
 
 ## Outcomes & retrospective
 
@@ -267,90 +311,93 @@ Not started. Complete at EP-M4.
 
 ## Context and orientation
 
-Polean is at a design-scaffold stage. Nothing here parses Rego, runs Lean, or
-calls OPA. The repository contains:
+Polean is at a design-scaffold stage: nothing parses Rego, runs Lean, or calls
+OPA. The relevant parts of the repository are:
 
-- `docs/terms-of-reference.md` (ToR): the problem brief. §4 defines the roles
-  (policy author, technical reviewer, project maintainer, sponsor, production
-  enforcement operator). §8.2 lists assumptions A1–A6; A2 says the frontend may
-  stay trusted and is resolved when the "sponsor accepts the assurance
-  statement or rejects it before release"; A3 says request attributes come from
-  trusted application components. §9 lists open questions OQ1–OQ7 with proposed
-  owner roles.
+- `docs/terms-of-reference.md` (ToR): §4 defines roles (policy author,
+  technical reviewer, project maintainer, sponsor, production enforcement
+  operator). §8.2 lists assumptions A1–A6: A2 says the frontend may stay
+  trusted and is resolved when the "sponsor accepts the assurance statement or
+  rejects it before release"; A3 says request attributes come from trusted
+  application components. §9 lists open questions OQ1–OQ7 with proposed owner
+  roles; OQ3's owner is "Application owner".
 - `docs/technical-design.md` (TDD): §1 holds the proposed first public
   assurance statement as a block quote; §2 is the trust-boundary table; §8
-  defines outcomes such as `model_proved`; §12 defines experiments E0–E2 and
-  the first user review; §13 ends with the "Open gates" sentence this plan
-  allocates.
+  defines outcomes such as `model_proved`; §10 mentions the "trust ledger"; §12
+  defines experiments E0–E2 and the first user review; §13 ends with the "Open
+  gates" sentence this plan allocates.
 - `docs/context.md`: the vocabulary (model theorem, source binding, runtime
   correspondence, kernel checked, trusted computing base).
-- `docs/adr-001-repository-bootstrap.md`: the only ADR. Header bullets
-  `Status`, `Date`, `Decision owners`; sections Context, Decision,
-  Consequences, Alternatives considered. It records the ISC licence and defers
-  toolchain pins to E0.
-- `contracts/`: JSON Schemas and the profile. `result.schema.json` has an
-  `assurance` object with `logic`, `source_binding`, and
-  `runtime_correspondence` enums. `profile.json` has prose `assurance` values
-  constrained by `profile.schema.json`.
+- `docs/adr-001-repository-bootstrap.md`: the only ADR. Header bullets in the
+  form `- **Status:** …`, `- **Date:** …`, `- **Decision owners:** …`; sections
+  Context, Decision, Consequences, Alternatives considered. It records the ISC
+  licence and defers toolchain pins to E0.
+- `contracts/`: JSON Schemas and the profile. `profile.json`'s `assurance`
+  object holds prose constants fixed by `profile.schema.json`.
 - `validation/validate_design.py`: the design harness. `Repository` is the
   read-only input boundary; `Workspace` is the only writer; `run_checks()` is
-  the composition root and writes `validation/design-validation.json`.
-  `load_schemas()` loads every `contracts/*.schema.json`, so a new schema is
-  meta-validated automatically and `json_schemas_checked` rises from 5 to 6.
-- `validation/test_boundary.py`: fault-injection tests of the harness, run by
-  `make design-boundary`, using a `Tampered` repository subclass that rewrites
-  one document in memory.
-- `Makefile`: `check-fmt`, `typecheck`, `lint`, `test`, `markdownlint`,
+  the composition root and writes `validation/design-validation.json`;
+  `negative_controls()` splices control lists from `request_controls`,
+  `contract_controls`, and `witness_controls`; `load_schemas()` loads every
+  `contracts/*.schema.json`, so a new schema is meta-validated automatically and
+  `json_schemas_checked` rises from 5 to 6.
+- `Makefile`: `check-fmt`, `markdownlint`, `typecheck`, `lint`, `test`,
   `design-check`, `design-properties`, `design-boundary`, and `all`.
 - `.github/workflows/design.yml`: runs the three design targets and fails if
-  the tree is dirty afterwards (so a regenerated summary must be committed).
-- `SHA256SUMS`: a manual provenance manifest; verify with
-  `sha256sum -c SHA256SUMS`.
+  the tree is dirty afterwards.
+- `SHA256SUMS`: a provenance manifest; `sha256sum -c SHA256SUMS` verifies it.
 
-Terms used in this plan:
+Terms used here:
 
-- *Assurance statement*: the sentences a successful run is permitted to
-  claim. *Ratified* means the sponsor and technical reviewer accepted it.
-- *Gate*: a decision or piece of evidence that must exist before a named stage
-  (E0 or public acceptance) may proceed.
-- *Acceptance ledger*: the contract listing every gate with its owner roles,
-  closure evidence, status, and the stages it blocks.
-- *Blocker*: a gate that blocks a stage and is not `closed`.
+- *Assurance statement*: the sentences a successful run may claim; *ratified*
+  means accepted by the sponsor and technical reviewer under the template.
+- *Statement digest*: SHA-256 of the statement after normalization (strip
+  line-anchored `>` prefixes, collapse whitespace runs to one space, trim).
+- *Gate*: a decision or evidence that must exist before a stage (E0 or public
+  acceptance) may proceed. *Blocker*: a gate that blocks a stage and is not
+  `closed`.
+- *Residual assumption*: an owned, visible assumption that blocks no stage.
+- *Acceptance ledger*: the contract listing gates, residuals, owner roles,
+  closure rules, and recorded acceptances. Distinct from the *assurance ledger*
+  or *trust ledger* of technical design §§10 and 12, which describe a run's
+  residual trust.
+- *Acceptance comment*: a GitHub comment by a role holder on the ratification
+  pull request, in the form
+  `<role>: ACCEPT|REJECT <gate> sha256:<digest-or-none> [reason]`.
 
-Required references for the implementer, in reading order:
-`docs/terms-of-reference.md` (§§1–5, 8–10), `docs/technical-design.md` (§§1–3,
-8–9, 12–13), `docs/context.md`, `docs/adr-001-repository-bootstrap.md`,
-`docs/roadmap.md` (phase 1 and 5.2.2), `docs/documentation-style-guide.md`,
-`docs/developers-guide.md`, `docs/repository-layout.md`,
-`validation/README.md`, and `docs/scripting-standards.md` (for the documented
-exception). `docs/reliable-testing-in-rust-via-dependency-injection.md`,
-`docs/rust-testing-with-rstest-fixtures.md`, `docs/rust-doctest-dry-guide.md`,
-and `docs/complexity-antipatterns-and-refactoring-strategies.md` do not apply
-to code changed here, because no Rust changes; read the last one before
-splitting harness functions. `docs/references.md` does not exist in this
-repository; external sources are listed per document.
+Required references, in reading order: `docs/terms-of-reference.md` (§§1–5,
+8–10), `docs/technical-design.md` (§§1–3, 8–10, 12–13), `docs/context.md`,
+`docs/adr-001-repository-bootstrap.md`, `docs/roadmap.md` (phases 1, 2, and 5),
+`docs/documentation-style-guide.md`, `docs/developers-guide.md`,
+`docs/repository-layout.md`, `validation/README.md`, and
+`docs/scripting-standards.md` (for the documented exception). Read
+`docs/complexity-antipatterns-and-refactoring-strategies.md` before shaping the
+harness functions. `docs/reliable-testing-in-rust-via-dependency-injection.md`,
+`docs/rust-testing-with-rstest-fixtures.md`, and
+`docs/rust-doctest-dry-guide.md` do not apply, because no Rust changes; they
+apply to the forward obligation at roadmap 4.2.1. `docs/references.md` does not
+exist; each document lists its own sources.
 
 Skills to load: `execplans` (maintaining this plan), `arch-decision-records`
-(ADR-002 shape), `en-gb-oxendict-style` (prose), `python-router` then
+(ADR-002), `en-gb-oxendict-style` (prose), `python-router` then
 `python-data-shapes` (ledger data handling), `rust-router` and
-`rust-verification` (only to confirm that no Rust or Verus work is warranted),
-`commit-message`, and `pr-creation`. Delegate full gate runs to the
-`scrutineer` agent.
+`rust-verification` (to confirm that no Rust, Kani, or Verus work is warranted),
+`commit-message`, and `pr-creation`. Delegate full gate runs to `scrutineer`.
 
 ## Conformance basis
 
 Upstream artefacts at commit `9a867bd`:
 
 - Terms of reference, draft v0.1 (2026-10-04): A2, A3, A4, A5, A6, OQ1–OQ7,
-  SC7, SC8, §4 roles, §8.1 ("No … licensing requirement … has been
-  authorized"), §8.3 (dependency tuple).
-- Technical design, draft v0.1 (2026-10-04): §1 statement (TDD-STMT), §2
-  "Application to request" row (TDD-BND-APP), §8 `model_proved` row (TDD-OUT),
-  §10 trust-ledger sentence (TDD-V), §12 exit gates (TDD-EXIT), §13 open gates
+  SC7, SC8, §4 roles, §8.1 (no licensing requirement authorized), §8.3
+  (dependency tuple).
+- Technical design, draft v0.1 (2026-10-04): §1 statement (TDD-STMT); §2
+  "Application to request" row (TDD-BND-APP); §8 `model_proved` row (TDD-OUT);
+  §10 trust ledger (TDD-V); §12 exit gates (TDD-EXIT); §13 open gates
   (TDD-GATES).
 - ADR-001 (accepted, 2026-10-08): ISC licence; toolchain pin deferred to E0.
-- Roadmap tasks RM-1.1.1 and RM-1.1.2; downstream consumers RM-1.2.1–1.2.4,
-  RM-4.3.2, RM-5.1.1, RM-5.2.2.
+- Roadmap: RM-1.1.1 and RM-1.1.2; consumers RM-1.2.1–1.2.4, RM-4.2.1,
+  RM-4.2.2, RM-4.3.1, RM-4.3.2, RM-5.1.1, RM-5.2.2.
 - Governing standards: AGENTS.md, `docs/documentation-style-guide.md`,
   `docs/repository-layout.md` §Ownership boundaries.
 
@@ -358,325 +405,314 @@ Trace links:
 
 ```plaintext
 TOR-A2, TOR-OQ2 -> TDD-STMT -> RM-1.1.1 -> EP-M1, EP-M3
-  -> ADR-002 ratification record; gate assurance-statement; checks O1, O6
+  -> ADR-002 ratification record; gate assurance-statement; O1, O6
 TOR-A3, TOR-OQ3 -> TDD-BND-APP -> RM-1.1.1 -> EP-M1
-  -> fourth statement sentence; attribute_provenance=assumed; check O2
-TDD-OUT -> EP-M1 -> users-guide and cli.txt wording fix; check O2
-TDD-GATES, TOR-OQ4, TOR-OQ5, TOR-OQ7, TOR-SC8 -> RM-1.1.2 -> EP-M2 -> ledger gates; checks O3, O4, O7
-ADR-001 ISC, TOR-OQ5 -> RM-1.1.2 -> EP-M2 -> ledger settled repository-licence vs gate dependency-distribution; check O5
-TDD-EXIT -> RM-1.1.2 -> EP-M2 -> ledger blocks e0/public-acceptance; derived blockers in design-validation.json; check O7
+  -> fourth statement sentence; profile assumptions; O2
+TOR-OQ3, TOR-OQ7 -> RM-1.1.2 -> EP-M2 -> ledger residuals; O3
+TDD-OUT -> EP-M1 -> users-guide and cli.txt wording fix; O2
+TDD-GATES, TOR-OQ4, TOR-OQ5, TOR-SC8 -> RM-1.1.2 -> EP-M2
+  -> ledger gates and floor; O3, O4
+ADR-001 ISC, TOR-OQ5 -> RM-1.1.2 -> EP-M2
+  -> settled repository_licence vs gate dependency-distribution; O5
+TDD-EXIT, roadmap phase-2 dependencies -> RM-1.1.2 -> EP-M2
+  -> derived blockers in design-validation.json; O7
 ```
 
-No requirement is dropped. ToR OQ6 is traced to RM-6.1.1 and deliberately
-excluded from the ledger (see `Decision log`).
+ToR OQ6 traces to RM-6.1.1 and is deliberately outside the ledger.
 
 ## Verification plan
 
 This change introduces data contracts and consistency rules over documents, not
-executable product logic. The invariants below are finite and document-shaped.
-The right tools are the existing harness's named checks, fault-injection
-controls in the `test_boundary.py` style, and one exhaustive enumeration over a
-finite state space.
+executable product logic. The invariants are finite and document-shaped. The
+right tools are named harness checks, negative controls in the existing
+`negative_controls` style, and an exhaustive per-gate truth table.
 
-Verus is not warranted. There is no Rust function, no unbounded data structure,
-and no contractual business logic in a compiled component. The one quantified
-property (readiness derivation) ranges over 3^10 = 59,049 gate-state
-assignments, which can be enumerated exhaustively in well under a second, so a
-deductive proof would add trusted machinery without adding coverage. Kani and
-`proptest` are not used for the same reason: there is no Rust code, and the
-finite domain is enumerated completely rather than sampled. `rstest-bdd` is not
-used because there is no Rust behaviour to specify; the observable workflow is
-`make design-check` and `make design-ledger`, whose expected outputs are given
-in `Validation and acceptance`. `insta` snapshots are not used because the only
-multi-format output is the committed JSON summary, which the design workflow
-already pins by requiring a clean tree.
+Verus is not warranted: there is no Rust function, no unbounded data structure,
+and no contractual business logic in a compiled component. Kani and `proptest`
+are not used for the same reason. Hypothesis is available in this Python lane
+but is unnecessary for a 12-row domain that is enumerated completely.
+`rstest-bdd` and `insta` are not used because there is no Rust behaviour; the
+observable workflow is `make design-check`, whose expected outputs are pinned
+by the committed summary and the design workflow's clean-tree check. The Rust
+testing stack (`rstest`, `googletest`, `pretty_assertions`, `insta`,
+`proptest`) becomes a forward obligation at roadmap 4.2.1, which must assert
+that every report carries the profile's assumptions; ADR-002 records that
+obligation.
 
 Axioms relied on, not verified:
 
-- AX1: `jsonschema` 4.26.0 implements Draft 2020-12 validation correctly.
-- AX2: a statement recorded as a sponsor's or reviewer's decision was in fact
-  made by the person holding that role. The harness checks the *form* of the
-  ratification record (both roles named, dated, evidence present); it cannot
-  authenticate a person. The evidence link (a PR comment by that GitHub
-  account, or a quoted conversation statement committed in the ADR) is the
-  audit trail.
-- AX3: an evidence path that exists, or a URL under
-  `https://github.com/leynos/polean/`, is relevant to the gate it closes.
-  Relevance is a reviewer's judgement; the harness checks existence and
-  namespace only.
+- AX1: `jsonschema` 4.26.0 implements Draft 2020-12 correctly.
+- AX2: a GitHub comment URL recorded in an acceptance was posted by the login
+  recorded with it, and that login belongs to the role holder. The harness
+  checks the URL's shape and the login's form; it does not query GitHub or
+  authenticate a person. Reviewers confirm by opening the link.
+- AX3: a cited repository artefact is relevant to the gate it supports.
+  Relevance is a reviewer's judgement; the harness checks existence only.
 
 Obligations:
 
-- O1 statement binding. Obligation: the text between
+- O1 statement binding. The text between
   `<!-- polean:assurance-statement:start -->` and
-  `<!-- polean:assurance-statement:end -->` in ADR-002 and in technical design
-  §1, after removing block-quote markers and collapsing runs of whitespace to
-  one space, equals `assurance_statement.text` in the ledger, and each marker
-  pair occurs exactly once per document. Method: named harness check
-  `check_statement_binding`, plus fault-injection tests. Artefact:
-  `validation/acceptance_ledger.py`, `validation/test_acceptance_ledger.py`.
-  Evidence: `make design-check` passes; `make design-ledger` reports the
-  controls rejected. Non-vacuity: the witness is the real ADR and TDD; controls
-  change one word in the TDD copy, delete the end marker, and duplicate the
-  block, and each must be rejected with a diagnostic naming the document. A
-  normalization test shows that rewrapping the same words is accepted, so the
-  check is not merely byte equality that would fail on reflow.
-- O2 dimension vocabulary. Obligation: the ledger's `dimensions` are exactly
-  `logic: kernel_checked`, `source_binding: trusted_frontend`,
-  `runtime_correspondence: tested_agreement`, `attribute_provenance: assumed`;
-  each value is a member of the corresponding enum in
-  `contracts/result.schema.json`; `attribute_provenance` is required there with
-  the single value `assumed`. Method: harness check plus controls. Non-vacuity:
-  controls remove `attribute_provenance` from the schema's `required` list,
-  change the ledger's `source_binding` to `proved_translation`, and add a
-  second enum value `authenticated`; each is rejected.
-- O3 closed vocabularies. Obligation: the ledger's role identifiers equal the
-  reviewed constant `LEDGER_ROLES` and its gate identifiers equal
-  `LEDGER_GATES`, with no duplicates; every `responsible` and `accepted_by`
-  role is a declared role. Method: harness check plus controls. Non-vacuity:
-  controls delete `execution-sandbox`, duplicate `toolchain-pins`, and set a
-  gate's `responsible` to `release-manager`; each is rejected.
-- O4 closure evidence. Obligation: a gate whose `status` is `closed` or
-  `rejected` has a `decided_on` date and at least one evidence entry; every
-  `path` entry names an existing repository file; every `url` entry starts with
-  `https://github.com/leynos/polean/`; an `open` gate has no `decided_on`.
-  Method: harness check plus controls. Non-vacuity: the `assurance-statement`
-  gate after EP-M3 is the positive witness; controls close `axiom-audit` with
-  no evidence, cite `docs/missing.md`, and cite `https://example.com/`; each is
+  `<!-- polean:assurance-statement:end -->` occurs exactly once in ADR-002 and
+  once in technical design §1; after normalization the two are equal, contain no
+  `...`, and their SHA-256 equals `assurance_statement.sha256` in the ledger.
+  Method: named check plus controls. Artefact:
+  `validation/acceptance_ledger.py`. Non-vacuity: the real ADR and TDD are the
+  witnesses; controls change one word in the TDD copy, delete an end marker,
+  duplicate the block, and alter the ledger digest, and each is rejected naming
+  the document; a rewrap-only change is accepted, showing the comparison is not
+  raw byte equality.
+- O2 vocabulary alignment. The ledger's `dimensions` equal
+  `{logic: kernel_checked, source_binding: trusted_frontend,
+  runtime_correspondence: tested_agreement}`;
+  each value is in the matching enum of `contracts/result.schema.json`; the
+  ledger's `assumptions` equal `contracts/profile.json`'s `assumptions`, which
+  the profile schema fixes and requires. Non-vacuity: controls change
+  `source_binding` to `proved_translation`, drop `attribute_provenance` from
+  the profile, and remove `assumptions` from the profile schema's `required`
+  list; each is rejected.
+- O3 closed vocabularies and floor. Role, gate, and residual identifiers equal
+  the reviewed constants `LEDGER_ROLES`, `LEDGER_GATES`, and
+  `LEDGER_RESIDUALS`, without duplicates; every role reference is declared;
+  each gate's `blocks` and `accepted_by` are supersets of `GATE_FLOOR`.
+  Non-vacuity: controls delete `execution-sandbox`, duplicate `toolchain-pins`,
+  set a `responsible` to `release-manager`, empty `axiom-audit`'s `blocks`, and
+  drop `technical-reviewer` from `toolchain-pins`'s `accepted_by`; each is
   rejected.
-- O5 licence distinction. Obligation: the ledger's `settled.repository_licence`
-  has SPDX identifier `ISC`, which equals `Cargo.toml`'s `license` value and
-  matches the first line of `LICENSE` (`ISC License`); no gate is named for the
-  repository licence; the `dependency-distribution` gate cannot be closed by
-  evidence consisting only of `LICENSE`, `Cargo.toml`, or ADR-001. Method:
-  harness check plus controls. Non-vacuity: controls change the ledger SPDX to
-  `MIT`, and close `dependency-distribution` citing only `LICENSE`; each is
-  rejected.
-- O6 ratification consistency. Obligation: `assurance_statement.decision` is
-  `pending`, `accepted`, or `rejected`; the `assurance-statement` gate status
-  is respectively `open`, `closed`, or `rejected`; a non-pending decision lists
-  exactly one `sponsor` and one `technical-reviewer` entry, each with a
-  non-empty `holder` and an ISO date; a pending decision lists none; and
-  ADR-002's `Status` bullet begins with `Proposed`, `Accepted`, or `Rejected`
-  to match. Method: harness check plus controls. Non-vacuity: the committed
-  ledger is the `pending` witness before EP-M3 and the decided witness after;
-  controls set `accepted` with only a sponsor entry, set `accepted` while the
-  ADR says `Proposed`, and close the gate while the decision is `pending`; each
-  is rejected.
-- O7 readiness derivation. Obligation: for each stage `s` in
-  `{e0, public-acceptance}`, `blockers(s)` is exactly the set of gates `g` with
-  `s` in `g.blocks` and `g.status` not `closed`; `rejected` never satisfies a
-  gate; closing a gate never adds a blocker, and reopening one never removes a
-  blocker. Method: exhaustive enumeration over every assignment of
-  `{open, closed, rejected}` to the ten gates (59,049 states), comparing
-  `blockers` with an independently written counting oracle, plus a monotonicity
-  check over every single-gate transition from each state. Artefact:
-  `validation/test_acceptance_ledger.py`. Evidence: the test prints the number
-  of states and transitions checked; the expected counts are 59,049 states and
-  59,049 × 10 × 2 = 1,180,980 single-gate changes to another status.
-  Non-vacuity: the enumeration includes the all-closed state (empty blockers)
-  and the all-open state (every blocking gate listed), asserted explicitly; a
-  seeded mutant `blockers` that treats `rejected` as satisfied, and another
-  that ignores `blocks`, must each be reported as a mismatch by the oracle
-  comparison.
-- O8 no self-declared readiness. Obligation: the ledger schema has
-  `additionalProperties: false` at every object level, so a ledger cannot add
-  `public_acceptance: "ready"` or similar. Method: schema control. Non-vacuity:
-  a control adds that property and must be rejected by schema validation.
+- O4 closure rules. An `open` gate has no acceptances and no `decided_on`. A
+  `closed` gate has a `decided_on` date, at least one existing repository
+  artefact that is not a subset of any `settled` entry's evidence, and exactly
+  one `ACCEPT` acceptance per `accepted_by` role. A `rejected` gate has a
+  `decided_on` date and at least one `REJECT` acceptance with a reason. Every
+  acceptance has a role in the gate's `accepted_by`, a holder matching
+  `^[a-z0-9](?:[a-z0-9-]{0,38})$` that does not end in `[bot]`, an ISO date,
+  and a comment URL matching
+  `^https://github\.com/leynos/polean/pull/[0-9]+#issuecomment-[0-9]+$` (the
+  prefix lives in one constant). Non-vacuity: after EP-M3 the
+  `assurance-statement` gate is the positive witness; before EP-M3 a
+  constructed closed gate in the controls serves. Controls close `axiom-audit`
+  with no acceptances, with only one of two roles, with a `docs/missing.md`
+  artefact, with only `LICENSE` as artefact, with an `https://example.com/`
+  URL, and with holder `github-actions[bot]`; each is rejected.
+- O5 licence distinction. `settled.repository_licence.spdx` is `ISC`, equals
+  `Cargo.toml`'s `license`, and `LICENSE` begins `ISC License`; no gate or
+  residual concerns the repository licence; `dependency-distribution` is a gate
+  owned by `sponsor`. Non-vacuity: a control changes the SPDX to `MIT` and is
+  rejected; O4's settled-subset control covers closure by `LICENSE` alone.
+- O6 ratification binding. Every acceptance on `assurance-statement` carries
+  `statement_sha256` equal to the current digest; ADR-002's `- **Status:** …`
+  line begins `Proposed` when the gate is `open`, `Accepted` when `closed`, and
+  `Rejected` when `rejected`; when the sponsor and technical-reviewer holders
+  are equal, an `Accepted` status reads
+  `Accepted — single holder; no independent technical review`. The summary
+  publishes `independent_review` as `null` while open and a Boolean otherwise.
+  Non-vacuity: the committed `Proposed` ledger is the pending witness; controls
+  add an acceptance with a stale digest, set the gate `closed` while the ADR
+  says `Proposed`, and use equal holders without the single-holder wording;
+  each is rejected. Scheduled in EP-M2's red step.
+- O7 readiness derivation. For each stage `s` in `{e0, public-acceptance}`,
+  `blockers(s)` lists, in ledger order, the gates with `s` in `blocks` and
+  status other than `closed`; `rejected` never satisfies a gate; residuals
+  never block. Method: a 12-row truth table over status × `blocks` shape for a
+  single gate, golden lists for the committed ledger, and two seeded mutants
+  (one treats `rejected` as satisfied, one ignores `blocks`) that the truth
+  table must reject. Non-vacuity: the table includes rows that block and rows
+  that do not for both stages; the mutants prove it can fail.
+- O8 no self-declared state. The ledger schema sets
+  `additionalProperties: false` on every object, constrains stage names to an
+  enum, and constrains status to `open`, `closed`, `rejected`. Non-vacuity: a
+  control adds `"public_acceptance": "ready"` and is rejected by schema
+  validation.
 
-Every obligation above is checked against the real committed documents by
-`make design-check`, and every control runs in `make design-ledger`. The
-residual gap is AX2 and AX3: the harness proves the ledger is well formed and
-consistent with the documents, not that a decision is authentic or that cited
-evidence is sufficient.
+Every obligation is checked against committed documents by `make design-check`,
+and every control runs in the same command. The residual gap is AX2 and AX3:
+the harness shows the ledger is well formed and bound to the current statement,
+not that a person is who they claim or that evidence is sufficient.
 
 ## Plan of work
 
 ### Stage A: confirm the baseline (EP-M0)
 
 No edits. Run every gate once, sequentially, through `scrutineer`, and record
-the log paths in `Artefacts and notes`. If any gate fails on the untouched
-branch, stop and report; do not fix unrelated failures inside this plan.
+log paths in `Artefacts and notes`. If a gate fails on the untouched branch,
+stop and report.
 
 ### Stage B and C for EP-M1: bind the assurance statement
 
-Red first. Create `validation/acceptance_ledger.py` with the constants
-`LEDGER_ROLES`, `LEDGER_GATES`, `STATEMENT_MARKERS`, `EXPECTED_DIMENSIONS`, and
-functions `normalize_statement(text) -> str`,
-`extract_statement(markdown, document) -> str`, `check_statement_binding(...)`
-and `check_dimensions(...)`. Wire a single call,
-`acceptance_ledger.check_ledger(repo, validators)`, into
-`validate_design.run_checks()` immediately after `check_result_schema`, and add
-`contracts/acceptance-ledger.json` to the documents read by `Fixtures.load()`
-or by `check_ledger` through `Repository.read_json` (prefer passing `repo` so
-the module reads only through the boundary). Run `make design-check`; it must
-fail with a `HarnessIOError` naming `contracts/acceptance-ledger.json`. Create
-`validation/test_acceptance_ledger.py` with the O1 and O2 controls and the
-normalization cases; it must fail because the module's checks cannot find the
-ledger.
+Red. Create `validation/acceptance_ledger.py` with constants
+`STATEMENT_MARKERS`, `EXPECTED_DIMENSIONS`, `EXPECTED_ASSUMPTIONS`, and
+functions `normalize_statement`, `extract_statement`, `statement_digest`,
+`check_statement_binding`, and `check_vocabulary`, plus `ledger_controls()`
+returning control tuples in the shape `negative_controls` already consumes. Wire
+`check_ledger(repo, validators)` into `validate_design.run_checks()` after
+`check_result_schema`, and splice `ledger_controls()` into `negative_controls`.
+The module reads only through `Repository`. Run `make design-check`; it must
+fail with `cannot read contracts/acceptance-ledger.json`.
 
-Green. Write `contracts/acceptance-ledger.schema.json` and a first
-`contracts/acceptance-ledger.json` holding `schema_version`, `profile`, `roles`,
-`assurance_statement` (decision `pending`, `decided_by: []`), and `settled`,
-and an empty `gates` array. The schema never constrains the number of gates;
-the closed gate set is a harness constant enforced by check O3, which EP-M2
-adds in its red step. EP-M1 therefore needs no temporary permissiveness. (If
-this sequencing proves awkward, land EP-M1 and EP-M2 as one milestone rather
-than add a shim; record the choice in `Decision log`.)
+Green. Write `contracts/acceptance-ledger.schema.json` (no `$id`, matching
+siblings) and `contracts/acceptance-ledger.json` holding `schema_version`,
+`profile`, `roles`, `settled`, `assurance_statement`, an empty `gates` array,
+and an empty `residuals` array. The schema never constrains how many gates
+exist; the closed set is a harness constant checked by O3, which EP-M2 adds.
 
 Write `docs/adr-002-first-profile-assurance-boundary.md` with header bullets
-`Status: Proposed — awaiting sponsor and technical-reviewer ratification.`,
-`Date`, and `Decision owners: sponsor and technical reviewer`, and the sections
-Context, Decision (including a one-paragraph Y-statement summary and the marked
-statement), Consequences, Alternatives considered, and Ratification record
-(empty, with the instructions for EP-M3). The proposed statement is:
+`- **Status:** Proposed — awaiting sponsor and technical-reviewer ratification.`,
+`- **Date:** …`, and `- **Decision owners:** sponsor and technical reviewer.`,
+and sections Context, Decision, Consequences, Alternatives considered, and
+Ratification record. The Decision section contains a one-paragraph Y-statement
+summary, then the marked statement on its own lines outside any block quote:
 
 ```plaintext
-The admitted policy model satisfies these six requirements for every valid
-request. Lean checked the model evidence. The source frontend remains trusted;
-OPA and Regorus agree on the recorded conformance cases, not by a refinement
-theorem. The theorem takes subject and resource attributes as given: it does
-not authenticate them, establish their provenance, or certify how an
+The admitted policy model satisfies the six registered tenant-write
+requirements for every valid request. Lean checked the model evidence. The
+source frontend remains trusted; OPA and Regorus agree with the model on the
+recorded conformance cases, not by a refinement theorem. The model theorem
+takes the request's subject, resource, and action attributes as given: it
+does not authenticate them, establish their provenance, or certify how an
 application enforces the decision.
 ```
 
-The ADR's Decision section must also state the machine mapping: a successful
-`prove` or `verify` reports outcome `model_proved` with assurance
-`logic: kernel_checked`, `source_binding: trusted_frontend`,
-`runtime_correspondence: tested_agreement`, `attribute_provenance: assumed`; no
-test result may upgrade `trusted_frontend` or `tested_agreement`; and the
-statement is the most that release material may claim. Alternatives considered
-must include "require checked source correspondence before v0" (ToR A2's
-consequence-if-false) and "omit provenance from the statement", each with the
-reason it was not proposed.
+The Decision section then states: admission is performed by the trusted
+frontend, `check` establishes admission only, and admission is not proved; a
+successful `prove` or `verify` reports outcome `model_proved` with assurance
+`logic: kernel_checked`, `source_binding: trusted_frontend`, and
+`runtime_correspondence: tested_agreement`, under the profile's `assumptions`;
+no test result upgrades `trusted_frontend` or `tested_agreement`; and the
+statement is the most that release material may claim. Consequences record the
+forward obligation on roadmap 4.2.1 and 4.2.2 and the disclosure duty when one
+person holds both roles. Alternatives considered cover "require checked source
+correspondence before v0" (A2's consequence-if-false), "omit provenance from
+the statement", and "a result field rather than profile assumptions". The
+Ratification record explains the acceptance-comment template and is otherwise
+empty.
 
-Update the TDD §1 block quote to the same text between the markers, and add
-ADR-002 and the ledger to its Companions list. Update `README.md` lines 30–33
-to add the provenance sentence in prose. Replace "model_proved +
-trusted_frontend + tested_agreement" in `docs/users-guide.md` and
-`contracts/cli.txt` with wording that names outcome `model_proved` and the four
-assurance values separately. Add `attribute_provenance` (enum `["assumed"]`,
-required) to `contracts/result.schema.json`'s `assurance` object, update
-`check_result_schema`'s sample report to include it, add
-`"attribute_provenance": "assumed; outside the theorem"` to
-`contracts/profile.json` with a matching `const` in
-`contracts/profile.schema.json`, and add one `require` line to `check_profile`.
-Add the vocabulary entries *Attribute provenance*, *Assurance statement*, and
-*Acceptance ledger* to `docs/context.md`. Link ADR-002 from `docs/contents.md`.
-Run `make design-check` (regenerates `validation/design-validation.json`;
-review the diff) and the controls.
+Update the TDD §1 statement to the same marked text (markers outside the quote)
+and add ADR-002 and the ledger to its Companions. Update the TDD §8
+`model_proved` row to mention the profile's assumptions. In `README.md` lines
+30–33 and `docs/users-guide.md`, replace restated wording with a short pointer
+to ADR-002 and correct `model_proved + trusted_frontend + tested_agreement` to
+name the outcome and the three dimension values separately; make the same
+correction in `contracts/cli.txt`. Add `assumptions` to
+`contracts/profile.json` and to `contracts/profile.schema.json` (a `const`
+array and an entry in the top-level `required` list), and add one `require`
+line to `check_profile`. In `docs/context.md`, add *Assurance statement*,
+*Attribute provenance*, *Acceptance ledger*, and *Assurance ledger* (covering
+the TDD's "trust ledger"), and change the closing provenance sentence to name
+subject, resource, and action attributes. Link ADR-002 from `docs/contents.md`.
+Update `validation/README.md` ("Five schemas" becomes six; new rows for the
+ledger checks). Run `make design-check`; review the regenerated summary diff.
 
-Refactor. Keep each new Python function under roughly 40 lines; keep
-`acceptance_ledger.py` free of writes. Refresh `SHA256SUMS` lines for every
-changed covered file and add the two new contract files and two new validation
-files.
+Refactor. Keep each new function under roughly 40 lines; keep the module free
+of writes; refresh `SHA256SUMS` for every changed covered file and add the new
+contract and validation files.
 
-### Stage B and C for EP-M2: allocate the gates
+### Stage B and C for EP-M2: allocate gates and residuals
 
-Red. Add the O3–O5, O7, and O8 checks and controls, and the exhaustive
-readiness enumeration with its two seeded mutants, to
-`validation/test_acceptance_ledger.py`. Add a `make design-ledger` target
-(`$(PYTHON) validation/test_acceptance_ledger.py`), add it to `all`, and add a
-step to `.github/workflows/design.yml` after "Test the harness boundaries". Run
-`make design-check`: it must fail with "Ledger gates mismatch" because the
-ledger has no gates.
+Red. Add O3–O8 checks, the `GATE_FLOOR`, `LEDGER_GATES`, `LEDGER_RESIDUALS`, and
+`LEDGER_ROLES` constants, the readiness truth table with its two seeded
+mutants, and their controls. Run `make design-check`; it must fail with
+`Ledger gates mismatch`.
 
-Green. Populate `gates` with the ten entries in `Interfaces and dependencies`,
-all `open`. Implement `derive_blockers(ledger) -> dict[str, list[str]]` and
-publish its result in the summary as `"acceptance_blockers"`, alongside
-`"acceptance_gates": 10` and `"independent_review": null` (null while pending).
-Update TDD §13: keep the decision table, replace the "Open gates" sentence's
-"Assign owners before implementation" with a pointer to the ledger as the
-authoritative record of owners, closure evidence, and status. Add one sentence
-to ToR §9 that the ledger allocates these roles to gates, without editing the
-OQ table. Document the ledger and the "how to close a gate" procedure in
-`docs/developers-guide.md` (new subsection under "The validation harness" and a
-`make design-ledger` row in the targets table), add the ledger to the
-`contracts/` row of `docs/repository-layout.md`, add the new checks to the
-`validation/README.md` table, and record the scripting-standards exception in
-`docs/developers-guide.md`.
+Green. Populate `gates` and `residuals` as specified in
+`Interfaces and dependencies`, all `open`. Implement
+`derive_blockers(gates) -> dict[str, list[str]]` and publish `acceptance_gates`
+(8), `acceptance_blockers`, `acceptance_residuals`, and `independent_review`
+(`null`) in the summary. Add a `checksums-check` Make target
+(`sha256sum -c --quiet SHA256SUMS`), add it to `all`, and add a design-workflow
+step after the clean-tree check.
 
-Refactor. Re-run the controls and the full gate sequence. Refresh `SHA256SUMS`.
+Documentation. In TDD §13, keep the decision table and replace "Assign owners
+before implementation" with a pointer to the ledger as the authoritative record
+of owners, closure rules, and status. Add one sentence to ToR §9 that the
+ledger allocates these roles to gates and residuals, leaving the OQ table
+unchanged. In `docs/developers-guide.md`, add a subsection "Closing an
+acceptance gate" (the acceptance-comment template, the anti-fabrication rule,
+the digest rule, the floor, and that agents never post acceptance comments or
+merge ratification pull requests), a `checksums-check` row, a paragraph on
+`SHA256SUMS`, and the scripting-standards exception. In
+`docs/repository-layout.md`, extend the `contracts/` row and explain that the
+ledger is governance state kept there so its schema is meta-validated with the
+others.
 
-### EP-M3: record the decision (human gate)
+Refactor and hand-over. Run the full sequence, refresh `SHA256SUMS`, push, and
+mark the implementation pull request ready for review. A human merges it with
+ADR-002 at `Proposed`.
 
-Stop and ask the user, in one message, for: the GitHub handle or name holding
-the sponsor role; the one holding the technical-reviewer role (stating that the
-same person may hold both, and that the ADR will say so); each holder's
-decision on the exact statement (accept, or reject with reason); and whether
-they accept the proposed non-blocking treatment of `attribute-provenance` and
-`design-transcript-provenance`. Point them at the ADR on the draft PR so they
-can answer there instead.
+### EP-M3: record the decisions (ratification pull request)
 
-When explicit answers arrive, update ADR-002's Status bullet and Ratification
-record (role, holder, decision, date, and evidence: either the PR comment URL
-or a verbatim quotation of the conversation statement with its date), set
-`assurance_statement.decision`, `decided_by`, the gate's `status`,
-`decided_on`, and `evidence`. If both holders are the same person, say so in
-the ratification record. If the ToR §4 "individual authority not assigned" note
-is superseded, update it to point at the ADR. Run the gates; the summary now
-shows the `assurance-statement` gate absent from both blocker lists if
-accepted, or present as `rejected` if rejected.
+From an up-to-date `main`, create branch `1-1-ratify-adr-002` and open a draft
+pull request whose description quotes the statement, its digest, and the
+template. Ask the user, in one message, to arrange for the sponsor and the
+technical reviewer each to post, from their own GitHub accounts:
 
-### EP-M4: close out
+```plaintext
+sponsor: ACCEPT assurance-statement sha256:<digest>
+technical-reviewer: ACCEPT assurance-statement sha256:<digest>
+```
 
-Mark roadmap 1.1.1 and 1.1.2 done (`- [x]`) only if EP-M3 recorded a decision.
-Reconcile discoveries with the conformance basis, complete
-`Outcomes & retrospective`, set Status to `COMPLETE` (or leave `BLOCKED` after
-a rejection), run the full gate sequence, and refresh `SHA256SUMS`.
+or `REJECT … sha256:<digest> <reason>`, and to say whether the residual
+treatment of the two provenance items stands. Point out that one person may
+hold both roles and that the ADR will disclose it.
+
+When conforming comments exist, record each as an acceptance (role, holder
+login, date, comment URL, digest), set the gate's status and `decided_on`,
+update ADR-002's Status line and Ratification record (linking each comment),
+and, if superseded, ToR §4's "individual authority not assigned" note. Run the
+gates. Never post, edit, or paraphrase a decision comment.
+
+### EP-M4: close out (same ratification pull request)
+
+If the gate is `closed`, tick roadmap 1.1.1 and 1.1.2. If it is `rejected`,
+leave both unticked, annotate 1.1.1 as "rejected on DATE; revise-or-stop
+pending (ADR-002)", and set this plan to `BLOCKED`. Reconcile discoveries with
+the conformance basis, complete `Outcomes & retrospective`, run the full
+sequence, refresh `SHA256SUMS`, and hand the pull request to a human to merge.
 
 ## Milestones and plateaus
 
-- EP-M0. Outcome: baseline evidence that every gate passes on the untouched
-  branch. Requirements: none. Acceptance: logs under `/tmp` cited in
-  `Artefacts and notes`. Conformance check: no edits. Recovery: none needed.
-  Remaining gaps: everything. Compatibility decision: none.
-- EP-M1. Outcome: a proposed ADR-002 whose statement is byte-for-byte (after
-  normalization) the statement in TDD §1 and in the ledger, with the result and
-  profile contracts carrying `attribute_provenance`. Requirements: TOR-A2,
-  TOR-A3, TOR-OQ2 (advanced, not closed), TDD-STMT, TDD-OUT. Acceptance:
-  `make design-check` passes and reports 6 schemas; the O1 and O2 controls are
-  rejected in `make design-ledger` (or the boundary script if the target lands
-  in EP-M2). Conformance check:
-  - TDD §1 changed only by the added provenance sentence and markers.
+- EP-M0. Outcome: every gate passes on the untouched branch. Acceptance: logs
+  cited in `Artefacts and notes`. Compatibility decision: none.
+- EP-M1. Outcome: ADR-002 `Proposed`; the statement is bound across ADR-002,
+  TDD §1, and the ledger digest; the profile carries `assumptions`.
+  Requirements: TOR-A2, TOR-A3, TOR-OQ2 (advanced), TDD-STMT, TDD-OUT.
+  Acceptance: `make design-check` passes, reports `json_schemas_checked: 6`,
+  and the O1 and O2 controls are counted in `negative_controls_passed`.
+  Conformance check:
+  - TDD §1 changed only by the statement revision and markers.
   - Four claim boundaries intact; no wording promotes tests into proof.
-  - A2 and A3 unchanged; A3 now reflected in the statement.
-  - Only the authorized additive contract field changed.
+  - A2 and A3 unchanged; A3 now visible in the statement.
+  - Only the authorized profile field and ledger files changed in contracts.
   - No trust boundary moved; provenance was already outside the theorem.
-  - Trace links above still current.
-  Recovery: revert the milestone commit; nothing downstream depends on it.
-  Remaining gaps: gates, ratification. Compatibility decision: none (no
-  released API or consumer of the result schema).
-- EP-M2. Outcome: a complete, open-gated ledger whose derived blockers appear
-  in the committed summary. Requirements: TDD-GATES, TOR-OQ3–OQ5, TOR-OQ7,
-  TOR-SC8, TDD-EXIT, ADR-001 licence. Acceptance: `make design-check` publishes
-  `acceptance_blockers` listing nine E0-or-public blockers as in
-  `Validation and acceptance`; `make design-ledger` passes all controls and
-  prints the enumeration counts. Conformance check:
-  - Every §13 gate and each named roadmap category has a responsible role.
-  - The ISC licence is a settled fact; distribution is an open gate.
-  - No gate is closed.
-  - New Make target and CI step are the only build changes.
   - Trace links current.
-  Recovery: revert the milestone commit. Remaining gaps: ratification.
+  Recovery: revert the milestone commits. Remaining gaps: gates, residuals,
+  ratification. Compatibility decision: none.
+- EP-M2. Outcome: a complete, open-gated ledger with floor, closure rules,
+  residuals, derived blockers, and a checked `SHA256SUMS`; implementation pull
+  request ready for human merge. Requirements: TDD-GATES, TOR-OQ3–OQ5, TOR-OQ7,
+  TOR-SC8, TDD-EXIT, ADR-001 licence. Acceptance: the outputs in
+  `Validation and acceptance`. Conformance check:
+  - Every §13 gate and each named roadmap category has a responsible role.
+  - The ISC licence is settled; distribution is an open gate.
+  - No gate is closed.
+  - The `checksums-check` target and workflow step are the only build
+    changes.
+  - Trace links current.
+  Recovery: revert the milestone commits. Remaining gaps: ratification.
   Compatibility decision: none.
-- EP-M3. Outcome: ADR-002 accepted or rejected with named holders and
-  evidence. Requirements: RM-1.1.1 success criterion; TOR-OQ2 closed or
-  blocking-rejected. Acceptance: O6 passes on the decided ledger; the
-  ratification record cites evidence. Conformance check: decision text matches
-  the user's statement verbatim; no other gate touched. Recovery: if a decision
-  was transcribed wrongly, correct it in a new commit that cites the correcting
-  statement; never rewrite the evidence. Compatibility decision: none.
-- EP-M4. Outcome: roadmap items marked done and the plan closed.
-  Requirements: RM-1.1.1, RM-1.1.2. Acceptance: roadmap shows `[x]` for both;
+- EP-M3. Outcome: the gate is `closed` or `rejected`, each acceptance bound
+  to a holder's own comment and the current digest. Requirements: RM-1.1.1
+  success criterion; TOR-OQ2 closed or blocking-rejected. Acceptance: O4 and O6
+  pass on the decided ledger. Conformance check: no other gate changed; every
+  recorded field is copied from a linked comment. Recovery: correct a
+  mistranscription in a new commit citing the comment; never edit the comment
+  trail. Compatibility decision: none.
+- EP-M4. Outcome: roadmap reflects the decision; plan closed or blocked.
+  Requirements: RM-1.1.1, RM-1.1.2. Acceptance: roadmap state as described;
   every gate passes. Compatibility decision: none.
 
 ## Concrete steps
 
-Run everything from the worktree root,
-`/home/leynos/.lody/repos/github---leynos---polean/worktrees/dfbd7024-6cdc-4f29-b754-2e4e27df7780`.
-Prepare the Python environment once (the design lane needs `jsonschema` and
-`hypothesis`):
+Run everything from the worktree root. Prepare the Python environment once:
 
 ```bash
 uv venv /tmp/polean-venv
@@ -684,7 +720,7 @@ uv pip install --python /tmp/polean-venv/bin/python -r validation/requirements.t
 ```
 
 Gate sequence (delegate to `scrutineer`; never run two at once), each teed to
-`/tmp/$ACTION-polean-1-1-ratify-assurance-and-release-gates.out`:
+`/tmp/$ACTION-polean-$(git branch --show-current).out`:
 
 ```bash
 make check-fmt
@@ -695,158 +731,213 @@ make test
 make design-check PYTHON=/tmp/polean-venv/bin/python
 make design-properties PYTHON=/tmp/polean-venv/bin/python
 make design-boundary PYTHON=/tmp/polean-venv/bin/python
-make design-ledger PYTHON=/tmp/polean-venv/bin/python   # from EP-M2
-sha256sum -c SHA256SUMS
-git status --porcelain   # must be empty after committing the regenerated summary
+make checksums-check            # from EP-M2; before then: sha256sum -c SHA256SUMS
+git status --porcelain          # empty once the regenerated summary is committed
 ```
 
-Refresh a checksum line after editing a covered file:
+Refresh one checksum line after editing a covered file, then re-run the check:
 
 ```bash
-sha256sum contracts/result.schema.json   # paste the new line over the old one
+sha256sum contracts/profile.json   # replace the old line with this output
 ```
+
+Compute the statement digest once ADR-002 exists. Make the digest-mismatch
+diagnostic print the digest computed from ADR-002, so the first green run can
+copy it into the ledger after a reviewer confirms the ADR text is the intended
+statement.
 
 Expected focused outputs:
 
 ```plaintext
 $ make design-check PYTHON=/tmp/polean-venv/bin/python   # EP-M1 red
-design validation I/O failure: contracts/acceptance-ledger.json: ...
+design validation I/O failure: cannot read contracts/acceptance-ledger.json: ...
 $ make design-check PYTHON=/tmp/polean-venv/bin/python   # EP-M2 red
 design validation check failed: Ledger gates mismatch
-$ make design-ledger PYTHON=/tmp/polean-venv/bin/python  # EP-M2 green
-... 
-readiness: 59049 states, 1180980 transitions, 2 seeded mutants rejected
-acceptance ledger controls: all <N> rejected as intended
 ```
 
-Commit after each milestone (and after each red and green step where the tree
-is coherent), with imperative subjects such as "Bind the first-profile
-assurance statement across ADR and design" and a body stating the assurance
-impact.
+Commit after each red and green step where the tree is coherent, with
+imperative subjects (for example "Bind the first-profile assurance statement
+across ADR and design") and bodies stating the assurance impact.
 
 ## Validation and acceptance
 
-Behavioural acceptance after EP-M2:
+After EP-M2, `make design-check` exits 0 and its summary contains:
 
-- `make design-check` exits 0 and its summary contains
-  `"json_schemas_checked": 6`, `"acceptance_gates": 10`, and an
-  `"acceptance_blockers"` object whose `e0` list is
-  `["toolchain-pins", "admission-coverage", "axiom-audit"]` and whose
-  `public-acceptance` list contains, in ledger order, `toolchain-pins`,
-  `admission-coverage`, `axiom-audit`, `execution-sandbox`, `resource-budgets`,
-  `dependency-distribution`, `assurance-statement`, and `first-user-review`.
-- `make design-ledger` exits 0, prints the enumeration counts above, and
-  lists every control as rejected for its intended reason.
-- Editing one word of the statement in `docs/technical-design.md` makes
-  `make design-check` exit 1 with a diagnostic naming that file.
+```json
+{
+  "json_schemas_checked": 6,
+  "acceptance_gates": 8,
+  "acceptance_blockers": {
+    "e0": ["toolchain-pins", "admission-coverage", "axiom-audit",
+           "execution-sandbox", "assurance-statement"],
+    "public-acceptance": ["toolchain-pins", "admission-coverage",
+                          "axiom-audit", "execution-sandbox",
+                          "resource-budgets", "dependency-distribution",
+                          "assurance-statement", "first-user-review"]
+  },
+  "acceptance_residuals": ["attribute-provenance",
+                           "design-transcript-provenance"],
+  "independent_review": null
+}
+```
 
-After EP-M3 (accepted): `assurance-statement` disappears from
-`public-acceptance`; ADR-002's Status reads `Accepted`; the summary's
-`independent_review` is `true` or `false` according to the holders. After EP-M3
-(rejected): the gate remains in `public-acceptance`, its status is `rejected`,
-and the plan Status is `BLOCKED`.
+`negative_controls_passed` rises from 19 by the number of ledger controls
+(record the exact figure in `Artefacts and notes`). Editing one word of the
+statement in `docs/technical-design.md` makes `make design-check` exit 1 with a
+diagnostic naming that file. `make checksums-check` exits 0.
+
+After EP-M3 with acceptance: `assurance-statement` leaves both blocker lists;
+ADR-002's Status begins `Accepted`; `independent_review` is a Boolean. After a
+rejection: the gate stays in both lists with status `rejected`, and this plan is
+`BLOCKED`.
 
 Red-Green-Refactor evidence to record: the EP-M1 red I/O failure, the EP-M2 red
-"Ledger gates mismatch", each green run, and each refactor re-run.
+gate mismatch, each green run, and each refactor re-run.
 
-Quality criteria: all gates in `Concrete steps` pass; O1–O8 discharged as
-described; `sha256sum -c SHA256SUMS` reports only `OK`; Markdown passes
-`markdownlint-cli2` and `mdtablefix --check`. Security: no new executable input
-path, no network access in the harness.
+Quality criteria: every command in `Concrete steps` passes; O1–O8 discharged as
+described; Markdown passes `markdownlint-cli2` and `mdtablefix --check`.
+Security: no new executable input path, no network access in the harness.
 
 ## Idempotence and recovery
 
-Every harness run is repeatable; `make design-check` rewrites only
-`validation/design-validation.json` and the witnesses, and the design workflow
-requires the committed copy to match. The ledger and ADR edits are plain text
-and revertible per commit. Ratification evidence is append-only: correct a
-mistake with a new commit citing the correction, never by rewriting the cited
-statement.
+Every harness run is repeatable; `make design-check` rewrites only the summary
+and witnesses, and the design workflow requires the committed copy to match.
+Ledger and ADR edits are plain text and revertible per commit. Acceptance
+comments are the decision trail: correct a mistranscription with a new commit
+citing the comment, and never ask a holder to edit an old comment; ask for a
+new one.
 
 ## Artefacts and notes
 
-To be filled during implementation with gate log paths and short transcripts.
+To be filled during implementation with gate log paths, the statement digest,
+the control count, and short transcripts.
 
 ## Interfaces and dependencies
 
-No new dependencies. Python modules use only the standard library and
-`jsonschema`, as the existing harness does.
+No new dependencies: the standard library and `jsonschema`, as now.
 
-`contracts/acceptance-ledger.json` (schema
-`contracts/acceptance-ledger.schema.json`, `$id`
-`polean.acceptance-ledger.v0`), shape:
+`contracts/acceptance-ledger.json` shape (abridged; the schema constrains every
+object with `additionalProperties: false`):
 
 ```json
 {
   "schema_version": "polean.acceptance-ledger.v0",
   "profile": "polean.tenant-write.v0",
   "roles": {
-    "sponsor": {"duty": "Decides proceed, revise, or stop; owns licence and distribution."},
-    "technical-reviewer": {"duty": "Accepts or rejects assurance wording and replay evidence."},
-    "maintainer": {"duty": "Produces toolchain, admission, audit, sandbox, and budget evidence."},
-    "policy-author": {"duty": "Supplies the real policy and requirement for the first user review."},
-    "application-owner": {"duty": "States how subject and resource attributes are authenticated."}
+    "sponsor": {"duty": "Decides proceed, revise, or stop; owns distribution."},
+    "technical-reviewer": {"duty": "Accepts wording, evidence, and replay."},
+    "maintainer": {"duty": "Produces pin, admission, audit, sandbox, budget evidence."},
+    "policy-author": {"duty": "Supplies the real policy for the first user review."},
+    "application-owner": {"duty": "States how request attributes are authenticated."}
   },
   "settled": {
-    "repository_licence": {"spdx": "ISC", "evidence": ["LICENSE", "Cargo.toml", "docs/adr-001-repository-bootstrap.md"]}
+    "repository_licence": {
+      "spdx": "ISC",
+      "evidence": ["LICENSE", "Cargo.toml", "docs/adr-001-repository-bootstrap.md"]
+    }
   },
   "assurance_statement": {
     "adr": "docs/adr-002-first-profile-assurance-boundary.md",
-    "text": "The admitted policy model satisfies ... enforces the decision.",
+    "sha256": "<digest>",
     "dimensions": {"logic": "kernel_checked", "source_binding": "trusted_frontend",
-                   "runtime_correspondence": "tested_agreement", "attribute_provenance": "assumed"},
-    "decision": "pending",
-    "decided_by": []
+                   "runtime_correspondence": "tested_agreement"},
+    "assumptions": ["attribute_provenance", "application_enforcement", "state_changes"]
   },
   "gates": [
-    {"id": "toolchain-pins", "responsible": "maintainer", "accepted_by": ["technical-reviewer"],
-     "sources": ["TDD §§11, 13", "ToR §8.3", "ADR-001"], "closing_task": "1.2.1",
-     "blocks": ["e0", "public-acceptance"],
-     "closure_evidence": "Recorded Rust, Regorus, Lean, and OPA pins with smoke results.",
-     "status": "open", "evidence": []}
+    {
+      "id": "toolchain-pins",
+      "responsible": "maintainer",
+      "accepted_by": ["technical-reviewer"],
+      "sources": [{"doc": "docs/technical-design.md", "section": "§§11, 13"}],
+      "closing_tasks": ["1.2.1"],
+      "blocks": ["e0", "public-acceptance"],
+      "closure_evidence": "Recorded Rust, Regorus, Lean, and OPA pins with smoke results.",
+      "status": "open",
+      "artefacts": [],
+      "acceptances": []
+    }
+  ],
+  "residuals": [
+    {
+      "id": "attribute-provenance",
+      "responsible": "application-owner",
+      "sources": [{"doc": "docs/terms-of-reference.md", "section": "A3, OQ3"}],
+      "closing_tasks": ["5.1.1"],
+      "resolution": "Document the integration's attribute provenance and ingress contract.",
+      "status": "open"
+    }
   ]
 }
 ```
 
-The ten gates (all `open` at EP-M2):
+An acceptance entry is
+`{"role", "holder", "decision": "ACCEPT"|"REJECT", "date", "comment_url",
+"statement_sha256"?, "reason"?}`,
+with `statement_sha256` required on `assurance-statement` and `reason`
+required on `REJECT`. `closing_tasks` entries match `^[1-6](\.[0-9]+){2}$` and
+may be empty.
 
-| Gate                           | Responsible       | Accepted by                 | Sources                         | Closing task | Blocks                |
-| ------------------------------ | ----------------- | --------------------------- | ------------------------------- | ------------ | --------------------- |
-| `toolchain-pins`               | maintainer        | technical-reviewer          | TDD §§11, 13; ToR §8.3; ADR-001 | 1.2.1        | e0, public-acceptance |
-| `admission-coverage`           | maintainer        | technical-reviewer          | TDD §§4.1, 6.1, 13; ToR A5      | 1.2.2        | e0, public-acceptance |
-| `axiom-audit`                  | maintainer        | technical-reviewer          | TDD §§5, 6.2, 13                | 1.2.3        | e0, public-acceptance |
-| `execution-sandbox`            | maintainer        | technical-reviewer          | TDD §§2, 11, 13; ToR A4         | 1.2.4, 4.3.1 | public-acceptance     |
-| `resource-budgets`             | maintainer        | technical-reviewer          | TDD §§11, 13; ToR OQ4, A6, SC7  | 4.3.2        | public-acceptance     |
-| `dependency-distribution`      | sponsor           | sponsor                     | TDD §13; ToR OQ5, §8.1          | 5.2.2        | public-acceptance     |
-| `assurance-statement`          | sponsor           | sponsor, technical-reviewer | TDD §§1, 13; ToR A2, OQ2        | 1.1.1        | public-acceptance     |
-| `first-user-review`            | sponsor           | sponsor, technical-reviewer | TDD §12; ToR SC8, OQ1           | 5.1.1        | public-acceptance     |
-| `attribute-provenance`         | application-owner | technical-reviewer          | TDD §2; ToR A3, OQ3             | 5.1.1        | (none; residual)      |
-| `design-transcript-provenance` | sponsor           | sponsor                     | ToR OQ7, §8.3                   | none         | (none; residual)      |
+Gates (all `open` at EP-M2). The floor equals these `blocks` and `accepted_by`
+values:
 
-`execution-sandbox` does not block E0 because technical design §12 lists only
-pins, documented source trust, and AST coverage as E0 evidence, and roadmap
-1.2.4 says "Unavailable enforcement blocks public acceptance".
+| Gate                      | Responsible | Accepted by                 | Sources                         | Closing tasks | Blocks                |
+| ------------------------- | ----------- | --------------------------- | ------------------------------- | ------------- | --------------------- |
+| `toolchain-pins`          | maintainer  | technical-reviewer          | TDD §§11, 13; ToR §8.3; ADR-001 | 1.2.1         | e0, public-acceptance |
+| `admission-coverage`      | maintainer  | technical-reviewer          | TDD §§4.1, 6.1, 13; ToR A5      | 1.2.2         | e0, public-acceptance |
+| `axiom-audit`             | maintainer  | technical-reviewer          | TDD §§5, 6.2, 13                | 1.2.3         | e0, public-acceptance |
+| `execution-sandbox`       | maintainer  | technical-reviewer          | TDD §§2, 11, 13; ToR A4         | 1.2.4, 4.3.1  | e0, public-acceptance |
+| `resource-budgets`        | maintainer  | technical-reviewer          | TDD §§11, 13; ToR OQ4, A6, SC7  | 4.3.2         | public-acceptance     |
+| `dependency-distribution` | sponsor     | sponsor                     | TDD §13; ToR OQ5, §8.1          | 5.2.2         | public-acceptance     |
+| `assurance-statement`     | sponsor     | sponsor, technical-reviewer | TDD §§1, 13; ToR A2, OQ2        | 1.1.1         | e0, public-acceptance |
+| `first-user-review`       | sponsor     | sponsor, technical-reviewer | TDD §12; ToR SC8, OQ1           | 5.1.1         | public-acceptance     |
 
-`validation/acceptance_ledger.py` public functions (all pure except reads via
-`Repository`):
+Residuals (all `open`, block nothing):
+
+| Residual                       | Responsible       | Sources                | Closing tasks | Resolution                                                              |
+| ------------------------------ | ----------------- | ---------------------- | ------------- | ----------------------------------------------------------------------- |
+| `attribute-provenance`         | application-owner | TDD §2; ToR A3, OQ3    | 5.1.1         | Integration's attribute provenance and ingress contract recorded.       |
+| `design-transcript-provenance` | sponsor           | ToR OQ7, §8.3; TDD R11 | none          | Transcript compared with sourced decisions, or unavailability recorded. |
+
+`application-owner` follows ToR OQ3's owner; `docs/context.md` notes that it
+corresponds to the "production enforcement operator" of ToR §4 for a given
+integration.
+
+`validation/acceptance_ledger.py` (pure; reads only through `Repository`):
 
 ```python
 LEDGER_ROLES: tuple[str, ...]
 LEDGER_GATES: tuple[str, ...]
+LEDGER_RESIDUALS: tuple[str, ...]
+GATE_FLOOR: dict[str, tuple[frozenset[str], frozenset[str]]]  # blocks, accepted_by
 STAGES: tuple[str, ...] = ("e0", "public-acceptance")
+EVIDENCE_URL_PATTERN: str
 
 def normalize_statement(text: str) -> str: ...
 def extract_statement(markdown: str, document: str) -> str: ...
+def statement_digest(statement: str) -> str: ...
 def derive_blockers(gates: list[dict[str, Any]]) -> dict[str, list[str]]: ...
-def check_ledger(repo: "Repository", validators: dict[str, Draft202012Validator]) -> dict[str, Any]:
-    """Run O1–O6 and O8 against committed documents; return summary fields."""
+def check_ledger(repo: Repository, validators: dict[str, Draft202012Validator]) -> dict[str, Any]:
+    """Run O1–O8 against committed documents; return summary fields."""
+def ledger_controls(repo: Repository, validators: dict[str, Draft202012Validator]
+                    ) -> list[tuple[str, bool, bool]]: ...
 ```
-
-`validation/test_acceptance_ledger.py` follows `test_boundary.py`: plain
-`test_*` functions, a `Tampered`-style in-memory repository, `expect_rejected`
-helpers, and a `main()` returning 0 or 1.
 
 ## Revision notes
 
-- 2026-10-15: initial draft from Wyvern reconnaissance. Pending
-  community-of-experts review.
+- 2026-10-15: initial draft from Wyvern reconnaissance.
+- 2026-10-15: revised after a community-of-experts review (structure,
+  contracts, failure modes, viability, alternatives, cost). Changes: bound
+  every acceptance to the statement digest and to a holder-posted, templated
+  GitHub comment, and forbade agents from posting or merging; generalized
+  acceptances to all gates; added `GATE_FLOOR`; made `assurance-statement` and
+  `execution-sandbox` block E0 under one stated rule; split provenance items
+  into non-blocking residuals; replaced the result-schema field with profile
+  `assumptions`; named subject, resource, and action attributes and "the model
+  theorem" in the statement; made ADR-002 the authoritative copy with a digest
+  in the ledger; folded controls into `design-check` and replaced the
+  59,049-state enumeration with a 12-row truth table and mutants; added
+  `closing_tasks` lists, structured sources, stage enums, and a
+  `checksums-check` gate; split delivery into implementation and ratification
+  pull requests; corrected counts and the expected I/O diagnostic. Effect on
+  remaining work: fewer files, no new Make target beyond `checksums-check`,
+  stronger closure rules.
