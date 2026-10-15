@@ -50,10 +50,11 @@ See technical-design.md §§1–2 and 13; terms-of-reference.md §§6–9.
   - Requires 1.1.1.
   - See technical-design.md §13; terms-of-reference.md §§8–10, OQ1–OQ7;
     adr-001-repository-bootstrap.md.
-  - Success: an acceptance ledger names responsible roles for toolchain pins,
-    admission, audit, sandbox, budgets, distribution, sponsor review, and
-    unresolved provenance; the existing ISC licence is distinguished from the
-    still-open dependency distribution decision.
+  - Success: the technical-design §13 prerequisites table names responsible
+    roles for toolchain pins, admission, audit, sandbox, budgets,
+    distribution, sponsor review, and unresolved provenance, and separates E0
+    needs from public-release needs; the existing ISC licence is distinguished
+    from the still-open dependency distribution decision.
 
 ### 1.2. Demonstrate that the selected tool boundaries are usable
 
