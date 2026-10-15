@@ -212,11 +212,14 @@ Owners below denote roles to allocate, not named commitments.
 | --- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------- |
 | OQ1 | Which real repository policy will follow the demonstrator?                           | Determines whether the narrow profile solves a useful job.           | Select a concrete source policy and independent requirement.                          | Sponsor / policy author |
 | OQ2 | Is model proof plus an explicit trusted frontend sufficient for v0?                  | Sets the minimum acceptable assurance boundary.                      | Accept the exact claim wording or require checked source correspondence.              | Sponsor / reviewer      |
-| OQ3 | Who validates the subject and resource attributes?                                   | Prevents policy-level evidence from implying identity correctness.   | Document the intended integration's provenance and ingress contract.                  | Application owner       |
+| OQ3 | Who validates the subject, resource, and action attributes?                          | Prevents policy-level evidence from implying identity correctness.   | Document the intended integration's provenance and ingress contract.                  | Application owner       |
 | OQ4 | What resource and onboarding budgets matter to the first reviewer?                   | Turns provisional defaults into useful requirements.                 | Measure the workflow on an agreed machine and set acceptance limits.                  | Maintainer              |
 | OQ5 | What licence and distribution model should the project use?                          | Affects redistribution and dependency packaging.                     | Record a sponsor decision after reviewing applicable dependencies.                    | Sponsor                 |
 | OQ6 | Is future bidirectional authoring essential, or is source-first verification enough? | Determines whether a native policy authoring surface earns its cost. | Demonstrate a user task that needs round-tripping rather than only source inspection. | Policy author / sponsor |
 | OQ7 | Can the original shared discussion be made available for a precise provenance check? | Separates recovered lessons from the exact supplied transcript.      | Compare an accessible transcript with the sourced design decisions.                   | Sponsor                 |
+
+[ADR-002](adr-002-first-profile-assurance-boundary.md) closes OQ2 by accepting
+the model-proof plus trusted-frontend statement.
 
 ## 10. Handoff
 

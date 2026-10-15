@@ -23,7 +23,7 @@ roadmap task, and whether E0 needs it or only public release does.
 
 After the change, a reader of
 `docs/adr-002-first-profile-assurance-boundary.md` and technical design §13 can
-answer: "What would a passing run actually prove, what must I still trust, and
+answer: "What would a passing run actually prove, what remains trusted, and
 what has to happen before E0 and before release?" No new tooling, schema, or
 validation code is added.
 
@@ -118,6 +118,17 @@ validation code is added.
 - Decision: classify prerequisites as E0 needs or public-release needs, and
   amend four roadmap entries accordingly (see `E0 scrutiny`). Approved with the
   plan on 2026-10-15.
+- Decision (hosted review, 2026-10-15): recorded in ADR-002 that `leynos`
+  holds both the sponsor and technical-reviewer responsibilities, so the one
+  acceptance satisfies roadmap 1.1.1's "sponsor and reviewer" criterion and
+  closes ToR OQ2; ADR-002's decision owners now name both roles. Expanded the
+  IR, AST, and OPA acronyms; made the 4.2.1 obligation explicit that the result
+  contract must be extended; extended ToR OQ3 to the action attribute;
+  corrected the §13 admission and axiom-audit rows to match roadmap 2.3.3's
+  dependencies (2.1.2 and 2.2.4) rather than claiming E0 only investigates
+  them; and changed the resource row's E0 need to "not needed", because
+  measurement is E2 evidence. The statement itself is unchanged. Declined:
+  pointing the attribute-provenance row at 1.1.2, because 5.1.1 cites OQ1–OQ4.
 - Decision: ADR-002 follows the approved outline. Three small additions,
   reported to the user: boundary 3 states that admission is performed by the
   frontend, that `check` establishes admission only, and that admission is not
@@ -128,6 +139,11 @@ validation code is added.
   than naming a holder.
 
 ## Outcomes & retrospective
+
+Post-review update (2026-10-15): hosted review of `81fe023` led to the
+corrections recorded in `Decision log`. The E0 rows now match the approved
+roadmap: the spikes no longer gate E0 work, but the E0 command (2.3.3) still
+depends on fail-closed admission (2.1.2) and axiom acceptance (2.2.4).
 
 ADR-002 records the accepted boundary, technical design §1 repeats the
 statement word for word, and §13 carries the prerequisites table. The roadmap
@@ -144,8 +160,8 @@ deserved the effort, and the approval machinery did not.
 
 - `docs/technical-design.md` §1 holds the proposed public assurance statement.
   §2 is the trust-boundary table, §6.2 the Lean worker and axiom policy, §10
-  the unproved obligations V1–V10, and §12 experiments E0–E2. §13 ends with the
-  "Open gates" sentence.
+  the unproved obligations V1–V10, and §12 experiments E0–E2. Before this work,
+  §13 ended with the "Open gates" sentence.
 - `docs/terms-of-reference.md`: A2 (trusted frontend acceptable for the first
   experiment, resolved when the sponsor accepts or rejects the statement), A3
   (attribute provenance), A5 (frontend can enforce admission), A6 (resource
@@ -188,6 +204,9 @@ committing, a reviewer confirms by reading:
   attribute handling.
 
 ## ADR-002 content
+
+Historical: this section is the approved outline. ADR-002 is now accepted; the
+delivered record is authoritative, and `Decision log` lists where it differs.
 
 Title: `ADR 002: first-profile assurance boundary`. Status: `Proposed` until
 accepted. Decision owners: the project sponsor.
@@ -256,6 +275,10 @@ conversational acceptance or rejection with any reason.
 
 ## Prerequisites table (technical design §13)
 
+Historical: the approved draft. The delivered table in technical design §13 is
+authoritative; review corrected its admission, axiom-audit, and resource rows
+(see `Decision log`).
+
 Replace the "Open gates" sentence with this table and one sentence saying the
 roadmap tasks track state:
 
@@ -294,6 +317,8 @@ distinction, and the roadmap keeps its stricter ordering.
 
 ## Plan of work
 
+Historical: both milestones are complete; see `Progress`.
+
 EP-M1 (one commit, or two if the ADR and the design edits read better
 separately):
 
@@ -310,7 +335,8 @@ separately):
    `tested_agreement`".
 5. `docs/contents.md`: list ADR-002.
 6. Refresh the `SHA256SUMS` lines for the covered files edited (`README.md`,
-   `contracts/cli.txt`, `docs/context.md`, and `docs/technical-design.md`).
+   `contracts/cli.txt`, `docs/context.md`, `docs/technical-design.md`, and
+   `docs/terms-of-reference.md`).
 7. Run the gates; push; ask the user to accept or reject ADR-002 and the
    roadmap edits.
 

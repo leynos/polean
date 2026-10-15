@@ -2,7 +2,7 @@
 
 - **Status:** accepted.
 - **Date:** 2026-10-15.
-- **Decision owners:** project sponsor.
+- **Decision owners:** project sponsor and technical reviewer.
 
 ## Context
 
@@ -16,8 +16,9 @@ source-to-model frontend may remain explicitly trusted in the first experiment
 The proposed statement left attribute provenance implicit, and it named only
 some of what the proof trusts. This record fixes the statement and states each
 assurance boundary separately: admission, model proof, source-to-model
-translation, and runtime correspondence. No theorem described here has been
-proved yet; the obligations remain V1–V10 in technical design §10.
+translation, and runtime correspondence. Runtime correspondence compares the
+model with Open Policy Agent (OPA) and Regorus. No theorem described here has
+been proved yet; the obligations remain V1–V10 in technical design §10.
 
 ## Decision
 
@@ -34,11 +35,11 @@ than this statement, which technical design §1 repeats verbatim:
 
 Each boundary means the following.
 
-1. **What Lean proves.** For the admitted IR `p` and each of the six claims,
-   the claim holds under Polean's pinned semantics for every request in the
-   declared domain. The proof route is the abstraction lemma
-   (`evalRequest p r = evalFacts p (α r)`), fact coverage, and kernel-reduced
-   finite checking (V2–V4). None of these is proved yet.
+1. **What Lean proves.** For the admitted intermediate representation (IR)
+   `p` and each of the six claims, the claim holds under Polean's pinned
+   semantics for every request in the declared domain. The proof route is the
+   abstraction lemma (`evalRequest p r = evalFacts p (α r)`), fact coverage,
+   and kernel-reduced finite checking (V2–V4). None of these is proved yet.
 2. **What that proof trusts.** The Lean kernel; the foundational axioms
    `propext`, `Classical.choice`, and `Quot.sound` only, with no `sorryAx` and
    no native-computation axioms; the integrity of the pinned proof package; and
@@ -47,11 +48,11 @@ Each boundary means the following.
    against Rego. This is the assumption most at risk of being smuggled into the
    trusted computing base, so this record names it explicitly.
 3. **What the trusted frontend assumes.** Regorus parses the source, and
-   Polean's Rust adapter maps the AST to IR faithfully and rejects everything
-   outside the profile. Admission is performed by this frontend; `check`
-   establishes admission only, and admission is not proved. There is no
-   source-preservation theorem. Spans, round-trip checks, and differential
-   tests reduce this trust but do not remove it (ToR A2).
+   Polean's Rust adapter maps the abstract syntax tree (AST) to IR faithfully
+   and rejects everything outside the profile. Admission is performed by this
+   frontend; `check` establishes admission only, and admission is not proved.
+   There is no source-preservation theorem. Spans, round-trip checks, and
+   differential tests reduce this trust but do not remove it (ToR A2).
 4. **What differential tests establish.** On the recorded conformance cases,
    OPA and Regorus return the model's decision for the original source. They
    prove neither refinement direction. In particular, transferring a safety
@@ -67,9 +68,11 @@ Each boundary means the following.
 
 ## Consequences
 
-Result reporting (roadmap 4.2.1) must render this boundary, including attribute
-provenance, in every report. Release material and user documentation quote or
-link this record rather than paraphrasing a stronger claim.
+Result reporting (roadmap 4.2.1) must extend the result contract so that every
+report carries this boundary, including attribute provenance; the current
+`contracts/result.schema.json` cannot yet express it. Release material and user
+documentation quote or link this record rather than paraphrasing a stronger
+claim.
 
 The following open questions stay visible until E0 and E1 answer them. They are
 recorded as questions, not gates:
@@ -100,6 +103,9 @@ the one sentence most likely to be quoted.
 
 ## Acceptance
 
-2026-10-15: the project sponsor (`leynos`) accepted this record as written, in
-conversation, when approving the
-[1.1 ExecPlan](execplans/1-1-ratify-assurance-and-release-gates.md).
+2026-10-15: `leynos` accepted this record as written, in conversation, when
+approving the
+[1.1 ExecPlan](execplans/1-1-ratify-assurance-and-release-gates.md). Polean is
+founder-led: the terms of reference describe the sponsor and the technical
+reviewer as responsibilities, and `leynos` holds both, so this one acceptance
+covers both. This closes ToR OQ2.
