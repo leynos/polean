@@ -39,21 +39,22 @@ Can the intended reviewer accept the designed trust boundary? The answer sets
 the release claim and identifies decisions that must block later acceptance.
 See technical-design.md §§1–2 and 13; terms-of-reference.md §§6–9.
 
-- [ ] 1.1.1. Record the first-profile assurance decision in an ADR.
+- [x] 1.1.1. Record the first-profile assurance decision in an ADR.
   - See technical-design.md §§1–3 and 9; terms-of-reference.md §§1–5 and 8.2,
     A2–A3;
     context.md.
   - Success: the sponsor and reviewer accept the exact model-proof,
     trusted-frontend, and tested-agreement wording, with attribute provenance
     explicitly outside the theorem, or record a blocking rejection.
-- [ ] 1.1.2. Allocate owners and closure evidence for the open gates.
+- [x] 1.1.2. Allocate owners and closure evidence for the open gates.
   - Requires 1.1.1.
   - See technical-design.md §13; terms-of-reference.md §§8–10, OQ1–OQ7;
     adr-001-repository-bootstrap.md.
-  - Success: an acceptance ledger names responsible roles for toolchain pins,
-    admission, audit, sandbox, budgets, distribution, sponsor review, and
-    unresolved provenance; the existing ISC licence is distinguished from the
-    still-open dependency distribution decision.
+  - Success: the technical-design §13 prerequisites table names responsible
+    roles for toolchain pins, admission, audit, sandbox, budgets,
+    distribution, sponsor review, and unresolved provenance, and separates E0
+    needs from public-release needs; the existing ISC licence is distinguished
+    from the still-open dependency distribution decision.
 
 ### 1.2. Demonstrate that the selected tool boundaries are usable
 
@@ -73,7 +74,8 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
   - See technical-design.md §§4.1 and 6.1; ../contracts/profile.json.
   - Success: fixtures account for package, import, default, every rule and
     expression, metadata, and unknown AST variants. Missing API coverage has a
-    demonstrated bounded check or blocks E0; unreachable syntax is not ignored.
+    demonstrated bounded check or is recorded as an E0 finding that blocks
+    2.1.2; unreachable syntax is not ignored.
 - [ ] 1.2.3. Demonstrate declaration-type and transitive-axiom auditing.
   - Requires 1.2.1.
   - See technical-design.md §§5 and 6.2.
@@ -136,7 +138,7 @@ than substituting Python enumeration for a universal proof. See
 technical-design.md §§3, 5–6, and 10, V1–V5.
 
 - [ ] 2.2.1. Implement Lean policy semantics and exact request abstraction.
-  - Requires 2.1.1 and 1.2.3.
+  - Requires 2.1.1.
   - See technical-design.md §5 and §10, V1–V2.
   - Success: typed requests, all six atoms, conjunction/disjunction semantics,
     and `abstraction_preserves` compile and are kernel checked; `unlocked`
@@ -166,11 +168,12 @@ replay? Completion decides whether the architecture merits the six-claim slice.
 See technical-design.md §§6, 8, 11–12, E0.
 
 - [ ] 2.3.1. Implement the bounded synchronous job supervisor.
-  - Requires 1.2.4 and 2.1.1.
+  - Requires 2.1.1.
   - See technical-design.md §§2 and 11.
-  - Success: one proof job uses immutable snapshots, private storage, cleared
-    environment, explicit executables, argument arrays, and enforced isolation;
-    one remaining deadline governs children, which are killed and reaped.
+  - Success: one supervised local proof job uses immutable snapshots, a
+    cleared environment, explicit executables, and argument arrays on trusted
+    repository inputs; one remaining deadline governs children, which are
+    killed and reaped. Enforced isolation follows in 4.3.1.
 - [ ] 2.3.2. Implement typed OPA and Regorus source observations.
   - Requires 2.3.1 and 2.1.3.
   - See technical-design.md §6.3 and §10, V5 and V10.
@@ -319,10 +322,11 @@ hostile? The answer supplies E2 exit evidence rather than assumed performance.
 See technical-design.md §§11–12; terms-of-reference.md §7, SC5–SC7.
 
 - [ ] 4.3.1. Harden supervisor containment and remaining-budget accounting.
-  - Requires 4.2.3.
+  - Requires 4.2.3 and 1.2.4.
   - See technical-design.md §§2 and 11; §10, V8.
-  - Success: injected hangs, output floods, cancellation, child crashes, and
-    storage escapes leave no running job children; absent isolation fails.
+  - Success: enforced isolation provides private storage and offline execution;
+    injected hangs, output floods, cancellation, child crashes, and storage
+    escapes leave no running job children; absent isolation fails.
     The 60-second, 2 GiB, and 1 MiB defaults are enforced end to end, not reset
     per oracle invocation, and exhausted bounds are named in the result.
 - [ ] 4.3.2. Deliver a clean-environment replay and resource acceptance harness.

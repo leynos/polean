@@ -30,7 +30,11 @@ APIs.
 The distinction matters. The intended first assurance statement is that Lean
 checked the admitted policy *model* against six requirements. The source
 frontend remains explicitly trusted, while OPA and Regorus supply tested
-runtime observations rather than a formal refinement theorem.
+runtime observations rather than a formal refinement theorem. The theorem takes
+the request's subject, resource, and action attributes as given; it does not
+authenticate them. See
+[ADR-002](docs/adr-002-first-profile-assurance-boundary.md) for the accepted
+boundary.
 
 ## The example policy
 

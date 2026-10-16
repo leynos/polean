@@ -35,6 +35,7 @@ implemented or already verified product.
 | Trusted computing base | The components and assumptions whose failure could invalidate a reported assurance claim. Different claims have different trusted computing bases.                           |
 | Vertical slice         | A demonstrable user workflow through ingestion, model construction, proof or refutation, reporting, and replay, not an isolated implementation layer.                        |
 
-An application must establish the provenance of subject and resource
+An application must establish the provenance of subject, resource, and action
 attributes. A theorem about supplied tenant identifiers does not authenticate
-those identifiers.
+those identifiers. [ADR-002](adr-002-first-profile-assurance-boundary.md)
+states the full assurance boundary.

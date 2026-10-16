@@ -17,6 +17,8 @@ already exist.
   vertical experiments.
 - [Implementation roadmap](roadmap.md): GIST delivery phases, dependencies,
   acceptance gates, and conditional extensions.
+- [Assurance boundary decision](adr-002-first-profile-assurance-boundary.md):
+  what a passing run proves, trusts, tests, and leaves outside the theorem.
 - [Bootstrap decision](adr-001-repository-bootstrap.md): repository provenance,
   selected Combobulate scaffold elements, and deliberate deferrals.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
