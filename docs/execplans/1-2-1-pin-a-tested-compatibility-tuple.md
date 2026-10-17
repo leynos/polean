@@ -1,0 +1,952 @@
+# Pin and smoke-test the Rust, Regorus, Lean, and OPA toolchain tuple
+
+This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
+`Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
+current as work proceeds.
+
+Status: DRAFT (revision 2)
+
+Roadmap item: [1.2.1](../roadmap.md). Branch:
+`1-2-1-pin-a-tested-compatibility-tuple`.
+
+## Purpose / big picture
+
+Every later Polean task depends on four external tools behaving as the design
+assumes. Regorus is the trusted frontend, Lean checks the model, OPA is the
+independent source oracle, and Rust hosts the orchestrator. Today none of them
+is pinned or exercised. The technical design (§11) and ADR-001 both leave the
+tuple to experiment E0.
+
+This work pins one tuple and shows that it works on Linux x86-64. A contributor
+runs `make toolchain-smoke`. It fetches the Lean release archive and the OPA
+static binary, rejects any byte stream whose SHA-256 differs from the committed
+pin, and then shows four things:
+
+1. The pinned Lean toolchain builds a fixed, repository-authored smoke library
+   with warnings as errors. It reports the expected version.
+2. Regorus, built with the recorded features only, parses the baseline
+   `examples/tenant-write/policy.rego` and returns its AST as JSON. A snapshot
+   records that output.
+3. Regorus and OPA each evaluate `data.authz.allow` on the original baseline
+   bytes. For four requests the result is exactly the Boolean that an
+   independently written expectation predicts.
+4. A built-in from a disabled Regorus feature group is unavailable, which shows
+   that the recorded feature set is the one actually compiled.
+
+`make test` covers the Regorus observations everywhere, including hosted CI. A
+path-filtered CI workflow re-runs the provisioned smoke checks whenever a pin
+or the smoke code changes.
+
+None of this establishes admission, a model theorem, translation, or runtime
+correspondence:
+
+- A successful parse is not admission. 1.2.2 owns AST coverage, and 2.1.2 owns
+  fail-closed admission.
+- A compiled smoke theorem is not an audited declaration. 1.2.3 owns the type
+  and axiom audit.
+- Agreement on four requests is not conformance evidence. 2.3.2 owns typed
+  oracle observations.
+
+The documentation added here states each of these limits explicitly.
+
+## Constraints
+
+- Keep the four claims separate (AGENTS.md, ADR-002). No text, test name,
+  diagnostic, or Make target may describe parsing as admission, compilation as
+  kernel-checked evidence, or two-runtime agreement as correspondence.
+- Preserve the single Rust package, the reserved `lean/Polean/` module layout,
+  and the independent Python design lane. Do not change `src/lib.rs`,
+  `contracts/`, `examples/`, or `validation/`.
+- The Lean package under `lean/` is trusted repository content. Never build
+  submitted Lean or Lake configuration. Generated proof jobs are 2.2.4.
+- Pin by exact identity:
+  - Regorus: an `=` requirement with `default-features = false` and an
+    explicit feature list.
+  - Lean: an exact `lean-toolchain` string, plus the archive SHA-256 and size.
+  - OPA: the static binary's SHA-256 and size.
+
+  Nothing fetched is used before its digest matches. No tool is resolved through
+  `PATH` or elan.
+- Keep `rust-toolchain.toml` at `nightly-2026-08-27` unless that is impossible;
+  changing it is an escalation.
+- Do not bypass compile admission (`RUSTC_WRAPPER`). Use the shared Cargo
+  cache. Never use `/tmp` as a build target.
+- Child processes get explicit executable paths, argument arrays, and an empty
+  environment (`env_clear()`). Enforced isolation and offline execution are
+  1.2.4.
+- Use British English with Oxford spelling. Keep `sha256sum -c SHA256SUMS`
+  passing whenever a covered file changes.
+
+## Tolerances (exception triggers)
+
+- Scope: more than 30 changed files, or about 1,200 net lines excluding
+  `Cargo.lock`, the insta snapshot, and `lake-manifest.json`.
+- Dependencies:
+  - Authorized Rust dev-dependencies: `regorus`, `rstest`, `rstest-bdd`,
+    `rstest-bdd-macros`, `googletest`, `pretty_assertions`, `insta`, and
+    `serde_json`.
+  - Authorized Python test dependency: `pytest`.
+  - The provisioning script uses the standard library only.
+  - Any other dependency requires escalation.
+- Toolchain: stop and present options, rather than moving a pin, in any of
+  these cases:
+  - Neither Regorus candidate builds on `nightly-2026-08-27`.
+  - Lean v4.35.0 cannot build the smoke library.
+  - A pinned digest differs from upstream on recheck.
+- Semantics: if either runtime returns anything other than the expected Boolean
+  for any of the four requests, stop. That is an E0 finding, not a test to
+  adjust.
+- Iterations: stop when a gate still fails after three fix attempts on one
+  cause.
+- Ambiguity: stop on tool behaviour that would force a design change beyond
+  recording pins, such as AST JSON lacking information that 1.2.2 needs. Record
+  it in the Decision log and ask.
+
+## Risks
+
+- Risk: Regorus 0.13.0, released 2026-10-14, is new and marked breaking. It
+  also adds `cc`, `find-msvc-tools`, `shlex`, `ohno`, and `typeid`, and a
+  `msvc_spectre_libs` build script that compiles even on Linux.
+  - Severity: medium. Likelihood: low.
+  - A scratch build on `nightly-2026-08-27` showed byte-identical AST JSON and
+    decisions for 0.12.0 and 0.13.0.
+  - The two breaking changes (a 32-component path limit and canonical rule
+    paths) do not touch `package authz`.
+  - Mitigation: test both in EP-M1 and record the dependency delta in ADR-003.
+    The default choice is in the Decision log.
+- Risk: Regorus requires exact prereleases of `vstd` and the Verus proc-macros.
+  - Severity: medium. Likelihood: low.
+  - Mitigation: both versions built in the scratch review. EP-M1 re-proves it
+    in the repository; the Toolchain tolerance applies.
+- Risk: elan downloads toolchains without hashing them
+  (`src/elan-dist/src/download.rs:30-37`, `download_and_check`).
+  - Severity: high for integrity. Likelihood: certain.
+  - Mitigation: the gate never uses elan. Contributors may keep elan for editor
+    support, and `lean/lean-toolchain` selects the same version.
+- Risk: Lean kernel soundness defects were found during the 2026 kernel bug
+  hunt.
+  - Severity: high. Likelihood: low at the pin.
+  - The forged-proof fix (PR #14577) and the bug-hunt fixes are in v4.33.1 and
+    later. The use-after-free fixes were backported to v4.34.1.
+  - Mitigation: pin v4.35.0, the newest stable release containing every known
+    fix. Record v4.34.1 as the floor in ADR-003.
+- Risk: the Lean asset sits on a mutable, unattested GitHub release, so its
+  digest is trust-on-first-use.
+  - Severity: medium. Likelihood: low.
+  - Mitigation: an upstream re-upload fails closed against the pin. ADR-003
+    records the provenance difference from OPA, whose immutable release is
+    attested.
+- Risk: the provisioned tools need about 3.7 GiB per worktree: a 3.0 GiB
+  extracted Lean tree, the 594 MB archive, and the 64 MB OPA binary.
+  - Severity: low. Likelihood: certain.
+  - Mitigation: document the size. Keep the archive so that re-extraction and
+    the CI cache work offline. `rm -rf .polean/tools` is always safe.
+- Risk: feature unification silently re-enables Regorus built-in groups when
+  2.1.1 moves it into `[dependencies]`.
+  - Severity: medium. Likelihood: medium. `Cargo.lock` does not record
+    features.
+  - Mitigation: a behavioural negative test (O3) fails if a disabled built-in
+    group becomes callable.
+- Risk: pins rot because nothing re-tests them.
+  - Severity: high. Likelihood: high without CI.
+  - Mitigation: a path-filtered `toolchain` workflow runs `make test-scripts`
+    and `make toolchain-smoke` on changes to pins, `Cargo.*`, `lean/`, the
+    script, or the smoke tests. Dependabot bumps are therefore re-tested.
+- Risk: the insta snapshot is accepted without being read.
+  - Severity: medium. Likelihood: medium.
+  - Mitigation: the snapshot test also asserts named structural facts (O5), and
+    developers-guide documents snapshot review.
+
+## Progress
+
+- [x] (2026-10-17) Branch renamed. Three Wyvern agents ran repository
+  reconnaissance. Firecrawl research covered the current Regorus, OPA, and Lean
+  releases, plus cedar-spec's toolchain practice.
+- [x] (2026-10-17) Revision 1 drafted and committed.
+- [x] (2026-10-17) A four-member expert panel reviewed the draft:
+  supply chain, Lean, Rust and Regorus, and assurance boundary with
+  alternatives. Two reviewers ran scratch builds and probes. The findings were
+  filtered for proportionality and folded into revision 2.
+- [ ] Plan approved by the user.
+- [ ] EP-M1: Regorus pinned. In-process parse, snapshot, feature, and decision
+  tests green.
+- [ ] EP-M2: pin record and digest-checked provisioning script with pytest
+  tests.
+- [ ] EP-M3: Lean smoke package and provisioned OPA and Lean smoke tests.
+  `make toolchain-smoke` green. `toolchain` CI workflow added.
+- [ ] EP-M4: ADR-003, design and guide updates, `SHA256SUMS` refresh, and
+  roadmap 1.2.1 marked done.
+
+## Surprises & discoveries
+
+- Observation: Regorus 0.13.0 was released 2026-10-14. Its feature table
+  matches 0.12.0's: the default is `full-opa`, `arc`, and `rvm`, and `ast` is
+  opt-in. The licence is `MIT AND Apache-2.0 AND BSD-3-Clause`.
+  - Evidence: the crates.io API and the `regorus-v0.13.0` `Cargo.toml`.
+  - Impact: both are candidates. The licence feeds the 5.2.2 decision.
+- Observation: `std` + `ast` suffice for every API this task uses. The resolved
+  set is `["ast", "msvc_spectre_libs", "rand", "std"]`, because `std` enables
+  the other two. Regorus already defaults `strict_builtin_errors` to true.
+  `eval_rule` returns:
+  - `Ok(Value::Bool)` for a defined decision;
+  - `Ok(Value::Undefined)` when undefined;
+  - `Err` for an invalid rule path, a rule conflict (detected only at
+    evaluation), or a strict built-in error.
+
+  `Value::Undefined.to_json_str()` yields the string `"<undefined>"`.
+  - Evidence: scratch builds by the Rust reviewer, 2026-10-17.
+  - Impact: tests match on `Value` variants and never on JSON text or error
+    messages, whose wording changed in 0.13.0.
+- Observation: OPA `eval --format json` output shapes:
+
+  | Case                                        | Stdout                                         | Exit |
+  | ------------------------------------------- | ---------------------------------------------- | ---- |
+  | Defined result                              | `{"result":[{"expressions":[{"value":...}]}]}` | 0    |
+  | Undefined, including a misspelt entry point | `{}`                                           | 0    |
+  | Conflict, built-in, or parse error          | `{"errors":[{"code":...}]}`                    | 2    |
+  | Missing input                               | empty (stderr only)                            | 2    |
+
+  - Without `--strict-builtin-errors`, a built-in error becomes `{}` with
+    exit 0.
+  - Evidence: the Rust reviewer's probe of the pinned binary.
+  - Impact: the smoke test asserts the exact defined shape and passes
+    `--strict-builtin-errors`. The table is recorded for 2.3.2, which owns the
+    typed classification.
+- Observation: Lake without `defaultTargets` prints "Nothing to build" and
+  exits 0 even when the module contains `sorry`. A `weak.` option prefix is
+  silently ignored, while a misspelt plain option fails. Lake needs no
+  environment variables under `env -i`. Setting `HOME` would move its cache
+  into the home directory.
+  - Evidence: the Lean reviewer's v4.35.0 scratch runs.
+  - Impact: the lakefile sets `defaultTargets`, and the test builds the target
+    explicitly and checks for its `.olean`. Children get an empty environment.
+- Observation: Lean v4.35.0 removed `Lean.ofReduceBool` and
+  `Lean.trustCompiler`. `native_decide` asserts per-use axioms named
+  `*._native.native_decide.ax_*`. `lake check` exists but needs `bwrap`, which
+  is absent on this host. Running `leanchecker` directly needs `PATH`.
+  - Evidence: v4.35.0 release notes (PR #14953 and #14990) and scratch runs.
+  - Impact: these are inputs for 1.2.3, recorded in ADR-003. No action here.
+- Observation: Python 3.14's `tarfile` `data` filter rewrites `/etc/x` to
+  `etc/x` instead of rejecting it. The real Lean archive has 17,925 files and
+  13 relative symlinks, all under one `lean-4.35.0-linux/` root, and passes the
+  filter unchanged with modes intact. Some distribution Python builds lack
+  `_zstd`.
+  - Evidence: the supply-chain reviewer's probe.
+  - Impact: the script checks that every member is under the pinned `root`
+    before extracting. It imports `compression.zstd` up front with a clear
+    error.
+- Observation: OPA v1.21.2 is an immutable, attested release. Lean v4.35.0 is
+  neither (`"immutable": false`; the attestations API returns 404). Both pinned
+  digests match the GitHub asset API.
+  - Impact: ADR-003 records the provenance of each pin separately.
+
+## Decision log
+
+- Decision: pin Regorus 0.13.0, after testing 0.12.0 as well.
+  - Rationale: the AST and decisions are identical. 0.13.0 is the current
+    release, so Dependabot would otherwise propose it at once, and fixes land
+    there. The cost is five more crates and a build script.
+  - The owner may prefer 0.12.0's smaller graph. Answering at plan approval
+    switches the pin at no other cost.
+  - (Agent, 2026-10-17.)
+- Decision: request only the Regorus features `std` and `ast`.
+  - Rationale: the profile admits no built-in calls (TDD §4.1), and `ast`
+    supplies `get_ast_as_json` (TDD §6.1).
+  - ADR-003 records the resolved set, including `rand` and
+    `msvc_spectre_libs`.
+  - (Agent, 2026-10-17.)
+- Decision: pin Lean v4.35.0 and the OPA v1.21.2 `opa_linux_amd64_static`
+  binary.
+  - Rationale: see Risks. (Agent, 2026-10-17.)
+- Decision: provision through one standard-library Python 3.14 script, without
+  Cyclopts, elan, curl, or shell pipelines.
+  - Rationale: the scripting standards require Python for non-trivial scripts.
+    The script takes no parameters, so a CLI framework would be unused.
+    `tarfile` reads zstd, and the script launches no subprocess.
+  - Considered: Make-only provisioning with `curl`, `sha256sum`, and
+    `tar --zstd`. It is about 15 lines, but needs host tools, leaves the digest
+    gate untested, and cannot parse the JSON pin file that the Rust tests
+    read.
+  - (Agent, 2026-10-17.)
+- Decision: one integration-test binary, `tests/toolchain/main.rs`, with
+  modules.
+  - Rationale: several binaries sharing `tests/common/` fail `dead_code`
+    under the denied-`allow` lint policy. One binary also links Regorus once.
+  - `make toolchain-smoke` runs
+    `cargo test --locked --test toolchain -- --ignored smoke::`.
+  - (Agent, 2026-10-17; from the Rust review.)
+- Decision: assert exact decision shapes. Do not build a decision classifier
+  (no `DecisionError`).
+  - Rationale: a typed classifier is 2.3.2's deliverable. A test-only copy
+    would be dead weight when `src/oracle.rs` arrives.
+  - (Agent, 2026-10-17; from the boundary review.)
+- Decision: drop line-parsing of `Cargo.toml` and `Cargo.lock` (revision 1's
+  O3).
+  - Rationale: checking a manifest against itself proves nothing. Cargo already
+    enforces the lockfile, and `--locked` keeps it so.
+  - Replacement: behavioural checks. The disabled-feature test, the Lean and
+    OPA version tests, and the Lean version compared with
+    `lean/lean-toolchain`.
+  - (Agent, 2026-10-17.)
+- Decision: BDD scenarios express the Regorus decision behaviour once, as the
+  readable specification of the in-process workflow. They do not repeat it in
+  an rstest table.
+  - The provisioned OPA decisions use `#[rstest] #[ignore]` cases, because
+    rstest-bdd filters by tag at expansion and cannot be ignored.
+  - (Agent, 2026-10-17.)
+- Decision: add a path-filtered hosted `toolchain` workflow now.
+  - Rationale: without it the tuple is "tested once on one machine". Roadmap
+    4.3.2 keeps clean-environment replay and resource measurement.
+  - This is a small pull-forward of CI coverage the owner may strike.
+  - (Agent, 2026-10-17; from the supply-chain review.)
+- Decision: keep three smoke requests inline in `tests/toolchain/support.rs`,
+  and take the owner case from `examples/tenant-write/request.json`.
+  - Rationale: they are tool smoke inputs, not profile fixtures. Adding them to
+    `examples/` would widen the design pack that the Python harness owns.
+  - (Agent, 2026-10-17.)
+- Decision: leave `README.md`, `docs/users-guide.md`, and
+  `validation/README.md` unchanged.
+  - Rationale: no user-visible behaviour or public API changes. The validation
+    record describes the Python lane, which is unchanged.
+  - (Agent, 2026-10-17.)
+- Decision: do not use Verus, Kani, or proptest in this task; see the
+  Verification plan. (Agent, 2026-10-17.)
+
+## Outcomes & retrospective
+
+Not started.
+
+## Context and orientation
+
+Polean is a design scaffold.
+
+- `src/lib.rs` exports a status string, and `tests/stub.rs` checks it.
+- `Cargo.toml` has no dependencies and a strict lint set. The denied lints
+  include `unwrap_used`, `expect_used` outside test functions, `print_*`,
+  `indexing_slicing`, `allow_attributes`, `panic_in_result_fn`, and
+  `str_to_string`. Docs and assertion messages are mandatory.
+- `clippy.toml` bans `std::env::var`.
+- `lean/` holds only a README. It currently forbids Lake configuration, and
+  this task reverses that for repository-owned configuration.
+- Python under `validation/` checks design fixtures as a separate lane.
+- `SHA256SUMS` is a manually maintained manifest. It covers `README.md`,
+  `contracts/`, `docs/context.md`, `docs/technical-design.md`,
+  `docs/terms-of-reference.md`, `examples/`, and `validation/`.
+- Hosted CI (`.github/workflows/ci.yml`) runs `make check-fmt`, markdownlint,
+  `make typecheck`, `make lint`, and `make test`.
+
+Terms used in this plan:
+
+- **Toolchain tuple**: the exact identities a run used. These are the Rust
+  toolchain and `Cargo.lock`, the Regorus version and resolved features, the
+  Lean toolchain and package manifest, and the OPA binary digest. TDD §7 later
+  binds evidence to this tuple (4.1.1), which should hash the binaries it runs
+  rather than trust the pin file.
+- **Provisioning**: downloading a pinned artefact, checking its size and
+  SHA-256 before use, and installing it into a digest-named directory under
+  `.polean/tools/`. Git already ignores `.polean/`.
+- **Smoke check**: an observation that a tool works on a fixed input. It is
+  not admission, not a theorem about Polean, and not conformance evidence.
+
+The baseline is `examples/tenant-write/policy.rego`. It declares package
+`authz`, `import rego.v1`, `default allow := false`, and two `allow` rules. The
+intended decision is `T ∧ W ∧ (A ∨ (O ∧ ¬L))` (TDD §3). The smoke expectations
+come from that formula, not from either runtime.
+
+Skills to load:
+
+- `execplans` and `rust-router`.
+- `rust-unit-testing` for rstest, googletest, and insta.
+- `arch-supply-chain` for exact pins and `cargo audit`.
+- `arch-decision-records` for ADR-003.
+- `en-gb-oxendict-style`.
+- `codegraph-mcp` for navigation and `firecrawl-mcp` for upstream lookups.
+
+Documents to read before the matching milestone:
+
+- `docs/rust-testing-with-rstest-fixtures.md`
+- `docs/reliable-testing-in-rust-via-dependency-injection.md`
+- `docs/rust-doctest-dry-guide.md`
+- `docs/complexity-antipatterns-and-refactoring-strategies.md`
+- `docs/scripting-standards.md`
+- `docs/documentation-style-guide.md`
+
+Delegate full gate runs to `scrutineer`.
+
+## Conformance basis
+
+Upstream at commit `24f3874`:
+
+- ToR draft v0.1: A4, G5, G6, SC5, and OQ5.
+- Technical design draft v0.1: §§3, 4.1, 6, 6.1, 6.3, 7, 11, and the §13
+  "Toolchain tuple" row.
+- ADR-001: the deferred Lean pin, and "revisit the Rust pin alongside the
+  tuple during E0".
+- ADR-002: the assurance boundary.
+- repository-layout.md §Ownership boundaries.
+- Roadmap RM-1.2.1.
+
+```plaintext
+TDD §11 pins, ADR-001 E0 deferral -> RM-1.2.1 -> EP-M1..M3 -> make toolchain-smoke; ADR-003
+TDD §6.1 Regorus ast feature      -> RM-1.2.1 -> EP-M1 -> toolchain::regorus AST snapshot
+TDD §6.3 v1, strict errors, entry -> RM-1.2.1 -> EP-M1/M3 -> explicit runtime options in both oracles
+TDD §13 toolchain row (E0 need)   -> RM-1.2.1 -> EP-M4 -> §13 row and ADR-003 cite the tuple
+```
+
+This task supplies a pre-provisioned toolchain. It does not discharge A4
+(offline verification), A5 (1.2.2), the axiom policy (1.2.3), enforced
+isolation (1.2.4), or SC5 clean-machine replay (4.3.2).
+
+## Verification plan
+
+This task introduces no contractual business logic and no policy semantics. Its
+code is provisioning and smoke-test plumbing.
+
+- Verus is not warranted. There is no lemma, and no pure kernel whose
+  correctness an unbounded proof would establish. The Polean theorems (V1–V5)
+  are Lean obligations in phase 2.
+- Kani and proptest are not warranted either. Each check below is a named
+  scenario over a fixed artefact, and a generator would only restate the
+  implementation.
+
+The obligations follow.
+
+- O1, digest gate: the script installs an artefact only when the downloaded
+  byte count and SHA-256 both equal the pin. Otherwise nothing appears at the
+  final path, and the script exits non-zero with a remediation message.
+  - Method: pytest with a fetcher injected over a temporary directory. The
+    fetcher is a parameter of the install function, not a monkeypatch.
+  - Artefact: `scripts/tests/test_provision_tools.py`.
+  - Evidence: `make test-scripts`.
+  - Non-vacuity: a one-byte flip and a truncated stream are both rejected,
+    while the correct bytes install. A second run with a fetcher that raises
+    succeeds, which proves that a complete install is reused without
+    downloading.
+- O2, containment: archive members outside the pinned `root/` are refused
+  before extraction. Extraction passes `filter="data"` explicitly. A crash
+  leaves only a temporary sibling, which the next run deletes while holding
+  `.polean/tools/.lock`.
+  - Method: pytest with a crafted archive containing a `../escape` member and
+    an `/abs` member. Both must be refused, and nothing may appear outside the
+    temporary directory.
+  - The `data` filter itself is a stdlib axiom; the test checks that the script
+    uses it.
+- O3, the compiled feature set equals the recorded set: with the `regex`
+  group disabled, a policy calling `regex.match` does not evaluate to a
+  decision under the pinned features.
+  - Method: rstest in `tests/toolchain/regorus.rs`, run by `make test`.
+  - Non-vacuity: the same policy without the call does evaluate. The test fails
+    if feature unification ever enables `full-opa`.
+  - The exact failure point (`add_policy` or `eval_rule`) is recorded in
+    Surprises during EP-M1. The test asserts `is_err()` on the combined
+    result, never the error text.
+- O4, independent expectations: each smoke request carries its fact vector and
+  expected decision, written by hand from `T ∧ W ∧ (A ∨ (O ∧ ¬L))`:
+
+  | Request                                                     | Facts        | Expected |
+  | ----------------------------------------------------------- | ------------ | -------- |
+  | Owner-unlocked write (`examples/tenant-write/request.json`) | T W ¬A O ¬L  | true     |
+  | Cross-tenant administrator write                            | ¬T W A ¬O ¬L | false    |
+  | Same-tenant administrator write on a locked resource        | T W A ¬O L   | true     |
+  | Owner read                                                  | T ¬W ¬A O ¬L | false    |
+
+  - Regorus: the decision must be exactly `Value::Bool(expected)`. Undefined
+    or `Err` fails. Checked in BDD scenarios run by `make test`.
+  - OPA: exit 0 and stdout parsing to exactly
+    `{"result":[{"expressions":[{"value":<expected>,...}]}]}`. That means one
+    result, one expression, a JSON Boolean, and no `errors` key. Run with
+    `--strict-builtin-errors` and stdin input (`-I`), in ignored rstest cases
+    under `make toolchain-smoke`.
+  - Non-vacuity: both outcomes occur. The cross-tenant request is the input on
+    which the E0 mutation diverges from the baseline. `"false"` or `{}` cannot
+    satisfy the Boolean equality.
+- O5, adapter-input record: the raw string from `get_ast_as_json` for the exact
+  baseline bytes is snapshotted with `insta::assert_snapshot!`. The test also
+  asserts, through `serde_json::Value::pointer`:
+  - one module, with `source.file == "policy.rego"` and `source.contents`
+    equal to the baseline;
+  - package `authz` and `ast.rego_v1` true;
+  - three rules: one `Default` for `allow`, and two `Spec` rules with head
+    `allow`, each with one body whose `query.stmts` have lengths 3 and 4.
+  - Non-vacuity: the deny-all mutation's source is checked in the same test
+    and must show one `Default` rule and no `Spec`.
+  - These are observations of the adapter input. Node-by-node coverage is
+    1.2.2.
+- O6, a non-vacuous Lean build: `lake build PoleanSmoke` must exit 0, and
+  `lean/.lake/build/lib/lean/PoleanSmoke.olean` must then exist.
+  - The lakefile sets `defaultTargets = ["PoleanSmoke"]` and a plain
+    `leanOptions.warningAsError = true`, with no `weak.` prefix.
+  - Each smoke theorem is followed by `#guard_msgs in #print axioms`, with
+    the exact expected text. `and_comm_on_boolPairs` reports no axioms;
+    `boolPairs_complete` reports `propext`.
+  - Negative controls, run once and recorded in Artefacts:
+    - appending `theorem bad : False := by sorry` fails the build;
+    - changing an expected `#guard_msgs` text fails the build.
+  - Limit: this does not detect axioms in general, `native_decide`, or
+    in-file option overrides. That audit is 1.2.3.
+- O7, version identity: the tools report their pinned identities.
+  - `lean --version` equals the exact string recorded in ADR-003, and its
+    version equals the one in `lean/lean-toolchain`:
+
+    ```plaintext
+    Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)
+    ```
+
+  - `opa version` reports `Version: 1.21.2` and `Rego Version: v1`.
+  - Non-vacuity: the provisioning step re-hashes the installed OPA binary on
+    every run, so a replaced binary fails before the version test can pass.
+
+External axioms, not verified here:
+
+- SHA-256 collision resistance.
+- Regorus, OPA, Lean, and Lake behaving as documented.
+- Python's `tarfile` and `fcntl`.
+- GitHub serving the published assets.
+
+Residual gap: the digests come from GitHub release metadata. The OPA asset is
+additionally checked with `gh release verify-asset` at pin time. Nothing here
+shows that upstream built either artefact from its tagged source.
+
+## Plan of work
+
+Stage A, recheck (repeat at the start of EP-M1 and EP-M2):
+
+- Re-read the crates.io entries for Regorus 0.12.0 and 0.13.0.
+- Re-read the GitHub asset digests and sizes for `opa_linux_amd64_static`
+  v1.21.2 and `lean-4.35.0-linux.tar.zst`.
+- Run
+  `gh release verify-asset v1.21.2 <downloaded opa> -R open-policy-agent/opa`
+  once and record the output.
+- Values observed on 2026-10-17:
+  - OPA:
+    `830ab11f61ffec760b5e19db0d7ad02bf037e13f5ef4d665faeaf17632177527`,
+    64,181,524 bytes.
+  - Lean:
+    `7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d`,
+    594,481,375 bytes.
+- Any difference triggers the Toolchain tolerance.
+
+Stage B, EP-M1, Regorus in process:
+
+1. Red.
+   - Add dev-dependencies, each with an `=` pin at the current release observed
+     on 2026-10-17:
+
+     | Crate | Version |
+     | --- | --- |
+     | `rstest` | 0.27.0 |
+     | `googletest` | 0.14.3 |
+     | `pretty_assertions` | 1.4.1 |
+     | `insta` | 1.49.0 (no extra features) |
+     | `serde_json` | 1.0.154 |
+     | `rstest-bdd` | 0.6.0 |
+     | `rstest-bdd-macros` | 0.6.0 |
+
+   - Create `tests/toolchain/main.rs`, with a crate-level `//!` doc and module
+     declarations.
+   - Create `tests/toolchain/support.rs`: the baseline and deny-all sources
+     via `include_str!`, the O4 request table, and repository-relative paths
+     built from `env!("CARGO_MANIFEST_DIR")`.
+   - Create `tests/toolchain/regorus.rs` for O3 and O5.
+   - Create `tests/toolchain/bdd.rs` for the O4 Regorus scenarios.
+   - Create `tests/features/regorus_baseline.feature` (see Interfaces).
+   - Run `cargo test --test toolchain`. Expect a compile failure: crate
+     `regorus` unresolved.
+2. Green.
+   - Add this line under `[dev-dependencies]`:
+
+     ```toml
+     regorus = { version = "=0.12.0", default-features = false, features = ["ast", "std"] }
+     ```
+
+   - Run the tests, then review and accept the snapshot with
+     `cargo insta review`.
+   - Switch to `=0.13.0`, rerun, and confirm that the snapshot is unchanged.
+     Keep the version the Decision log selects.
+   - Record `cargo tree -e features -i regorus` in Artefacts.
+3. Write each Regorus engine call out explicitly:
+   - `Engine::new()`, then `set_rego_v0(false)` and
+     `set_strict_builtin_errors(true)`, matching `contracts/profile.json`
+     `runtime_options`;
+   - `add_policy("policy.rego".to_owned(), baseline.to_owned())`;
+   - `set_input_json(request)`;
+   - `eval_rule("data.authz.allow".to_owned())`.
+
+   For the lints: BDD step functions and helpers return `Result<(), String>`
+   instead of calling `expect`. `#[gtest]` tests use only `verify_that!` and
+   `?`. JSON access goes through `.pointer(..)`, never indexing.
+4. Refactor. Run `make check-fmt`, `make typecheck`, `make lint`, and
+   `make test`. Run `make audit` once and record its output. Commit.
+
+Stage C, EP-M2, pins and provisioning:
+
+1. Red. Write `scripts/tests/test_provision_tools.py`, covering O1, O2,
+   pin-file validation, and the offline re-run.
+   - Pin-file validation rejects unknown keys and a `root` that does not embed
+     the version.
+   - Add `scripts/requirements-test.txt` (`pytest==9.1.1`).
+   - Add the `test-scripts` target: `$(PYTHON) -m pytest scripts/tests`.
+   - Run it and expect a collection error, because the module is missing.
+2. Green. Add `toolchain-pins.json`:
+
+   ```json
+   {
+     "format": 1,
+     "platform": "x86_64-unknown-linux-gnu",
+     "opa": {
+       "version": "1.21.2",
+       "url": "https://github.com/open-policy-agent/opa/releases/download/v1.21.2/opa_linux_amd64_static",
+       "sha256": "830ab11f61ffec760b5e19db0d7ad02bf037e13f5ef4d665faeaf17632177527",
+       "size": 64181524,
+       "kind": "binary"
+     },
+     "lean": {
+       "version": "4.35.0",
+       "url": "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-linux.tar.zst",
+       "sha256": "7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d",
+       "size": 594481375,
+       "kind": "tar.zst",
+       "root": "lean-4.35.0-linux"
+     }
+   }
+   ```
+
+   Then write `scripts/provision_tools.py`: a uv-style shebang and PEP 723
+   header with no dependencies, Python 3.14, standard library only. Under
+   `fcntl.flock` on `.polean/tools/.lock` it does the following:
+   - It deletes stale temporary siblings.
+   - For each tool, a complete install is reused. A complete install is either
+     `.polean/tools/<name>/<sha256>/`, containing a `COMPLETE` marker that
+     holds the digest, or, for OPA, a binary whose re-hash matches.
+   - Otherwise a verified archive in `.polean/tools/downloads/` is extracted.
+   - Otherwise the artefact is fetched into a `mkstemp` file. The download
+     stops once it exceeds the pinned size. Size and SHA-256 are checked
+     before the file is renamed into place.
+   - Installation goes through a `mkdtemp` sibling and an atomic rename. The
+     OPA binary is made executable before the rename.
+   - It prints the installed tool paths.
+
+   Make the downloader a parameter of the install function so that tests inject
+   it.
+3. Add `tools` (`$(PYTHON) scripts/provision_tools.py`) and `test-scripts` to
+   `.PHONY`, each with a `##` help comment. Neither goes into `all`, because
+   the first run needs the network and about 3.7 GiB. Run the gates plus
+   `make test-scripts` and `make tools`, then rerun `make tools` with the
+   network disabled. Commit.
+
+Stage D, EP-M3, Lean package, provisioned smoke checks, and CI:
+
+1. Red. Write `tests/toolchain/smoke.rs`. Every test in it is `#[rstest]` plus
+   `#[ignore = "needs make tools; run make toolchain-smoke"]`:
+   - `opa_reports_pinned_version`
+   - `opa_decides_baseline_source`, the O4 table with
+     `opa eval --format json --strict-builtin-errors -d <baseline path> -I
+     data.authz.allow` and the request on stdin
+   - `lean_reports_pinned_version`
+   - `lean_builds_smoke_library`, which runs
+     `<lean root>/bin/lake build PoleanSmoke` in `lean/` and then checks for
+     the `.olean`
+
+   Tools are located through `toolchain-pins.json` and the digest-named path. A
+   missing tool is a failure with a remediation message, never a skip. All
+   children use `env_clear()`. Add a `toolchain-smoke` target that runs `tools`
+   and then
+   `cargo test --locked --all-features --test toolchain -- --ignored smoke::`.
+   Run it and expect the two Lean tests to fail because the package and
+   toolchain file are missing.
+2. Green. Add:
+   - `lean/lean-toolchain`, containing `leanprover/lean4:v4.35.0`;
+   - `lean/lakefile.toml` (see Interfaces);
+   - `lean/PoleanSmoke.lean` (see Interfaces);
+   - `lean/lake-manifest.json`, generated by the pinned `lake build`;
+   - `.lake/` in `.gitignore`.
+
+   Run the O6 negative controls and record them.
+3. Add `.github/workflows/toolchain.yml` with `permissions: contents: read`
+   and every action pinned by SHA. Reuse the checkout, setup-rust, and
+   setup-python SHAs from the existing workflows, plus `actions/cache` at a
+   pinned SHA.
+   - Triggers: `pull_request` and `push` to `main`, path-filtered to
+     `toolchain-pins.json`, `lean/**`, `Cargo.toml`, `Cargo.lock`,
+     `rust-toolchain.toml`, `scripts/**`, `tests/toolchain/**`,
+     `tests/features/**`, `Makefile`, and the workflow itself; plus
+     `workflow_dispatch`.
+   - Steps: `make test-scripts`, then `make toolchain-smoke`, with
+     `.polean/tools/downloads` cached on `hashFiles('toolchain-pins.json')`.
+   - Timeout: 30 minutes.
+4. Run the gates, `make test-scripts`, and `make toolchain-smoke`. Commit.
+
+Stage E, EP-M4, records:
+
+- Write `docs/adr-003-pin-the-e0-toolchain-tuple.md`. It records:
+  - the tuple, the requested and resolved Regorus features, and the
+    dependency delta between 0.12.0 and 0.13.0;
+  - each digest's provenance: OPA attested and immutable, Lean
+    trust-on-first-use;
+  - the Lean v4.35.0 rationale and the v4.34.1 floor;
+  - keeping the Rust nightly, which resolves ADR-001's "revisit" consequence;
+  - removing elan from the gate, with the source citation;
+  - the 1.2.3 inputs: v4.35.0 axiom naming, `lake check` needing `bwrap`, and
+    `leanchecker` needing `PATH`;
+  - the licences, as inputs to 5.2.2.
+
+  List the ADR in `docs/contents.md`.
+- Update `docs/technical-design.md`:
+  - §6.1: the tested Regorus version and features.
+  - §6.3: the observed OPA output shapes, as input to 2.3.2.
+  - §11: replace "Regorus 0.12.0 is an inspected frontend candidate" with the
+    tested pin, linking ADR-003.
+  - §13 toolchain row: E0 need met by ADR-003 and `make toolchain-smoke`.
+  - References: the new upstream sources.
+- Add **Toolchain tuple** to `docs/context.md`.
+- Update `lean/README.md` and `docs/repository-layout.md`. They must reverse
+  the Lake prohibition for repository-owned configuration, keep it for
+  submitted configuration, and describe:
+  - the non-semantic `PoleanSmoke` library, which 2.2.4 never imports;
+  - `toolchain-pins.json`, `scripts/`, `tests/toolchain/`, and
+    `.polean/tools/`.
+- Update `docs/developers-guide.md` with:
+  - prerequisites: Python 3.14 with `_zstd`, `pytest`, `cargo-insta`, network
+    access for the first provisioning, and about 3.7 GiB of disk;
+  - the new targets and the `toolchain` workflow;
+  - how to change a pin: edit the authoritative file, run `make tools`,
+    `make toolchain-smoke`, and `cargo insta review`, then update ADR-003;
+  - test conventions: one integration binary, `Result`-returning steps and
+    helpers, a committed and reviewed snapshot, and ignored provisioned tests.
+- Add `make test-scripts` and `make toolchain-smoke` to the gate list in
+  `AGENTS.md`.
+- Refresh `SHA256SUMS` for the covered files edited, which are the technical
+  design and context.
+- Mark roadmap 1.2.1 `[x]`, run every gate, and set Status to `COMPLETE`.
+
+## Milestones and plateaus
+
+- EP-M1, Regorus in process.
+  - End state: a pinned Regorus. `make test` shows the baseline parsed, its AST
+    snapshotted, the disabled built-in group unavailable, and four expected
+    Boolean decisions.
+  - Requirements: TDD §6.1, and §6.3 for Regorus.
+  - Evidence: `toolchain::regorus` and `toolchain::bdd`.
+  - Design adherence: no `src/` change; authorized dev-dependencies only.
+  - Recovery: revert the commit.
+  - Compatibility: none.
+- EP-M2, provisioning.
+  - End state: `make tools` installs digest-checked artefacts, and a second
+    run works with the network disabled.
+  - Requirements: TDD §11 pins.
+  - Evidence: `make test-scripts` and the offline re-run transcript.
+  - Design adherence: `.polean/tools/` stays untracked.
+  - Recovery: `rm -rf .polean/tools`.
+  - Compatibility: none.
+- EP-M3, provisioned smoke.
+  - End state: `make toolchain-smoke` passes locally and in the `toolchain`
+    workflow.
+  - Requirements: the RM-1.2.1 success criteria.
+  - Evidence: the smoke log, the O6 negative-control transcripts, and the CI
+    run URL.
+  - Design adherence: Lake builds only repository content, and `lean/Polean/`
+    stays reserved.
+  - Recovery: revert the commit and delete `lean/.lake/`.
+  - Compatibility: none.
+- EP-M4, records.
+  - End state: ADR-003 and the documents agree with the code, `SHA256SUMS`
+    passes, and 1.2.1 is ticked.
+  - Requirements: the TDD §13 E0 toolchain need.
+  - Evidence: all gates pass, and a read-through confirms that no edited
+    sentence widens one of the four claims.
+  - Compatibility: none.
+
+## Concrete steps
+
+From the worktree root, run each command in order, teeing its output to
+`/tmp/<action>-polean-1-2-1-pin-a-tested-compatibility-tuple.out`:
+
+```bash
+make check-fmt
+make markdownlint
+make typecheck
+make lint
+make test                      # Regorus tests run; smoke:: tests ignored
+make test-scripts PYTHON=<python3.14 venv with scripts/requirements-test.txt>
+make tools PYTHON=<same>       # network only on the first run
+make toolchain-smoke PYTHON=<same>   # expect 7 passed: 3 single tests + 4 OPA cases
+make design-check PYTHON=<venv with validation/requirements.txt>  # expect no diff
+sha256sum -c --quiet SHA256SUMS      # expect no output
+```
+
+Expected tail of `make toolchain-smoke`:
+
+```plaintext
+test smoke::lean_builds_smoke_library ... ok
+test smoke::lean_reports_pinned_version ... ok
+test smoke::opa_decides_baseline_source::case_1 ... ok
+...
+test smoke::opa_reports_pinned_version ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored
+```
+
+## Validation and acceptance
+
+Accepted when all of the following hold:
+
+- A fresh clone passes `make tools && make toolchain-smoke`, and the
+  `toolchain` workflow passes on the PR.
+- `make tools` re-runs offline.
+- `make test` passes in hosted CI without Lean or OPA.
+- `Cargo.lock`, `lean/lake-manifest.json`, the Regorus feature list, and both
+  digests are committed and named in ADR-003.
+- The O6 negative controls are recorded.
+- No document says the tuple proves, admits, or conforms.
+
+Record the Red-Green-Refactor evidence in Artefacts:
+
+- EP-M1: the unresolved-crate compile failure.
+- EP-M2: the pytest collection error.
+- EP-M3: the failing Lean smoke tests.
+
+## Idempotence and recovery
+
+`make tools` is idempotent and serialized by a lock file. It removes stale
+temporary files, reuses complete installs, re-hashes the OPA binary, and never
+overwrites a completed install. Deleting `.polean/tools/` or `lean/.lake/` is
+always safe. Each milestone is one revertable commit, or a small series of them.
+
+## Artefacts and notes
+
+Fill in during implementation:
+
+- `cargo tree -e features -i regorus` output.
+- `make audit` result.
+- `gh release verify-asset` output.
+- Red-stage transcripts.
+- O6 negative-control transcripts.
+- The O3 failure point.
+- The `toolchain` workflow run URL.
+
+## Interfaces and dependencies
+
+There are no public Rust API changes; all new Rust code lives under
+`tests/toolchain/`.
+
+New committed files:
+
+- `toolchain-pins.json`
+- `scripts/provision_tools.py`
+- `scripts/tests/test_provision_tools.py`
+- `scripts/requirements-test.txt`
+- `lean/lean-toolchain`
+- `lean/lakefile.toml`
+- `lean/lake-manifest.json`
+- `lean/PoleanSmoke.lean`
+- `tests/toolchain/{main,support,regorus,bdd,smoke}.rs`
+- `tests/features/regorus_baseline.feature`
+- `tests/toolchain/snapshots/*.snap`
+- `.github/workflows/toolchain.yml`
+- `docs/adr-003-pin-the-e0-toolchain-tuple.md`
+
+`lean/lakefile.toml`:
+
+```toml
+name = "polean"
+defaultTargets = ["PoleanSmoke"]
+
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "PoleanSmoke"
+```
+
+`lean/PoleanSmoke.lean`. The Lean reviewer compiled this file on v4.35.0. The
+`#guard_msgs` texts are settled by the first build.
+
+```lean
+/-!
+# Toolchain smoke module
+
+A fixed, repository-authored check that the pinned Lean toolchain elaborates
+and kernel-reduces a small finite Boolean enumeration with `decide`. It states
+nothing about Polean policies.
+-/
+namespace PoleanSmoke
+
+/-- Every pair of Booleans, listed explicitly. -/
+def boolPairs : List (Bool × Bool) :=
+  [(false, false), (false, true), (true, false), (true, true)]
+
+/-- The enumeration covers every pair. -/
+theorem boolPairs_complete : ∀ a b : Bool, (a, b) ∈ boolPairs := by
+  decide
+
+/-- info: 'PoleanSmoke.boolPairs_complete' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms boolPairs_complete
+
+/-- A finite check over the enumeration, settled by kernel reduction. -/
+theorem and_comm_on_boolPairs :
+    boolPairs.all (fun p => (p.1 && p.2) == (p.2 && p.1)) = true := by
+  decide
+
+/-- info: 'PoleanSmoke.and_comm_on_boolPairs' does not depend on any axioms -/
+#guard_msgs in
+#print axioms and_comm_on_boolPairs
+
+end PoleanSmoke
+```
+
+`tests/features/regorus_baseline.feature`:
+
+```gherkin
+Feature: Pinned Regorus decides the baseline source
+
+  Background:
+    Given the baseline tenant-write source loaded into Regorus with Rego v1 and strict built-in errors
+
+  Scenario: An owner may write an unlocked resource in their tenant
+    Given the owner-unlocked write request
+    When Regorus evaluates data.authz.allow
+    Then the decision is exactly true
+
+  Scenario: A cross-tenant administrator write is denied
+    Given the cross-tenant administrator write request
+    When Regorus evaluates data.authz.allow
+    Then the decision is exactly false
+
+  Scenario: An administrator may write a locked resource in their tenant
+    Given the same-tenant administrator locked write request
+    When Regorus evaluates data.authz.allow
+    Then the decision is exactly true
+
+  Scenario: An owner read is denied
+    Given the owner read request
+    When Regorus evaluates data.authz.allow
+    Then the decision is exactly false
+```
+
+## Revision notes
+
+- Revision 1 (2026-10-17): initial draft from reconnaissance and upstream
+  research.
+- Revision 2 (2026-10-17): incorporated the expert-panel review.
+  - Removed:
+    - the test-only `DecisionError` classifier, which is 2.3.2's work; exact
+      shape assertions replace it;
+    - line-parsing of the Cargo manifests; behavioural feature and version
+      checks replace it;
+    - Cyclopts and the README edit.
+  - Fixed:
+    - a vacuous Lake build: `defaultTargets`, an explicit target, an `.olean`
+      check, and `#guard_msgs` axiom pins;
+    - the Lean rationale and the disk estimate;
+    - the absolute-path containment test, now a `root` check;
+    - provisioning concurrency: a lock file, temporary siblings, and size
+      pins;
+    - the multi-binary `dead_code` failure, now one test binary.
+  - Reworded the A4 mapping, the cross-tenant claim, and "conformance" in
+    milestone checks.
+  - Added a path-filtered `toolchain` CI workflow and OPA provenance through
+    `gh release verify-asset`.
+  - Recorded the reviewers' Regorus and OPA observations as discoveries.
+  - Effect on the remaining work: fewer moving parts, the same success
+    criteria.
