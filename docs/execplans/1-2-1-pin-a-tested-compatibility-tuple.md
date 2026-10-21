@@ -544,6 +544,39 @@ The documentation added here states each of these limits explicitly.
   selector and the manifest into step 1's prose. Splitting them into their own
   numbered steps states the same requirements in an order a contributor
   follows, so the content was adopted and the suggested shape was not.
+- Observation: all five inline dispositions and the four pre-merge rows were
+  reconciled on `508151a` without a further code change. Each inline thread was
+  answered in place and CodeRabbit marked it resolved: the four repairs as
+  confirmed, and the docstring finding withdrawn. On the pre-merge rows it
+  recorded both errors as resolved, accepted the `OSError` propagation in place
+  of its suggested `Result[bool, OSError]`, and withdrew the AST-projection
+  warning while accepting the recorded disposition as complete rather than
+  deferred. Its reply also carried an Assessment-ID
+  (`PR11-EP-COMPLETE-20261021`), because the question was posted as a tagged
+  issue comment; that is a label on the reconciliation, not a second assessment
+  request.
+  - Evidence: issue comment
+    [6323427714](https://github.com/leynos/polean/pull/11#issuecomment-6323427714)
+    for the pre-merge rows; inline replies
+    [4340430000](https://github.com/leynos/polean/pull/11#discussion_r4340430000),
+    [4340428438](https://github.com/leynos/polean/pull/11#discussion_r4340428438),
+    [4340429995](https://github.com/leynos/polean/pull/11#discussion_r4340429995),
+    [4340431047](https://github.com/leynos/polean/pull/11#discussion_r4340431047),
+    and
+    [4340436014](https://github.com/leynos/polean/pull/11#discussion_r4340436014).
+    CodeRabbit stated its checks were read-only source inspection; it did not
+    execute the repository or reproduce the two negative controls, so those
+    remain author-reported evidence.
+  - Impact: the surviving `CHANGES_REQUESTED` review is the one submitted on
+    `fd992e3`. It is not cleared by these replies, because a review's state
+    belongs to the review, not to the threads beneath it. A fresh approval is a
+    separate step, and the reconciliation reply explicitly did not change
+    approval status.
+- Hosted runs on `508151a`, observed 2026-10-21: CI (39652081314), Design
+  contracts (39652081215), and Toolchain (39652081144) all completed with
+  `success`. Sourcery skipped the pull request for exceeding its diff-size
+  limit, and the Codex connector reported its usage limit; neither is a
+  required check.
 
 ## Decision log
 
