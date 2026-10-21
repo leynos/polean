@@ -431,6 +431,16 @@ The documentation added here states each of these limits explicitly.
     scoped to a private `fixture` submodule that re-exports `state`. Verified
     load-bearing: rewriting the fixture body multi-line makes the expectation
     report itself unfulfilled.
+- Observation: the third CLI review over `d8f0c4a` returned three unique
+  findings. Two were actioned.
+  - The `concurrency` group keyed on `github.head_ref`, which is only the
+    source branch name, so two pull requests from forks with the same branch
+    name would cancel each other. It is now keyed on
+    `github.event.pull_request.number`, which is unique within the repository,
+    with `github.ref` for the push case.
+  - ADR-003 said "seven dev-dependencies"; `Cargo.toml` lists eight. Corrected.
+  - The docstring-style finding repeats the earlier one and is covered by the
+    recorded decision above.
 - Observation: the root README's contributor detail was trimmed to a signpost,
   with the detail relocated into the developer guide rather than deleted, and
   the ExecPlan added to `docs/contents.md`, which listed neither ExecPlan even
@@ -1169,9 +1179,14 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   `/tmp/coderabbit-reassess2-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
   Dispositions in Surprises: six actioned, two rejected with reasons, one (the
   root README move) actioned together with the `docs/contents.md` entry.
+- Third milestone CLI review, 2026-10-21, over `d8f0c4a` (36 files): completed
+  in one attempt, 4 raw findings reducing to 3 unique. Log
+  `/tmp/coderabbit-reassess3-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
+  Two repaired (the fork-collision concurrency key and the ADR dependency
+  count); the third repeats the docstring decision above.
 - Pending:
 
-- The milestone sweep over this second repaired candidate.
+- The milestone sweep over this third repaired candidate.
 - The `toolchain` workflow run URL.
 
 ## Interfaces and dependencies

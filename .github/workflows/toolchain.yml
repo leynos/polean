@@ -35,10 +35,12 @@ permissions:
   contents: read
 
 # A superseded pull request run is cancelled so two 628 MiB provisioning jobs
-# do not compete for the same cache. A push to main is never cancelled: it is
-# the observation of what landed, and runs share a single group there.
+# do not compete for the same cache. The group is keyed on the pull request
+# number, not the branch name: `github.head_ref` is only the source branch, so
+# two forks sharing a branch name would cancel each other's runs. A push to
+# main is never cancelled, because it is the observation of what landed.
 concurrency:
-  group: toolchain-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+  group: toolchain-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

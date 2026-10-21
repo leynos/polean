@@ -40,7 +40,7 @@ second authority.
 
 ### Why every dev-dependency carries an exact pin
 
-The seven dev-dependencies are `=` requirements rather than caret ones.
+The eight dev-dependencies are `=` requirements rather than caret ones.
 `Cargo.lock` plus `--locked` would already fix the resolved versions for a
 build, but the crate requirements are the statement of intent that a lockfile
 then satisfies; a caret requirement would make an intended tuple change
