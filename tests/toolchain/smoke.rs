@@ -40,6 +40,8 @@ struct Pin {
     sha256: String,
     /// The upstream version, which the binary must report.
     version: String,
+    /// The complete identity line Lean reports, checked verbatim.
+    identity: Option<String>,
 }
 
 /// Read one tool's digest and version from the committed pin file.
@@ -64,9 +66,19 @@ fn read_pin(tool: &str) -> Result<Pin, String> {
         .get("version")
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| format!("toolchain-pins.json `{tool}.version` is not a string"))?;
+    let identity = entry
+        .get("identity")
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| format!("toolchain-pins.json `{tool}.identity` is not a string"))
+        })
+        .transpose()?;
     Ok(Pin {
         sha256: sha256.to_owned(),
         version: version.to_owned(),
+        identity,
     })
 }
 
@@ -162,15 +174,17 @@ fn opa_reports_pinned_version() -> Result<(), String> {
     let (path, pin) = pinned_opa()?;
     let root = repository_path(".");
     let report = run(&path, &["version"], None, &root)?;
-    if !report.contains(&format!("Version: {}", pin.version)) {
+    // Compare whole lines. A substring test would accept `Version: 1.21.20`
+    // as satisfying a `1.21.2` pin.
+    let version_line = format!("Version: {}", pin.version);
+    if !report.lines().any(|line| line.trim() == version_line) {
         return Err(format!(
-            "OPA must report `Version: {}`, got:\n{report}",
-            pin.version
+            "OPA must report the line `{version_line}`, got:\n{report}"
         ));
     }
-    if !report.contains("Rego Version: v1") {
+    if !report.lines().any(|line| line.trim() == "Rego Version: v1") {
         return Err(format!(
-            "OPA must report `Rego Version: v1`, got:\n{report}"
+            "OPA must report the line `Rego Version: v1`, got:\n{report}"
         ));
     }
     Ok(())
@@ -281,10 +295,14 @@ fn pinned_lean() -> Result<(PathBuf, Pin), String> {
     Ok((root, pin))
 }
 
-/// O7: the provisioned Lean toolchain reports the pinned version.
+/// O7: the provisioned Lean toolchain reports the pinned identity.
 ///
-/// The reported version must also equal the one `lean/lean-toolchain`
-/// selects, so the committed file and the provisioned binary cannot drift.
+/// O7 requires more than a matching version number. Two builds of the same
+/// version can differ in platform, commit, or build type, so a prefix check
+/// would accept a different toolchain. The reported line must equal the
+/// complete identity the pin records, and `lean/lean-toolchain` must select
+/// exactly the release that identity names, so the committed selector and the
+/// provisioned binary cannot drift.
 #[rstest]
 #[ignore = "needs make tools; run make toolchain-smoke"]
 fn lean_reports_pinned_version() -> Result<(), String> {
@@ -292,20 +310,25 @@ fn lean_reports_pinned_version() -> Result<(), String> {
     let lean = root.join("bin").join("lean");
     require_executable(&lean)?;
     let report = run(&lean, &["--version"], None, &repository_path("."))?;
-    let expected = format!("Lean (version {},", pin.version);
-    if !report.starts_with(&expected) {
+    let reported = report.trim();
+    let identity = pin.identity.as_deref().ok_or_else(|| {
+        "toolchain-pins.json `lean.identity` is missing; the complete reported version line is the \
+         thing O7 checks"
+            .to_owned()
+    })?;
+    if reported != identity {
         return Err(format!(
-            "Lean must report a version starting `{expected}`, got:\n{report}"
+            "Lean must report exactly `{identity}`, got:\n{reported}"
         ));
     }
     let selection_path = repository_path("lean/lean-toolchain");
     let selection_text = std::fs::read_to_string(&selection_path)
         .map_err(|error| format!("cannot read {}: {error}", selection_path.display()))?;
     let selected = selection_text.trim();
-    if !selected.ends_with(&pin.version) {
+    let expected = format!("leanprover/lean4:v{}", pin.version);
+    if selected != expected {
         return Err(format!(
-            "lean/lean-toolchain selects {selected:?}, but the pin records {}",
-            pin.version
+            "lean/lean-toolchain must select exactly `{expected}`, found {selected:?}"
         ));
     }
     Ok(())

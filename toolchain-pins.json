@@ -14,6 +14,7 @@
     "sha256": "7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d",
     "size": 594481375,
     "kind": "tar.zst",
-    "root": "lean-4.35.0-linux"
+    "root": "lean-4.35.0-linux",
+    "identity": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)"
   }
 }

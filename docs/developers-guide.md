@@ -100,7 +100,11 @@ artefacts, and [ADR-003](adr-003-pin-the-e0-toolchain-tuple.md) is the record
 of why the tuple is what it is. A pin change is a tuple change:
 
 1. Edit `toolchain-pins.json` — the upstream URL, the SHA-256, and the byte
-   size — or, for Regorus or Rust, `Cargo.toml` and `rust-toolchain.toml`.
+   size — or, for Regorus or Rust, `Cargo.toml` and `rust-toolchain.toml`. A
+   Lean pin also carries `root`, the archive's extraction directory, and
+   `identity`, the complete line `lean --version` must print; the smoke test
+   compares that line character for character rather than checking a version
+   prefix.
 2. Run `make tools`, which must reject any artefact that does not match the new
    pin, then `make toolchain-smoke`.
 3. If a Regorus change alters the AST snapshot, review it with
