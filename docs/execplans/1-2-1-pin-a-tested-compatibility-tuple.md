@@ -445,7 +445,19 @@ The documentation added here states each of these limits explicitly.
   with the detail relocated into the developer guide rather than deleted, and
   the ExecPlan added to `docs/contents.md`, which listed neither ExecPlan even
   though ADR-003 links to this one.
-- Observation: two further findings were judged unwarranted and left alone.
+- Observation: a `pull_request` path filter is evaluated against a three-dot
+  diff from the merge base, not against the latest commit. The last two commits
+  of this branch touch only the ExecPlan, yet CI and Design contracts ran on
+  both and Toolchain ran on the second. Reasoning about a single commit's paths
+  is therefore the wrong model for whether a workflow should have run.
+  - Evidence: the six runs listed in Artefacts, checked against GitHub's
+    workflow-syntax documentation for `on.<pull_request>.paths`.
+  - Impact: the false "triggers no run" claim previously recorded here was
+    replaced with the observed runs. The practical consequence is that a
+    docs-only commit on an open pull request still re-runs every unfiltered
+    workflow, so a superseded Toolchain run is expected and is cancelled by the
+    concurrency group rather than being evidence of a path-filter mistake.
+- Observation: three further findings were judged unwarranted and left alone.
   - NumPy-style `Parameters`/`Returns`/`Raises` sections on the
     `provision_tools.py` public functions. No Python in this repository uses
     them (`validation/` has none), and the script's existing prose docstrings
@@ -1190,9 +1202,21 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   - [CI run](https://github.com/leynos/polean/actions/runs/39645020530)
   - [Design contracts run](https://github.com/leynos/polean/actions/runs/39645020545)
 
-  All three completed with `success` on `2fd7cc0`. The subsequent `847ac7c`
-  (this record) touches only the ExecPlan, which no workflow path filter
-  matches, so it correctly triggers no run.
+  All three completed with `success` on `2fd7cc0`.
+- Hosted runs on `847ac7c` and `6acfedd`, observed 2026-10-21: CI and Design
+  contracts succeeded on both, and the Toolchain run succeeded on `6acfedd`.
+  The Toolchain run on `847ac7c` was cancelled, because the concurrency group
+  added in `d8f0c4a` cancels a superseded pull request run. That cancellation
+  is the rule working, not a failure.
+  - Evidence: run IDs 39645380708, 39645380608, 39645380443 (`847ac7c`) and
+    39645450791, 39645450768, 39645450549 (`6acfedd`).
+  - Correction: an earlier revision of this record claimed these two commits
+    "correctly trigger no run" because they touch only the ExecPlan. That was
+    wrong. `ci.yml` and `design.yml` declare no path filter, so they run on
+    every synchronisation; Toolchain's filter is matched by other paths in the
+    pull request's three-dot diff from the merge base, not by the latest
+    commit's alone. The claim had been reasoned from the two commits without
+    checking the run list.
 - Final local sweep, 2026-10-21, over `2fd7cc0`: 12 of 12 gates pass, with the
   three repair commits' changes included. `make markdownlint` initially failed
   on three bare URLs this record had written; they are now Markdown links and
