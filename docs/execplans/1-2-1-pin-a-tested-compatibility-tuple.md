@@ -235,8 +235,13 @@ The documentation added here states each of these limits explicitly.
   `lean/README.md`, `docs/repository-layout.md`, `docs/developers-guide.md`,
   `README.md`, and `AGENTS.md` updated; roadmap 1.2.1 ticked; `SHA256SUMS`
   refreshed for `README.md`, `docs/context.md`, and `docs/technical-design.md`.
-- [ ] EP-M2, EP-M3, and EP-M4 milestone gates, second run over the committed
-  candidate, then `coderabbit review --agent` over the committed scope.
+- [x] (2026-10-21) EP-M2, EP-M3, and EP-M4 milestone gates, second run over
+  the committed candidate: 13 gates, 11 passing on the first sweep and the two
+  prose-and-digest failures repaired before the commit.
+  `coderabbit review --agent` then covered the committed scope against base
+  `24f3874` and returned eight unique findings, seven repaired and one
+  dispositioned as contradicting the plan's required `=` pins. Recorded in
+  Surprises and Artefacts.
 
 ## Surprises & discoveries
 
@@ -363,6 +368,23 @@ The documentation added here states each of these limits explicitly.
   - Impact: `**/.polean/**` and `**/.lake/**` are now ignored. Both are
     generated or provisioned trees, and `.polean/` could not be committed
     anyway. `make fmt` would otherwise rewrite upstream files.
+- Observation: the milestone CLI review found eight unique defects that the
+  deterministic gates cannot see. Two were functional:
+  `tests/toolchain/regorus.rs` passed `"{context}: head"` as a plain `&str`, so
+  three failure diagnostics would have printed the literal braces, and
+  `urllib.request.urlopen` had no timeout while the run held the exclusive
+  tools lock. One was a real coverage gap: the `toolchain` workflow did not
+  trigger on `examples/tenant-write/**`, which both smoke tests read. One was a
+  repository rule the file breached: `regorus.rs` was 422 lines against the
+  400-line limit in `AGENTS.md`.
+  - Evidence:
+    `/tmp/coderabbit-milestone-polean-1-2-1-pin-a-tested-compatibility-tuple.out`;
+    every finding was re-checked against source before repair.
+  - Impact: the module was split into `engine.rs` (the shared engine
+    configuration and entry point) and `json.rs` (the AST accessors), and a
+    regression test now injects `urlopen` to observe the timeout. One finding
+    was rejected: caret dev-dependency requirements would contradict the plan's
+    required `=` pins, so ADR-003 now records why the exact pins stand.
 
 ## Decision log
 
@@ -444,6 +466,20 @@ The documentation added here states each of these limits explicitly.
   - (Agent, 2026-10-17.)
 - Decision: do not use Verus, Kani, or proptest in this task; see the
   Verification plan. (Agent, 2026-10-17.)
+- Decision: split the Regorus observations into `engine.rs` and `json.rs`
+  rather than leaving them in `regorus.rs`.
+  - Rationale: `regorus.rs` was 422 lines against the 400-line module limit.
+    The split also removes duplicated engine setup and rule-tag matching that
+    `bdd.rs` and `regorus.rs` each carried, without changing a single
+    observation. The snapshot is unchanged.
+  - Considered: merging `rule_kind` and `head_kind` alone. That leaves the
+    file over the limit and leaves the duplicated configuration in place.
+  - (Agent, 2026-10-21; from the milestone CLI review.)
+- Decision: keep the exact `=` dev-dependency pins and record the exception in
+  ADR-003.
+  - Rationale: the plan requires an `=` pin for each, and the intent statement
+    belongs in the requirements rather than being inferred from the lockfile.
+  - (Agent, 2026-10-21; disposition of a milestone CLI finding.)
 
 ## Outcomes & retrospective
 
@@ -1040,10 +1076,16 @@ always safe. Each milestone is one revertable commit, or a small series of them.
     Log `/tmp/negcontrol-sorry-…out`.
   - Altered `#guard_msgs`: `❌️ Docstring on '#guard_msgs' does not match
     generated message`, exit 1. Log `/tmp/negcontrol-guardmsgs-…out`.
-- EP-M3 CLI review: to be requested with the milestone sweep.
+- Milestone CLI review, 2026-10-21:
+  `coderabbit review --agent --committed --base-commit 24f3874c` (CLI 0.9.1)
+  inspected all 34 changed files and returned 17 raw findings, 8 unique, with
+  no rate limit or execution failure. Log
+  `/tmp/coderabbit-milestone-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
+  Dispositions in Surprises; seven repaired, one rejected with its own
+  documented-exception alternative adopted in ADR-003. Pending:
 
-Pending:
-
+- The milestone sweep over the repaired candidate, and the resulting
+  `coderabbit review --agent` reassessment.
 - The `toolchain` workflow run URL.
 
 ## Interfaces and dependencies

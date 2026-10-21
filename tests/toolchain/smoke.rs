@@ -18,21 +18,21 @@ use std::{
 
 use rstest::rstest;
 
-use crate::support::{
-    CROSS_TENANT_ADMIN_REQUEST,
-    OWNER_READ_REQUEST,
-    OWNER_UNLOCKED_REQUEST,
-    SAME_TENANT_ADMIN_LOCKED_REQUEST,
-    baseline_source_path,
-    lean_root,
-    opa_path,
-    parse_json,
-    pins_path,
-    repository_path,
+use crate::{
+    engine::ENTRYPOINT,
+    json::parse_json,
+    support::{
+        CROSS_TENANT_ADMIN_REQUEST,
+        OWNER_READ_REQUEST,
+        OWNER_UNLOCKED_REQUEST,
+        SAME_TENANT_ADMIN_LOCKED_REQUEST,
+        baseline_source_path,
+        lean_root,
+        opa_path,
+        pins_path,
+        repository_path,
+    },
 };
-
-/// The entry point named by `contracts/profile.json`.
-const ENTRYPOINT: &str = "data.authz.allow";
 
 /// One pinned tool, as the pin file records it.
 struct Pin {

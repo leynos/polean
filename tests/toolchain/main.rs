@@ -9,6 +9,8 @@
 //! require `make tools`.
 
 mod bdd;
+mod engine;
+mod json;
 mod regorus;
 mod smoke;
 mod support;

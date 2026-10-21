@@ -20,6 +20,7 @@ import hashlib
 import io
 import json
 import tarfile
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -93,7 +94,7 @@ def write_pins(
     return path
 
 
-def good_fetcher(artefacts: dict[str, bytes]):
+def good_fetcher(artefacts: dict[str, bytes]) -> provision_tools.Fetcher:
     """Return a fetcher that serves `artefacts` by URL."""
 
     def fetch(url: str, destination: Path, limit: int) -> None:
@@ -110,7 +111,7 @@ def raising_fetcher(url: str, destination: Path, limit: int) -> None:
     raise AssertionError(f"the provisioner downloaded {url}")
 
 
-def standard_fetcher(lean: bytes = lean_archive_bytes()):
+def standard_fetcher(lean: bytes = lean_archive_bytes()) -> provision_tools.Fetcher:
     """The fetcher serving the two URLs the standard pin file names."""
     return good_fetcher(
         {
@@ -140,7 +141,9 @@ def test_install_accepts_correct_bytes(tmp_path: Path) -> None:
         "the Lean member is extracted"
     )
     assert installed.opa.stat().st_mode & 0o111, "the OPA binary is executable"
-    assert (installed.lean_root / "COMPLETE").read_text(encoding="utf-8").strip() == lean_sha
+    assert (installed.lean_root / "COMPLETE").read_text(encoding="utf-8").strip() == lean_sha, (
+        "the completion marker records the Lean digest"
+    )
 
 
 def test_install_rejects_a_flipped_byte(tmp_path: Path) -> None:
@@ -273,6 +276,28 @@ def test_corrupt_cached_download_is_refetched(tmp_path: Path) -> None:
     installed = provision_tools.install_tools(pins_path, tools_dir, standard_fetcher())
 
     assert installed.opa.read_bytes() == OPA_BYTES, "the fetched copy replaced it"
+
+
+def test_fetch_url_passes_a_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stalled connection cannot hold the tools lock indefinitely."""
+    observed: dict[str, object] = {}
+
+    class Response(io.BytesIO):
+        """A response body that ends immediately."""
+
+    def urlopen(request: object, timeout: float) -> Response:
+        observed["timeout"] = timeout
+        return Response(OPA_BYTES)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    destination = tmp_path / "opa"
+
+    provision_tools.fetch_url("https://example.invalid/opa", destination, len(OPA_BYTES))
+
+    assert observed["timeout"] == provision_tools.REQUEST_TIMEOUT_SECONDS, (
+        "the download must bound how long a stalled read may block"
+    )
+    assert destination.read_bytes() == OPA_BYTES, "the fetched bytes are written"
 
 
 def test_load_pins_rejects_an_unknown_key(tmp_path: Path) -> None:
