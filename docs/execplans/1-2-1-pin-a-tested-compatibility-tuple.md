@@ -1184,10 +1184,17 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   `/tmp/coderabbit-reassess3-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
   Two repaired (the fork-collision concurrency key and the ADR dependency
   count); the third repeats the docstring decision above.
+- Published head: `2fd7cc07dc4da90c98fe0677a9dab01b65442824`, pushed over SSH
+  and verified against `ls-remote`. All three workflows triggered on it:
+  - [Toolchain run](https://github.com/leynos/polean/actions/runs/39645020719)
+  - [CI run](https://github.com/leynos/polean/actions/runs/39645020530)
+  - [Design contracts run](https://github.com/leynos/polean/actions/runs/39645020545)
+
+  Hosted results are not yet known; `pr-babysitting` owns that observation.
 - Pending:
 
-- The milestone sweep over this third repaired candidate.
-- The `toolchain` workflow run URL.
+- The milestone sweep over the three-commit repair series beginning at
+  `efcdc91`.
 
 ## Interfaces and dependencies
 
