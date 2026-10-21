@@ -207,20 +207,30 @@ The documentation added here states each of these limits explicitly.
   retained archive). A second run with `socket.connect` denied succeeded in
   0.09 s, so a complete install is reused offline. `gh release verify-asset`
   verified the OPA digest against the v1.21.2 attestation.
-- [x] (2026-10-21) EP-M2 gates, first run: nine of eleven passed
+- [x] (2026-10-21) EP-M3 Red. The smoke module was run before the Lean package
+  existed. The Lean invocation failed with
+  `no configuration file with a supported extension`, and the OPA cases were
+  not yet runnable without a pin file.
+- [x] (2026-10-21) EP-M3 Green. `lean/lean-toolchain`, `lean/lakefile.toml`,
+  `lean/PoleanSmoke.lean`, and the pinned lake's `lean/lake-manifest.json` were
+  added; `tests/toolchain/smoke.rs` runs OPA 1.21.2 and the pinned Lake under
+  `env_clear()`. Both O6 negative controls failed the build as required: a
+  `sorry` declaration, and an altered `#guard_msgs` text.
+- [x] (2026-10-21) EP-M3 CI. `.github/workflows/toolchain.yml` added with
+  path filters, `permissions: contents: read`, every action pinned by SHA, and
+  the verified archives cached on `hashFiles('toolchain-pins.json')`.
+- [x] (2026-10-21) EP-M2 and EP-M3 gates, first run: nine of eleven passed
   (`check-fmt`, `typecheck`, `lint`, `test`, `test-scripts`, `toolchain-smoke`,
   `audit`, `SHA256SUMS`, `actionlint`). `make markdownlint` failed on 286
   findings, all inside the gitignored Lean distribution under `.polean/tools/`,
   and `make design-check` could not start because the scratch interpreter lacked
   `jsonschema`.
-- [x] (2026-10-21) EP-M2 repair: `.markdownlint-cli2.jsonc` now
+- [x] (2026-10-21) EP-M2 and EP-M3 repair: `.markdownlint-cli2.jsonc` now
   ignores `**/.polean/**` and `**/.lake/**`, which are generated or provisioned
   trees; `validation/requirements.txt` was installed into the scratch
   interpreter. Both gates pass on a direct re-run.
-- [ ] EP-M2 milestone gates, second run, then
+- [ ] EP-M2 and EP-M3 milestone gates, second run, then
   `coderabbit review --agent`.
-- [ ] EP-M3: Lean smoke package and provisioned OPA and Lean smoke tests.
-  `make toolchain-smoke` green. `toolchain` CI workflow added.
 - [ ] EP-M4: ADR-003, design and guide updates, `SHA256SUMS` refresh, and
   roadmap 1.2.1 marked done.
 
@@ -335,6 +345,20 @@ The documentation added here states each of these limits explicitly.
   - Evidence: a scratch probe during EP-M2.
   - Impact: a future refactor to the class API would produce an empty
     extraction rather than an error, so the archive test is what catches it.
+- Observation: the pinned Lake needs `--dir <package>`; invoked from the
+  repository root it reports
+  `no configuration file with a supported extension`, because it looks for
+  `lakefile.lean` in the working directory.
+  - Evidence: EP-M3 Red.
+  - Impact: the smoke test passes `--dir` with an absolute path and also sets
+    the child's working directory to the repository root.
+- Observation: an extracted Lean release contains three upstream `README.md`
+  files, so `markdownlint-cli2 "**/*.md"` lints provisioned tool content unless
+  it is ignored. No repository-owned Markdown was affected.
+  - Evidence: 286 findings, all under `.polean/tools/lean/<digest>/src/lean/`.
+  - Impact: `**/.polean/**` and `**/.lake/**` are now ignored. Both are
+    generated or provisioned trees, and `.polean/` could not be committed
+    anyway. `make fmt` would otherwise rewrite upstream files.
 
 ## Decision log
 
@@ -390,6 +414,15 @@ The documentation added here states each of these limits explicitly.
   - The provisioned OPA decisions use `#[rstest] #[ignore]` cases, because
     rstest-bdd filters by tag at expansion and cannot be ignored.
   - (Agent, 2026-10-17.)
+- Decision: cache only `.polean/tools/downloads`, keyed on
+  `hashFiles('toolchain-pins.json')`.
+  - Rationale: the archives are the 630 MB download; the extracted trees are
+    3.7 GiB and re-extract in seconds from a verified archive. A pin change
+    changes the key, so a stale archive can never satisfy a new pin.
+  - Considered: caching the extracted trees too. Their cache entry would be
+    several gigabytes and would need its own eviction policy for no measured
+    gain.
+  - (Agent, 2026-10-21.)
 - Decision: add a path-filtered hosted `toolchain` workflow now.
   - Rationale: without it the tuple is "tested once on one machine". Roadmap
     4.3.2 keeps clean-environment replay and resource measurement.
@@ -959,6 +992,16 @@ always safe. Each milestone is one revertable commit, or a small series of them.
 - EP-M2 Green: `make test-scripts` → 12 passed.
 - EP-M2 provisioning: `make tools` printed both digest-named paths; the
   offline re-run succeeded in 0.09 s with `socket.connect` denied.
+- EP-M3 Red: the pinned Lake from the repository root reported
+  `no configuration file with a supported extension` before `lean/` existed.
+- O6 negative controls, 2026-10-21:
+  - `sorry`: `error: PoleanSmoke.lean:37:8: declaration uses 'sorry'`, exit 1.
+    Log `/tmp/negcontrol-sorry-…out`.
+  - Altered `#guard_msgs`: `❌️ Docstring on '#guard_msgs' does not match
+    generated message`, exit 1. Log `/tmp/negcontrol-guardmsgs-…out`.
+- EP-M3 CLI review: to be requested with the milestone sweep.
+
+Pending:
 
 - The `toolchain` workflow run URL.
 

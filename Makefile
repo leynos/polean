@@ -5,7 +5,7 @@ MDLINT ?= markdownlint-cli2
 CARGO ?= cargo
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts
+.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke
 
 SHELL := bash
 
@@ -58,6 +58,9 @@ tools: ## Provision the pinned OPA and Lean tools into .polean/tools
 
 test-scripts: ## Test the provisioning script with pytest
 	$(PYTHON) -m pytest scripts/tests
+
+toolchain-smoke: tools ## Provision the pinned tools, then run the ignored smoke tests
+	$(CARGO) test --locked --all-features --test toolchain -- --ignored smoke::
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

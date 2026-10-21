@@ -5,9 +5,10 @@
 //! so that Regorus is linked once.
 //!
 //! The Regorus observations run under `make test` on any host. The provisioned
-//! OPA and Lean observations will live in `smoke` behind `#[ignore]`, because
-//! they require `make tools`; EP-M3 adds that module.
+//! OPA and Lean observations live in [`smoke`] behind `#[ignore]`, because they
+//! require `make tools`.
 
 mod bdd;
 mod regorus;
+mod smoke;
 mod support;
