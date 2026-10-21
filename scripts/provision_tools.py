@@ -325,14 +325,21 @@ def _require_root(pin: ToolPin) -> str:
 
 
 def _is_complete(directory: Path, pin: ToolPin) -> bool:
-    """Whether `directory` holds a completed install of `pin`."""
+    """Whether `directory` holds a completed install of `pin`.
+
+    A marker that cannot be inspected is an environment failure, not an
+    incomplete install, so `OSError` propagates. `Path.is_file` would answer
+    `False` for a permission error too, sending the caller down the repair path
+    and deleting a tree that may be complete; a re-download of 600 MiB is the
+    wrong response to an unreadable directory. `stat` distinguishes the one
+    answer that means "not installed" from every failure to find out.
+    """
     marker = directory / COMPLETE_MARKER
-    if not marker.is_file():
-        return False
     try:
-        recorded = marker.read_text(encoding="utf-8").strip()
-    except OSError:
+        marker.stat()
+    except FileNotFoundError:
         return False
+    recorded = marker.read_text(encoding="utf-8").strip()
     return recorded == pin.sha256
 
 

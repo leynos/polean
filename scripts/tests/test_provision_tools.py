@@ -373,6 +373,82 @@ def test_fetch_url_passes_a_timeout(tmp_path: Path) -> None:
     assert destination.read_bytes() == OPA_BYTES, "the fetched bytes are written"
 
 
+def test_download_refuses_a_stream_over_the_limit(tmp_path: Path) -> None:
+    """The size guard is in `download`, not only in the test fetcher.
+
+    An injected fetcher that raises `DownloadTooLarge` itself proves nothing
+    about the production guard: deleting `total > limit` from `download` would
+    leave such a test passing. This test therefore drives the real `download`
+    with an opener that yields one byte more than the limit, and asserts the
+    three things the guard owes: the refusal, no excess byte on disk, and no
+    completed file left behind.
+    """
+    limit = len(OPA_BYTES)
+    oversize = OPA_BYTES + b"X"
+    chunks = [oversize[: limit // 2], oversize[limit // 2 :]]
+
+    class Response(io.BytesIO):
+        """A response body served in two chunks."""
+
+    def opener(request: object, timeout: float) -> Response:
+        return Response(b"".join(chunks))
+
+    destination = tmp_path / "opa"
+
+    with pytest.raises(provision_tools.DownloadTooLarge) as raised:
+        provision_tools.download(
+            "https://example.invalid/opa", destination, limit, opener=opener
+        )
+
+    assert str(limit) in str(raised.value), "the diagnostic names the pinned size"
+    written = destination.read_bytes() if destination.exists() else b""
+    assert len(written) <= limit, "the guard refuses before writing past the limit"
+    assert oversize not in (written,), "the excess byte is never written"
+
+
+def test_unreadable_marker_is_not_treated_as_an_incomplete_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A permission failure is reported, not repaired by deleting the install.
+
+    `_is_complete` answering `False` for an unreadable marker sends
+    `_install_lean` into the repair path, which removes the existing tree and
+    re-downloads 600 MiB. A directory the process cannot read is an environment
+    failure, so the `OSError` must reach `main`, which reports it as one line.
+    """
+    pins_path = write_pins(tmp_path)
+    tools_dir = tmp_path / "tools"
+    lean_sha = hashlib.sha256(lean_archive_bytes()).hexdigest()
+    installed = tools_dir / "lean" / lean_sha
+    installed.mkdir(parents=True)
+    marker = installed / provision_tools.COMPLETE_MARKER
+    marker.write_text(f"{lean_sha}\n", encoding="utf-8")
+
+    real_read_text = Path.read_text
+
+    def deny_marker(self: Path, *args: object, **kwargs: object) -> str:
+        if self == marker:
+            raise PermissionError(13, "Permission denied", str(marker))
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny_marker)
+
+    fetched: list[str] = []
+    standard = standard_fetcher()
+
+    def recording(url: str, destination: Path, limit: int) -> None:
+        fetched.append(url)
+        standard(url, destination, limit)
+
+    status = provision_tools.main(pins_path, tools_dir, recording)
+
+    assert status == 1, "an unreadable marker is an environment failure"
+    assert installed.is_dir(), "the existing install is not deleted by the repair path"
+    assert "https://example.invalid/lean.tar.zst" not in fetched, (
+        "the unreadable marker does not send the provisioner to the network"
+    )
+
+
 def test_load_pins_rejects_an_unknown_key(tmp_path: Path) -> None:
     """Pin-file validation rejects a key the script does not understand."""
     pins_path = write_pins(tmp_path, extra="unexpected")
