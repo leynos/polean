@@ -246,8 +246,10 @@ The documentation added here states each of these limits explicitly.
   their findings reconciled; the formal review 5604162108 was repaired and
   reconciled on `508151a`; the reconciliation and its hosted runs were recorded
   in `4a7e2e9` and `a43c76e`; and CodeRabbit approved `a43c76e` in review
-  5604419148. Every hosted run observed on the branch concluded `success`.
-  Merge has not been performed: it awaits explicit user authority.
+  1. Every hosted run observed on the branch concluded `success`
+  except one `check-fmt` failure caused by a prose line that began with
+  `5604419148.`; see the note on tool-version skew below. Merge has not been
+  performed: it awaits explicit user authority.
 
 ## Surprises & discoveries
 
@@ -590,6 +592,17 @@ The documentation added here states each of these limits explicitly.
   re-observed rather than assumed to carry over from `508151a`. The commit that
   adds this paragraph starts a further set of runs; those are recorded in the
   delivery ledger, because writing them back here would start another cycle.
+- Tool-version skew between the local and hosted `mdtablefix`. The hosted
+  `check-fmt` failed on the commit that recorded the approval, while the same
+  command passed locally on the same bytes. The cause is version, not content:
+  `ci.yml` pins `mdtablefix` 0.6.0, and the local install is 0.6.1. In 0.6.0 a
+  prose line that happens to begin with a review ID and a full stop, here
+  `5604419148.`, is read as an ordered-list marker and renumbered to `1.`;
+  0.6.1 stopped doing that. The paragraph was reworded so both versions agree,
+  and the check was then reproduced with 0.6.0 installed into a scratch
+  directory rather than trusting the 0.6.1 result. The lesson is not that the
+  pin is wrong: a formatter's behaviour is part of the contract, so a local
+  pass under an unpinned tool is not evidence about the hosted gate.
 
 ## Decision log
 
