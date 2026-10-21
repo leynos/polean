@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: IN PROGRESS (revision 2)
+Status: COMPLETE (revision 2)
 
 Roadmap item: [1.2.1](../roadmap.md). Branch:
 `1-2-1-pin-a-tested-compatibility-tuple`.
@@ -229,10 +229,14 @@ The documentation added here states each of these limits explicitly.
   ignores `**/.polean/**` and `**/.lake/**`, which are generated or provisioned
   trees; `validation/requirements.txt` was installed into the scratch
   interpreter. Both gates pass on a direct re-run.
-- [ ] EP-M2 and EP-M3 milestone gates, second run, then
-  `coderabbit review --agent`.
-- [ ] EP-M4: ADR-003, design and guide updates, `SHA256SUMS` refresh, and
-  roadmap 1.2.1 marked done.
+- [x] (2026-10-21) EP-M4 records. `docs/adrs/adr-0003-pin-the-e0-toolchain-tuple.md`
+  written and indexed in `docs/contents.md`; technical design §6.1, §6.3, §11,
+  §13, and References updated; **Toolchain tuple** added to `docs/context.md`;
+  `lean/README.md`, `docs/repository-layout.md`, `docs/developers-guide.md`,
+  `README.md`, and `AGENTS.md` updated; roadmap 1.2.1 ticked; `SHA256SUMS`
+  refreshed for `README.md`, `docs/context.md`, and `docs/technical-design.md`.
+- [ ] EP-M2, EP-M3, and EP-M4 milestone gates, second run over the committed
+  candidate, then `coderabbit review --agent` over the committed scope.
 
 ## Surprises & discoveries
 
@@ -443,7 +447,44 @@ The documentation added here states each of these limits explicitly.
 
 ## Outcomes & retrospective
 
-Not started.
+Delivered. The tuple is pinned, provisioned behind a digest gate, and observed
+by three lanes: `make test` for Regorus on every host, `make test-scripts` for
+the provisioning script, and `make toolchain-smoke` for OPA and Lean.
+
+What the work establishes, in its own terms:
+
+- the pinned Regorus parses the baseline, exposes an AST that a reviewed
+  snapshot records, compiles only the requested feature groups, and decides
+  four hand-written requests as `T ∧ W ∧ (A ∨ (O ∧ ¬L))` predicts;
+- the pinned OPA decides the same four requests the same way, from the same
+  source bytes;
+- the pinned Lean and Lake build a fixed smoke library and the kernel reports
+  the axioms the source asserts;
+- the provisioning script installs only digest-matching bytes, rejects path
+  escapes and truncated streams, and reuses a complete install offline.
+
+What it does not establish, and must not be read as establishing: any theorem
+about a Polean policy, any source-to-model correspondence, any runtime
+conformance claim, or any statement about a platform other than
+`x86_64-unknown-linux-gnu`. ADR-003 records the boundary; the smoke tests state
+it in their own comments.
+
+Lessons worth carrying forward:
+
+- Testing the next candidate before rejecting the current one paid off twice.
+  0.12.0 and 0.13.0 produce a byte-identical AST and the same decisions, so the
+  upgrade is free; the plan's default was therefore safe, and the record now
+  says why rather than leaving a suspicion.
+- The dependency delta was the least visible part of the change. Two offline
+  lockfile probes and a build-log check settled it; reading `Cargo.toml` alone
+  would have missed the unconditional C compiler build chain.
+- The hosted workflow is the part that cannot be observed locally. It is
+  path-filtered, so a pin change re-tests it, but its first green run remains
+  evidence to collect after publication.
+- Provisioning is deliberately slow on the first run and instant afterwards.
+  Keeping the verified archive in `.polean/tools/downloads` is what makes the
+  second run offline-capable, and the CI cache keys on the pin file for the
+  same reason.
 
 ## Context and orientation
 
@@ -808,7 +849,7 @@ Stage D, EP-M3, Lean package, provisioned smoke checks, and CI:
 
 Stage E, EP-M4, records:
 
-- Write `docs/adr-003-pin-the-e0-toolchain-tuple.md`. It records:
+- Write `docs/adrs/adr-0003-pin-the-e0-toolchain-tuple.md`. It records:
   - the tuple, the requested and resolved Regorus features, and the
     dependency delta between 0.12.0 and 0.13.0;
   - each digest's provenance: OPA attested and immutable, Lean
@@ -1024,7 +1065,7 @@ New committed files:
 - `tests/features/regorus_baseline.feature`
 - `tests/toolchain/snapshots/*.snap`
 - `.github/workflows/toolchain.yml`
-- `docs/adr-003-pin-the-e0-toolchain-tuple.md`
+- `docs/adrs/adr-0003-pin-the-e0-toolchain-tuple.md`
 
 `lean/lakefile.toml`:
 

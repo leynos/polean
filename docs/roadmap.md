@@ -61,14 +61,15 @@ Can a bounded spike enforce the closed grammar and inspect checked declarations
 without executing submitted code? Its result either unlocks E0 or requires an
 explicit design revision. See technical-design.md §§4–6 and 11–13.
 
-- [ ] 1.2.1. Pin a tested Rust, Regorus, Lean, and OPA compatibility tuple.
+- [x] 1.2.1. Pin a tested Rust, Regorus, Lean, and OPA compatibility tuple.
   - Requires 1.1.2.
   - See technical-design.md §§6 and 11;
-    [ADR 0001][adr-0001];
+    [ADR 0001][adr-0001] and [ADR 0003][adr-0003];
     repository-layout.md §Ownership boundaries.
   - Success: provisioned tools compile a fixed Lean smoke theorem, parse the
     baseline, and evaluate its source; lockfiles, Regorus features, and OPA
-    digest are recorded. Regorus 0.12.0 remains a candidate until tested.
+    digest are recorded. Regorus 0.13.0 was tested in process and OPA replay
+    was observed; ADR-003 records the tuple and its provenance.
 - [ ] 1.2.2. Produce a complete-module admission feasibility record.
   - Requires 1.2.1.
   - See technical-design.md §§4.1 and 6.1; ../contracts/profile.json.
@@ -435,3 +436,4 @@ See technical-design.md §§7, 11, and 13; terms-of-reference.md §6.2.
     claims remain outside this roadmap.
 
 [adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md
+[adr-0003]: adrs/adr-0003-pin-the-e0-toolchain-tuple.md
