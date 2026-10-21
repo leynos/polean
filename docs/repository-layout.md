@@ -17,6 +17,8 @@ The module split proposed by the technical design is not yet implemented.
 | `validation/`                  | Design-fixture checks, property checks, and witnesses; not the production checker.     |
 | `docs/`                        | Terms of reference, technical design, guides, vocabulary, and decisions.               |
 | `docs/contents.md`             | Canonical documentation index.                                                         |
+| `docs/adrs/`                   | Accepted architecture decision records, named `adr-nnnn-title-slug.md`.                |
+| `docs/rfcs/`                   | Reserved for proposed changes, named `rfc-nnnn-title-slug.md`; none are committed yet. |
 | `.github/workflows/ci.yml`     | Hosted Rust, Markdown, and basic repository gate.                                      |
 | `.github/workflows/design.yml` | Independent design-contract validation lane.                                           |
 | `.github/dependabot.yml`       | Cargo and GitHub Actions dependency updates.                                           |

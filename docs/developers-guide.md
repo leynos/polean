@@ -161,3 +161,12 @@ Start with [documentation contents](contents.md). Update the terms of reference
 when the problem, scope, users, or acceptance criteria change. Update the
 technical design when implementation or assurance mechanisms change. Record
 substantive, durable choices as ADRs.
+
+ADRs live in `docs/adrs/` and are named `adr-nnnn-title-slug.md`, where `nnnn`
+is a four-digit, zero-padded serial number and `title-slug` is a kebab-case
+American Standard Code for Information Interchange (ASCII) rendering of the
+title. Proposals that need review before acceptance live in `docs/rfcs/` and
+follow the same pattern with an `rfc-` prefix. Number each series sequentially,
+never renumber a published record, and update every inbound link when a record
+is renamed. The [documentation style guide](documentation-style-guide.md)
+specifies the required sections and templates.

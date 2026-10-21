@@ -61,8 +61,8 @@ reported outcome is `model_proved`, with assurance `kernel_checked`,
 `trusted_frontend`, and `tested_agreement`; a successful run does not upgrade
 tested runtime agreement to a refinement proof. The theorem takes the request's
 subject, resource, and action attributes as given and does not authenticate
-them. [ADR-002](adr-002-first-profile-assurance-boundary.md) states exactly
-what a passing run proves, trusts, and leaves outside the theorem.
+them. [ADR 0002](adrs/adr-0002-first-profile-assurance-boundary.md) states
+exactly what a passing run proves, trusts, and leaves outside the theorem.
 
 ## Available today
 

@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: COMPLETE (revision 3)
+Status: COMPLETE (revision 4)
 
 Roadmap item: [1.1](../roadmap.md), tasks 1.1.1 and 1.1.2. Branch:
 `1-1-ratify-assurance-and-release-gates`.
@@ -13,7 +13,7 @@ Roadmap item: [1.1](../roadmap.md), tasks 1.1.1 and 1.1.2. Branch:
 ## Purpose / big picture
 
 Polean's value depends on saying exactly what it proves and nothing more. This
-work produces one ADR, ADR-002, that states what the Lean model theorem
+work produces one ADR, ADR 0002, that states what the Lean model theorem
 establishes, what the trusted Regorus frontend is assumed to do, what OPA and
 Regorus differential tests show, and what lies outside the theorem, including
 the provenance of request attributes. It also replaces the technical design's
@@ -22,10 +22,10 @@ outstanding prerequisite, the responsible role, the completion evidence, the
 roadmap task, and whether E0 needs it or only public release does.
 
 After the change, a reader of
-`docs/adr-002-first-profile-assurance-boundary.md` and technical design §13 can
-answer: "What would a passing run actually prove, what remains trusted, and
-what has to happen before E0 and before release?" No new tooling, schema, or
-validation code is added.
+`docs/adrs/adr-0002-first-profile-assurance-boundary.md` and technical design
+§13 can answer: "What would a passing run actually prove, what remains trusted,
+and what has to happen before E0 and before release?" No new tooling, schema,
+or validation code is added.
 
 ## Constraints
 
@@ -37,7 +37,7 @@ validation code is added.
   `validation/`, or any JSON contract. The only contract-directory edit is the
   wording fix in `contracts/cli.txt`.
 - Record acceptance only after the user states it in conversation. The agent
-  then commits an acceptance note to ADR-002 on their behalf.
+  then commits an acceptance note to ADR 0002 on their behalf.
 - Roadmap dependency edits proposed below take effect only if the user approves
   this plan without striking them.
 - British English, Oxford spelling; keep `sha256sum -c SHA256SUMS` passing.
@@ -65,15 +65,23 @@ validation code is added.
   (revisions 1–2).
 - [x] (2026-10-15) User rejected revision 2 as over-engineered; rewrote as
   revision 3.
-- [x] (2026-10-15) Plan approved by the user, with ADR-002 accepted as
+- [x] (2026-10-15) Plan approved by the user, with ADR 0002 accepted as
   written in the same message; the roadmap edits were not struck.
 - [x] (2026-10-15) EP-M1 and EP-M2 delivered together, because acceptance
-  arrived with plan approval: ADR-002 written as `accepted` with its acceptance
-  note; technical design §§1 and 13; context, README, user's guide,
+  arrived with plan approval: ADR 0002 written as `accepted` with its
+  acceptance note; technical design §§1 and 13; context, README, user's guide,
   `contracts/cli.txt`, contents, and the ToR sponsor row amended; four roadmap
   edits applied; 1.1.1 and 1.1.2 ticked; `SHA256SUMS` refreshed.
 - [x] (2026-10-15) Gates and CodeRabbit CLI review run through `scrutineer`
   (see `Outcomes & retrospective`).
+- [x] (2026-10-21) Follow-up documentation change: refreshed
+  `docs/documentation-style-guide.md` from the canonical
+  `leynos/agent-helper-scripts` library edition (commit `c2dfbc7`) and adopted
+  its four-digit naming scheme. ADR 0002 moved to
+  `docs/adrs/adr-0002-first-profile-assurance-boundary.md`; ADR 0001 moved to
+  `docs/adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md` (the
+  slug now derives from its title); every inbound link and numeric reference in
+  this plan and in the other documents was updated.
 
 ## Surprises & discoveries
 
@@ -106,7 +114,7 @@ validation code is added.
 - Decision: no acceptance ledger, schema, harness module, digest, or comment
   protocol. Rationale: the user rejected revision 2. Git history, the ADR, the
   roadmap, and code review already supply traceability. (User, 2026-10-15.)
-- Decision: ratification is a conversation note recorded in ADR-002 by the
+- Decision: ratification is a conversation note recorded in ADR 0002 by the
   agent, as with earlier decisions. (User, 2026-10-15.)
 - Decision: the prerequisites table lives in technical design §13, replacing
   the "Open gates" sentence. Each row links to the roadmap task that tracks its
@@ -114,14 +122,14 @@ validation code is added.
   the open gates; the roadmap remains the state record.
 - Decision: no JSON contract changes. A machine-readable provenance assumption
   belongs with result reporting (roadmap 4.2.1), which must render the
-  assurance boundary. ADR-002 records that obligation.
+  assurance boundary. ADR 0002 records that obligation.
 - Decision: classify prerequisites as E0 needs or public-release needs, and
   amend four roadmap entries accordingly (see `E0 scrutiny`). Approved with the
   plan on 2026-10-15.
-- Decision (hosted review, 2026-10-15): recorded in ADR-002 that `leynos`
+- Decision (hosted review, 2026-10-15): recorded in ADR 0002 that `leynos`
   holds both the sponsor and technical-reviewer responsibilities, so the one
   acceptance satisfies roadmap 1.1.1's "sponsor and reviewer" criterion and
-  closes ToR OQ2; ADR-002's decision owners now name both roles. Expanded the
+  closes ToR OQ2; ADR 0002's decision owners now name both roles. Expanded the
   IR, AST, and OPA acronyms; made the 4.2.1 obligation explicit that the result
   contract must be extended; extended ToR OQ3 to the action attribute;
   corrected the §13 admission and axiom-audit rows to match roadmap 2.3.3's
@@ -134,13 +142,13 @@ validation code is added.
   (1.2.2) still gates E0 semantics and supervisor work through 2.1.1; only the
   axiom-audit spike (1.2.3) and the sandbox decision (1.2.4) stopped gating
   them. The approved dependency graph is unchanged.
-- Decision: ADR-002 follows the approved outline. Three small additions,
+- Decision: ADR 0002 follows the approved outline. Three small additions,
   reported to the user: boundary 3 states that admission is performed by the
   frontend, that `check` establishes admission only, and that admission is not
   proved (from the four-claim rule); the alternatives carry one sentence of
   rationale each; and the consequences add that release material and user
   documentation quote or link the ADR rather than paraphrasing a stronger
-  claim. The ToR sponsor row now reads "acceptance recorded in ADR-002" rather
+  claim. The ToR sponsor row now reads "acceptance recorded in ADR 0002" rather
   than naming a holder.
 
 ## Outcomes & retrospective
@@ -152,7 +160,7 @@ semantics and supervisor work, the admission spike (1.2.2) still does through
 2.1.1, and the E0 command (2.3.3) still depends on fail-closed admission
 (2.1.2) and axiom acceptance (2.2.4).
 
-ADR-002 records the accepted boundary, technical design §1 repeats the
+ADR 0002 records the accepted boundary, technical design §1 repeats the
 statement word for word, and §13 carries the prerequisites table. The roadmap
 no longer makes E0 semantics work wait for the axiom-audit spike or E0
 supervisor work wait for the sandbox decision, and it moves enforced isolation
@@ -173,9 +181,10 @@ deserved the effort, and the approval machinery did not.
   experiment, resolved when the sponsor accepts or rejects the statement), A3
   (attribute provenance), A5 (frontend can enforce admission), A6 (resource
   envelope), and OQ2–OQ5 and OQ7.
-- `docs/adr-001-repository-bootstrap.md` sets the ADR form (Status, Date, and
-  Decision owners bullets; Context, Decision, Consequences, and Alternatives
-  considered sections) and records the ISC licence.
+- `docs/adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md` sets
+  the ADR form (Status, Date, and Decision owners bullets; Context, Decision,
+  Consequences, and Alternatives considered sections) and records the ISC
+  licence.
 - `docs/context.md`, `docs/users-guide.md`, `README.md`, and
   `contracts/cli.txt` restate parts of the statement.
 
@@ -185,10 +194,10 @@ Skills to load: `execplans`, `arch-decision-records`, and
 ## Conformance basis
 
 Upstream at commit `9a867bd`: ToR draft v0.1 (A2, A3, A5, A6, OQ2–OQ5, OQ7,
-SC8); technical design draft v0.1 (§§1, 2, 6, 10, 12, 13); ADR-001.
+SC8); technical design draft v0.1 (§§1, 2, 6, 10, 12, 13); ADR 0001.
 
 ```plaintext
-ToR A2, A3, OQ2, OQ3 -> TDD §1 -> RM-1.1.1 -> EP-M1/M2 -> ADR-002 (accepted)
+ToR A2, A3, OQ2, OQ3 -> TDD §1 -> RM-1.1.1 -> EP-M1/M2 -> ADR 0002 (accepted)
 TDD §13 gates, ToR OQ4, OQ5, OQ7, SC8 -> RM-1.1.2 -> EP-M1 -> TDD §13 table
 ```
 
@@ -197,7 +206,7 @@ TDD §13 gates, ToR OQ4, OQ5, OQ7, SC8 -> RM-1.1.2 -> EP-M1 -> TDD §13 table
 This change is documentation. It introduces no executable logic, invariant, or
 lemma, so Verus, Kani, property tests, and new unit or behavioural tests are
 not warranted. The technical obligations that matter (V1–V10 in technical
-design §10) are unchanged. ADR-002 names them as unproved and leaves them to
+design §10) are unchanged. ADR 0002 names them as unproved and leaves them to
 roadmap phases 2–4.
 
 Checks for this milestone are the existing gates: `make check-fmt`,
@@ -205,17 +214,17 @@ Checks for this milestone are the existing gates: `make check-fmt`,
 that nothing in the design pack moved), and `sha256sum -c SHA256SUMS`. Before
 committing, a reviewer confirms by reading:
 
-- the statement in ADR-002 and technical design §1 is word-for-word identical;
+- the statement in ADR 0002 and technical design §1 is word-for-word identical;
 - every table row names an existing roadmap task; and
 - no edited sentence attributes proof to the frontend, the runtime, or
   attribute handling.
 
-## ADR-002 content
+## ADR 0002 content
 
-Historical: this section is the approved outline. ADR-002 is now accepted; the
+Historical: this section is the approved outline. ADR 0002 is now accepted; the
 delivered record is authoritative, and `Decision log` lists where it differs.
 
-Title: `ADR 002: first-profile assurance boundary`. Status: `Proposed` until
+Title: `ADR 0002: first-profile assurance boundary`. Status: `Proposed` until
 accepted. Decision owners: the project sponsor.
 
 The statement for acceptance, identical in technical design §1:
@@ -296,8 +305,8 @@ roadmap tasks track state:
 | Axiom audit             | maintainer             | Investigated: `#print axioms` on the E0 theorem shows only the foundational set                 | Automated audit in worker acceptance that rejects `sorryAx`, native-computation, and undeclared axioms | 1.2.3, 2.2.4 |
 | Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                             | Enforced offline sandbox with memory and output limits, process-group kill, and private storage        | 1.2.4, 4.3.1 |
 | Resource budgets        | maintainer             | Record what E0 measures                                                                         | Measured limits on an agreed machine                                                                   | 4.3.2        |
-| Assurance statement     | sponsor                | ADR-002 accepted                                                                                | Release wording no stronger than ADR-002                                                               | 1.1.1        |
-| Dependency distribution | sponsor                | Not needed                                                                                      | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR-001)           | 5.2.2        |
+| Assurance statement     | sponsor                | ADR 0002 accepted                                                                               | Release wording no stronger than ADR 0002                                                              | 1.1.1        |
+| Dependency distribution | sponsor                | Not needed                                                                                      | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR 0001)          | 5.2.2        |
 | First user review       | sponsor, policy author | Not needed                                                                                      | SC8 proceed, revise, or stop decision                                                                  | 5.1.1        |
 | Attribute provenance    | application owner      | Outside the theorem                                                                             | Still outside the theorem; integrator documents ingress (OQ3); not a release blocker                   | 5.1.1        |
 | Design transcript (OQ7) | sponsor                | Not needed                                                                                      | Not a blocker; the transcript is already excluded from acceptance evidence (ToR §8.3)                  | none         |
@@ -329,32 +338,32 @@ Historical: both milestones are complete; see `Progress`.
 EP-M1 (one commit, or two if the ADR and the design edits read better
 separately):
 
-1. Write ADR-002 as above, with Status `Proposed`.
+1. Write ADR 0002 as above, with Status `Proposed`.
 2. In technical design §1, replace the statement with the four-sentence text and
-   link ADR-002 from Companions. In §13, replace the "Open gates" sentence with
-   the table.
+   link ADR 0002 from Companions. In §13, replace the "Open gates" sentence
+   with the table.
 3. `docs/context.md`: make the closing provenance sentence name the subject,
    resource, and action attributes.
 4. `README.md` (lines 30–33) and `docs/users-guide.md`: add the provenance
-   clause and link ADR-002. In the user's guide and `contracts/cli.txt`, replace
-   `model_proved + trusted_frontend + tested_agreement` with "outcome
+   clause and link ADR 0002. In the user's guide and `contracts/cli.txt`,
+   replace `model_proved + trusted_frontend + tested_agreement` with "outcome
    `model_proved` with assurance `kernel_checked`, `trusted_frontend`, and
    `tested_agreement`".
-5. `docs/contents.md`: list ADR-002.
+5. `docs/contents.md`: list ADR 0002.
 6. Refresh the `SHA256SUMS` lines for the covered files edited (`README.md`,
    `contracts/cli.txt`, `docs/context.md`, `docs/technical-design.md`, and
    `docs/terms-of-reference.md`).
-7. Run the gates; push; ask the user to accept or reject ADR-002 and the
+7. Run the gates; push; ask the user to accept or reject ADR 0002 and the
    roadmap edits.
 
 EP-M2, after the user's answer:
 
-1. Add the acceptance note to ADR-002 and set Status to `Accepted` or
+1. Add the acceptance note to ADR 0002 and set Status to `Accepted` or
    `Rejected`.
 2. Apply the approved roadmap edits; tick 1.1.1 and 1.1.2. On rejection, leave
    1.1.1 unticked with a one-line note and wait for a revise-or-stop direction.
 3. Update the ToR §4 Sponsor row's "individual authority not assigned" to point
-   at ADR-002.
+   at ADR 0002.
 4. Run the gates, update this plan's living sections, and set Status to
    `COMPLETE`.
 
@@ -375,9 +384,9 @@ git status --porcelain                                  # clean after commit
 
 ## Validation and acceptance
 
-Done when ADR-002 exists with the statement and six boundary paragraphs; the
+Done when ADR 0002 exists with the statement and six boundary paragraphs; the
 technical design §1 statement is identical; §13 carries the table; the user's
-acceptance (or rejection) is noted in ADR-002; approved roadmap edits are
+acceptance (or rejection) is noted in ADR 0002; approved roadmap edits are
 applied; and every command above passes.
 
 ## Idempotence and recovery
@@ -398,9 +407,13 @@ None added or changed.
 - Revision 3 (2026-10-15): the user rejected revision 2 as substantially
   over-engineered. Removed the ledger, schema, harness module, controls,
   digests, comment protocol, staged pull requests, and role ceremonies.
-  Retained and sharpened the assurance boundaries in ADR-002, including the
+  Retained and sharpened the assurance boundaries in ADR 0002, including the
   trusted Lean atom semantics and three open technical questions. Replaced gate
   machinery with a §13 table that separates E0 needs from public-release needs,
   and proposed four roadmap dependency edits so that E0 investigates admission
   and axiom auditing rather than waiting for them. The remaining work is one
   ADR and small documentation amendments.
+- Revision 4 (2026-10-21): documentation-only follow-up after completion. The
+  shared style guide was refreshed from its canonical library edition, so the
+  ADR paths and numbers moved to `docs/adrs/adr-nnnn-title-slug.md`. No
+  assurance statement, roadmap task, contract, or gate changed.

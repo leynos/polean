@@ -9,8 +9,8 @@ verification workflow for a closed Rego profile.
 
 - [Terms of reference](terms-of-reference.md)
 - [Vocabulary](context.md)
-- [Bootstrap ADR](adr-001-repository-bootstrap.md)
-- [Assurance boundary ADR](adr-002-first-profile-assurance-boundary.md)
+- [ADR 0001](adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md)
+- [ADR 0002](adrs/adr-0002-first-profile-assurance-boundary.md)
 - [Contracts](../contracts/profile.json)
 - [Draft-pack validation](../validation/README.md)
 
@@ -29,7 +29,7 @@ solver, arbitrary theorem synthesis, a general Rego semantics, and an
 application platform while preserving a meaningful universal model claim.
 
 The first public assurance statement, accepted in
-[ADR-002](adr-002-first-profile-assurance-boundary.md), is:
+[ADR 0002](adrs/adr-0002-first-profile-assurance-boundary.md), is:
 
 > The admitted policy model satisfies the six registered tenant-write
 > requirements for every valid request. Lean checked the model evidence. The
@@ -39,7 +39,7 @@ The first public assurance statement, accepted in
 > does not authenticate them, establish their provenance, or certify how an
 > application enforces the decision.
 
-ADR-002 states separately what the proof trusts, what the frontend assumes,
+ADR 0002 states separately what the proof trusts, what the frontend assumes,
 what differential tests establish, and what lies outside the theorem.
 
 An unqualified statement that Polean has verified production Rego execution is
@@ -614,8 +614,8 @@ weaken a prerequisite when a spike fails.
 | Axiom audit             | maintainer             | 1.2.3 investigates the audit interface; 2.2.4 accepts the E0 theorem only with the foundational axioms, rejecting `sorryAx` and native-computation axioms | The same audit applied by `verify` to untrusted evidence                                        | 1.2.3, 2.2.4, 4.1.3 |
 | Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                                                                                       | Enforced offline sandbox with memory and output limits, process-group kill, and private storage | 1.2.4, 4.3.1        |
 | Resource budgets        | maintainer             | Not needed; measurement is E2 evidence                                                                                                                    | Measured limits on an agreed machine                                                            | 4.3.2               |
-| Assurance statement     | sponsor                | ADR-002 accepted                                                                                                                                          | Release wording no stronger than ADR-002                                                        | 1.1.1               |
-| Dependency distribution | sponsor                | Not needed                                                                                                                                                | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR-001)    | 5.2.2               |
+| Assurance statement     | sponsor                | ADR 0002 accepted                                                                                                                                         | Release wording no stronger than ADR 0002                                                       | 1.1.1               |
+| Dependency distribution | sponsor                | Not needed                                                                                                                                                | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR 0001)   | 5.2.2               |
 | First user review       | sponsor, policy author | Not needed                                                                                                                                                | SC8 proceed, revise, or stop decision                                                           | 5.1.1               |
 | Attribute provenance    | application owner      | Outside the theorem                                                                                                                                       | Still outside the theorem; integrator documents ingress (OQ3); not a release blocker            | 5.1.1               |
 | Design transcript (OQ7) | sponsor                | Not needed                                                                                                                                                | Not a blocker; the transcript is already excluded from acceptance evidence (ToR §8.3)           | none                |
