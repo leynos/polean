@@ -242,6 +242,12 @@ The documentation added here states each of these limits explicitly.
   `24f3874` and returned eight unique findings, seven repaired and one
   dispositioned as contradicting the plan's required `=` pins. Recorded in
   Surprises and Artefacts.
+- [x] (2026-10-21) Hosted delivery. Both hosted assessments were answered and
+  their findings reconciled; the formal review 5604162108 was repaired and
+  reconciled on `508151a`; the reconciliation and its hosted runs were recorded
+  in `4a7e2e9` and `a43c76e`; and CodeRabbit approved `a43c76e` in review
+  5604419148. Every hosted run observed on the branch concluded `success`.
+  Merge has not been performed: it awaits explicit user authority.
 
 ## Surprises & discoveries
 
@@ -703,6 +709,12 @@ about a Polean policy, any source-to-model correspondence, any runtime
 conformance claim, or any statement about a platform other than
 `x86_64-unknown-linux-gnu`. ADR-003 records the boundary; the smoke tests state
 it in their own comments.
+
+Delivery state at the close of implementation: the branch is published, every
+hosted run observed on it concluded `success`, and CodeRabbit approved
+`a43c76e` in review 5604419148 after both pre-readiness assessments and the
+formal review's findings were reconciled. Approval is not a merge. The merge
+remains unperformed, and awaits the user's explicit authority.
 
 Lessons worth carrying forward:
 
