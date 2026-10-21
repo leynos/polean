@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 2)
+Status: IN PROGRESS (revision 2)
 
 Roadmap item: [1.2.1](../roadmap.md). Branch:
 `1-2-1-pin-a-tested-compatibility-tuple`.
@@ -14,9 +14,9 @@ Roadmap item: [1.2.1](../roadmap.md). Branch:
 
 Every later Polean task depends on four external tools behaving as the design
 assumes. Regorus is the trusted frontend, Lean checks the model, OPA is the
-independent source oracle, and Rust hosts the orchestrator. Today none of them
-is pinned or exercised. The technical design (§11) and ADR-001 both leave the
-tuple to experiment E0.
+independent source oracle, and Rust hosts the orchestrator. Before this task,
+none of them was pinned or exercised. The technical design (§11) and ADR-001
+both left the tuple to experiment E0.
 
 This work pins one tuple and shows that it works on Linux x86-64. A contributor
 runs `make toolchain-smoke`. It fetches the Lean release archive and the OPA
@@ -168,9 +168,32 @@ The documentation added here states each of these limits explicitly.
   supply chain, Lean, Rust and Regorus, and assurance boundary with
   alternatives. Two reviewers ran scratch builds and probes. The findings were
   filtered for proportionality and folded into revision 2.
-- [ ] Plan approved by the user.
-- [ ] EP-M1: Regorus pinned. In-process parse, snapshot, feature, and decision
-  tests green.
+- [x] Plan approved by the user.
+- [x] (2026-10-21) EP-M1 Red. `tests/toolchain/{main,support,regorus,bdd}.rs`
+  and `tests/features/regorus_baseline.feature` written;
+  `cargo test --test toolchain` failed with
+  `error[E0432]: unresolved import 'regorus'` in both `bdd.rs` and
+  `regorus.rs`, as the plan requires.
+- [x] (2026-10-21) EP-M1 Green. Regorus 0.12.0 pinned, tests green, snapshot
+  reviewed and accepted, then 0.13.0 pinned; the accepted snapshot is
+  unchanged, and all eight tests pass on 0.13.0.
+- [x] (2026-10-21) EP-M1 gates, first run: `make typecheck`, `make test`,
+  `make markdownlint`, and `make audit` passed; `make check-fmt` failed on
+  ExecPlan table reflow and `make lint` failed on seven Clippy diagnostics in
+  `tests/toolchain/regorus.rs`.
+- [x] (2026-10-21) EP-M1 repair: `make fmt` reflowed the tables.
+  `regorus.rs` gained a `Result`-returning `expect_equal` helper (the
+  `panic_in_result_fn` requirement), the structural checks were split into
+  small functions (`cognitive_complexity`, `too_many_lines`), and shadowed
+  bindings were renamed.
+- [x] (2026-10-21) EP-M1 milestone gates, second run: `make check-fmt`,
+  `make typecheck`, `make lint`, and `make test` all passed sequentially under
+  one scrutineer run (2 stub + 8 toolchain + 1 doctest).
+- [x] (2026-10-21) EP-M1 milestone CLI review: `coderabbit review --agent`
+  completed over the branch against `main`, reviewing `Cargo.toml`,
+  `Cargo.lock`, and the ExecPlan. One low-severity finding: `serialisation`
+  should be `serialization` under en-GB-oxendict. Fixed in the same file; the
+  review reported no other concern.
 - [ ] EP-M2: pin record and digest-checked provisioning script with pytest
   tests.
 - [ ] EP-M3: Lean smoke package and provisioned OPA and Lean smoke tests.
@@ -180,6 +203,41 @@ The documentation added here states each of these limits explicitly.
 
 ## Surprises & discoveries
 
+- Observation: the O3 failure point is `eval_rule`, not `add_policy`.
+  `add_policy` accepts a source that calls a built-in from the disabled `regex`
+  feature group; the "could not find function regex.match" error is raised at
+  evaluation.
+  - Evidence: a scratch probe against 0.13.0 and the O3 test, which evaluates
+    and asserts only `is_err()` on the combined result.
+  - Impact: none for the test, which already combines the two steps and never
+    asserts the message. A runtime that fails closed at evaluation is enough
+    for O3, and the next consumer must not expect `add_policy` to reject such a
+    policy.
+- Observation: the deny-all mutation parses to a module whose only rule is the
+  default, so O5's non-vacuity check discriminates on rule kind rather than on
+  module count.
+  - Evidence: `deny_all_ast_has_only_a_default_rule` and the accepted snapshot
+    for the baseline, which shows `[Default, Spec, Spec]` and statement counts
+    `[3, 4]`.
+  - Impact: none; recorded so 1.2.2 can rely on the shape.
+- Observation: Regorus 0.13.0's AST JSON serialization is byte-identical to
+  0.12.0's for the baseline source. The snapshot accepted under 0.12.0 passed
+  unchanged after switching the pin to 0.13.0.
+  - Evidence: the `=0.13.0` test run in
+    `/tmp/green13-test-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
+  - Impact: supports the Decision log's choice of 0.13.0; the AST is not a
+    reason to prefer 0.12.0.
+- Observation: `rstest` 0.27.0's fixture expansion wraps a single-expression
+  body in braces, which `unused_braces` rejects under this repository's lint
+  policy. The upstream remedy is a helper attribute macro that is not exported
+  by the published crate, and an `#[expect]` on the fixture item is reported as
+  unfulfilled; a module-scoped `#![expect(unused_braces, reason = ...)]` is the
+  form that holds.
+  - Evidence: three `cargo test` runs in `/tmp/green12d-…out`; the fixture body
+    is deliberately written multi-line as well.
+  - Impact: `tests/toolchain/bdd.rs` carries one module-scoped expectation. If
+    a later `rstest` stops adding the braces, the expectation warns rather than
+    silently claiming a lint it no longer suppresses.
 - Observation: Regorus 0.13.0 was released 2026-10-14. Its feature table
   matches 0.12.0's: the default is `full-opa`, `arc`, and `rvm`, and `ast` is
   opt-in. The licence is `MIT AND Apache-2.0 AND BSD-3-Clause`.
@@ -240,6 +298,13 @@ The documentation added here states each of these limits explicitly.
   neither (`"immutable": false`; the attestations API returns 404). Both pinned
   digests match the GitHub asset API.
   - Impact: ADR-003 records the provenance of each pin separately.
+- Observation: Python 3.14's `compression.zstd.ZstdCompressor().compress()`
+  returned zero bytes on this host, while the module-level
+  `compression.zstd.compress(data)` wrote a frame that `tarfile` in `r:zst`
+  mode reads. The script uses the module-level function.
+  - Evidence: a scratch probe during EP-M2.
+  - Impact: a future refactor to the class API would produce an empty
+    extraction rather than an error, so the archive test is what catches it.
 
 ## Decision log
 
@@ -322,13 +387,14 @@ Not started.
 Polean is a design scaffold.
 
 - `src/lib.rs` exports a status string, and `tests/stub.rs` checks it.
-- `Cargo.toml` has no dependencies and a strict lint set. The denied lints
-  include `unwrap_used`, `expect_used` outside test functions, `print_*`,
-  `indexing_slicing`, `allow_attributes`, `panic_in_result_fn`, and
-  `str_to_string`. Docs and assertion messages are mandatory.
+- At the start of this work, `Cargo.toml` had no dependencies and a strict
+  lint set. The denied lints include `unwrap_used`, `expect_used` outside test
+  functions, `print_*`, `indexing_slicing`, `allow_attributes`,
+  `panic_in_result_fn`, and `str_to_string`. Docs and assertion messages are
+  mandatory.
 - `clippy.toml` bans `std::env::var`.
-- `lean/` holds only a README. It currently forbids Lake configuration, and
-  this task reverses that for repository-owned configuration.
+- At the start, `lean/` held only a README, which forbade Lake configuration.
+  This task reverses that for repository-owned configuration.
 - Python under `validation/` checks design fixtures as a separate lane.
 - `SHA256SUMS` is a manually maintained manifest. It covers `README.md`,
   `contracts/`, `docs/context.md`, `docs/technical-design.md`,
@@ -814,14 +880,40 @@ always safe. Each milestone is one revertable commit, or a small series of them.
 
 ## Artefacts and notes
 
-Fill in during implementation:
+- `cargo tree -e features -i regorus`, 2026-10-21, Regorus 0.13.0:
 
-- `cargo tree -e features -i regorus` output.
-- `make audit` result.
-- `gh release verify-asset` output.
-- Red-stage transcripts.
-- O6 negative-control transcripts.
-- The O3 failure point.
+  ```plaintext
+  regorus v0.13.0
+  ├── regorus feature "ast"
+  │   [dev-dependencies]
+  │   └── polean v0.1.0 (...)
+  │       └── polean feature "default" (command-line)
+  ├── regorus feature "msvc_spectre_libs"
+  │   └── regorus feature "std"
+  │       [dev-dependencies]
+  │       └── polean v0.1.0 (...) (*)
+  ├── regorus feature "rand"
+  │   └── regorus feature "std" (*)
+  └── regorus feature "std" (*)
+  ```
+
+  The requested set is `["ast", "std"]`; the resolved set is
+  `["ast", "msvc_spectre_libs", "rand", "std"]`, because `std` enables the
+  other two. `full-opa` and `arc` are absent, which is what O3 asserts
+  behaviourally.
+
+- O3 failure point: `eval_rule`, not `add_policy`. See Surprises.
+- EP-M1 Red transcript:
+  `/tmp/red-test-polean-1-2-1-pin-a-tested-compatibility-tuple.out`
+  (`error[E0432]: unresolved import 'regorus'`).
+- EP-M1 Green transcript on 0.13.0:
+  `/tmp/green13-test-polean-1-2-1-pin-a-tested-compatibility-tuple.out` (8
+  passed). The snapshot accepted under 0.12.0 is unchanged.
+- Accepted snapshot:
+  `tests/toolchain/snapshots/toolchain__regorus__baseline_ast_json.snap`.
+
+Pending:
+
 - The `toolchain` workflow run URL.
 
 ## Interfaces and dependencies
