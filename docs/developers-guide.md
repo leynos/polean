@@ -65,6 +65,13 @@ provisioning. The first run downloads 628 MiB; later runs verify whatever is
 already installed and use no network. `.polean/tools/` is untracked, and
 `rm -rf .polean/tools` is always safe.
 
+`make test` also observes the pinned Regorus, because that needs no
+provisioning: it parses the baseline source, snapshots the AST JSON, and
+evaluates four requests. `make toolchain-smoke` adds the provisioned OPA and
+Lean observations. OPA agreeing with Regorus on four requests is not
+conformance evidence; see the assurance boundary in
+[the technical design](technical-design.md).
+
 `make test-scripts` and `make toolchain-smoke` need the Python 3.14 interpreter
 described above. The `toolchain` workflow runs both on every pull request that
 touches a pin, the script, the Lean package, the smoke tests, the example

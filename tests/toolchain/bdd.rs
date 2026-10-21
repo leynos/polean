@@ -14,19 +14,32 @@
 //! macro-driven mutable world on the pinned nightly, so every step borrows the
 //! state immutably and fills one slot.
 
-// `rstest`'s fixture expansion wraps a single-expression body in braces, which
-// `unused_braces` rejects. Upstream attach the matching expectation from a
-// helper macro that is not published for downstream users, and an expectation
-// written on the fixture item itself is reported as unfulfilled because the
-// lint arises in a separate generated item. A module-scoped expectation covers
-// the expansion and still warns if a future release stops emitting the braces.
-#![expect(
-    unused_braces,
-    reason = "rstest fixture expansion wraps a single-expression body in braces"
-)]
+/// The per-scenario state fixture.
+///
+/// `rstest`'s fixture expansion wraps a single-expression body in braces, which
+/// `unused_braces` rejects. Upstream attach the matching expectation from a
+/// helper macro that is not published for downstream users, and an expectation
+/// written on the fixture item itself is reported as unfulfilled because the
+/// lint arises in a separate generated item. The expectation is scoped to this
+/// module so it covers only the generation it is about, and still warns if a
+/// future release stops emitting the braces.
+mod fixture {
+    #![expect(
+        unused_braces,
+        reason = "rstest fixture expansion wraps a single-expression body in braces"
+    )]
 
+    use rstest::fixture;
+
+    use super::RegorusState;
+
+    /// The per-scenario state, built empty for each generated test.
+    #[fixture]
+    pub fn state() -> RegorusState { RegorusState::default() }
+}
+
+pub use fixture::state;
 use regorus::{Engine, Value};
-use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 
@@ -61,10 +74,6 @@ struct RegorusState {
     /// The decision produced by the most recent evaluation.
     decision: Slot<Value>,
 }
-
-/// The per-scenario state, built empty for each generated test.
-#[fixture]
-fn state() -> RegorusState { RegorusState::default() }
 
 /// Load the baseline source with the profile's runtime options.
 #[given(

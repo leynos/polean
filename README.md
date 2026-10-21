@@ -111,11 +111,10 @@ model obligations `abstraction_preserves`, `check_sound`, and `witness_sound`
 remain unproved design targets; a passing property run is sampling, and it does
 not upgrade the explicitly trusted source frontend to a checked translation.
 
-Separately, `make test` observes the pinned Regorus: it parses the baseline,
-snapshots the AST JSON, and evaluates four requests. `make toolchain-smoke`
-adds provisioned OPA and Lean observations. Those are toolchain smoke checks
-and runtime observations, not proofs, and OPA agreeing with Regorus on four
-requests is not conformance evidence.
+The toolchain observations are smoke checks and runtime observations, not
+proofs: Regorus agreeing with OPA on four requests is not conformance evidence.
+The [developer guide](docs/developers-guide.md) describes what each target
+observes and what a contributor needs to run it.
 
 The Rust scaffold gates are:
 
@@ -126,11 +125,6 @@ make typecheck
 make lint
 make test
 ```
-
-Two further targets cover the toolchain. `make test-scripts` tests the
-provisioning script, and `make toolchain-smoke` provisions the pinned OPA and
-Lean artefacts and then runs the ignored smoke tests. Both need Python 3.14 with
-`compression.zstd`; the first provisioning run also needs network access.
 
 ## Repository status
 

@@ -23,6 +23,9 @@ already exist.
   scaffold elements, and deliberate deferrals.
 - [Toolchain tuple decision][adr-0003]: the pinned Rust, Regorus, Lean, and OPA
   tuple, its provenance, and the remaining gaps.
+- [Toolchain tuple ExecPlan](execplans/1-2-1-pin-a-tested-compatibility-tuple.md):
+  the work that pins the tuple, proves the provisioning path, and records its
+  acceptance evidence.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
   and explicit omissions.
 

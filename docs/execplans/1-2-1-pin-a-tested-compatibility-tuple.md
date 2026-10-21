@@ -392,7 +392,7 @@ The documentation added here states each of these limits explicitly.
   directory, so the member vanished rather than being refused. The second CLI
   pass found this.
   - Evidence: a probe of `PurePosixPath(...).parts` and the new
-    `dot-dot-inside-the-root` parametrisation of
+    `dot-dot-inside-the-root` parametrization of
     `test_install_refuses_an_escaping_member`. Without the `..` check that case
     installs successfully instead of raising.
   - Impact: `_check_archive` now rejects any `..` component and any link whose
@@ -412,6 +412,43 @@ The documentation added here states each of these limits explicitly.
     contains no hard links, so this cannot regress on the artefact the
     repository actually provisions; it matters for the general containment
     claim.
+- Observation: the second milestone CLI review over `efcdc91` returned nine
+  unique findings, none above `minor`, and none a security or correctness
+  defect in the pinned path. Six were actioned.
+  - `main` caught only `ProvisionError`, so `URLError` and `HTTPError` — both
+    `OSError` subclasses — escaped as a traceback on an unreachable network, a
+    full disk, or an unwritable directory. It now catches `OSError` too, with a
+    test that fails without the change. `main` takes the pin path, tools
+    directory, and fetcher as defaults so the test injects them rather than
+    patching, consistent with the rest of the script.
+  - Two en-GB-oxendict spellings (`neutralized`, `parametrization`), both
+    introduced by the previous commit.
+  - `.github/workflows/toolchain.yml` now has a `concurrency` group that
+    cancels a superseded pull request run but never a `main` push. Two
+    concurrent runs would each attempt a 628 MiB provisioning against one
+    cache key.
+  - `tests/toolchain/bdd.rs`'s module-wide `#![expect(unused_braces)]` is now
+    scoped to a private `fixture` submodule that re-exports `state`. Verified
+    load-bearing: rewriting the fixture body multi-line makes the expectation
+    report itself unfulfilled.
+- Observation: the root README's contributor detail was trimmed to a signpost,
+  with the detail relocated into the developer guide rather than deleted, and
+  the ExecPlan added to `docs/contents.md`, which listed neither ExecPlan even
+  though ADR-003 links to this one.
+- Observation: two further findings were judged unwarranted and left alone.
+  - NumPy-style `Parameters`/`Returns`/`Raises` sections on the
+    `provision_tools.py` public functions. No Python in this repository uses
+    them (`validation/` has none), and the script's existing prose docstrings
+    state the same obligations without a new convention. Introducing the style
+    for one file would make the repository less consistent, not more.
+  - The `docs/execplans/…` Stage A digest repetition. It is the plan's
+    pre-execution observation record: a historical statement of what was
+    observed on 2026-10-17 and what would trigger the Toolchain tolerance.
+    Rewriting it to point at `toolchain-pins.json` would destroy the record of
+    what was checked before the pin existed.
+  - A `name:` on the `toolchain-smoke` job. `ci.yml` and `design.yml` name
+    neither of their jobs, so adding one here alone is inconsistent, and the
+    job identifier already renders in the checks list.
 
 ## Decision log
 
@@ -949,8 +986,12 @@ Stage E, EP-M4, records:
     helpers, a committed and reviewed snapshot, and ignored provisioned tests.
 - Add `make test-scripts` and `make toolchain-smoke` to the gate list in
   `AGENTS.md`.
-- Refresh `SHA256SUMS` for the covered files edited, which are the technical
-  design and context.
+- Refresh `SHA256SUMS` for the covered files edited: the technical design,
+  context, and — once the README's toolchain section was trimmed — `README.md`.
+  The manifest covers the root README but not `docs/developers-guide.md`,
+  `docs/repository-layout.md`, ADR-003, or this plan, so editing those needs no
+  refresh. A forgotten refresh is caught by the `sha256sum -c` gate, which is
+  how the README omission surfaced.
 - Mark roadmap 1.2.1 `[x]`, run every gate, and set Status to `COMPLETE`.
 
 ## Milestones and plateaus
@@ -1122,10 +1163,15 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   members; `make tools` re-extracted it successfully with the hardened check;
   `make toolchain-smoke` → 7 passed. The hard-link test was confirmed to fail
   without the base fix.
+- Second milestone CLI review, 2026-10-21, over `efcdc91` (36 files, true merge
+  base `24f3874c`): completed in one attempt, 10 raw findings reducing to 9
+  unique, all `minor` or `trivial`. Log
+  `/tmp/coderabbit-reassess2-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
+  Dispositions in Surprises: six actioned, two rejected with reasons, one (the
+  root README move) actioned together with the `docs/contents.md` entry.
 - Pending:
 
-- The milestone sweep over this repaired candidate, and the resulting
-  `coderabbit review --agent` pass.
+- The milestone sweep over this second repaired candidate.
 - The `toolchain` workflow run URL.
 
 ## Interfaces and dependencies

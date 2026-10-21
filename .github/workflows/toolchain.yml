@@ -34,6 +34,13 @@ name: Toolchain
 permissions:
   contents: read
 
+# A superseded pull request run is cancelled so two 628 MiB provisioning jobs
+# do not compete for the same cache. A push to main is never cancelled: it is
+# the observation of what landed, and runs share a single group there.
+concurrency:
+  group: toolchain-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   toolchain-smoke:
     runs-on: ubuntu-latest
