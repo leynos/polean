@@ -1261,13 +1261,17 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   Its first assessment named the O7 gap; this record's earlier revision had
   treated the version-prefix check as sufficient.
 - Proof-specific assessment, 2026-10-21: **not applicable**, and recorded
-  rather than posted. The tree contains no CrossHair, Kani, Verus, or
-  LemmaScript reference outside `Cargo.lock` and ADR-003, and no proof-bearing
-  code changed. The only Lean theorems are the two `decide` probes in
-  `lean/PoleanSmoke.lean`, whose own module comment states it "states nothing
-  about Polean policies". The technical design's `abstraction_preserves`,
-  `check_sound`, and `witness_sound` obligations remain unproved targets for
-  1.2.2 and 1.2.3.
+  rather than posted. This task introduces no CrossHair, Kani, Verus, or
+  LemmaScript proof artefact, and no proof-bearing code changed. References to
+  those tools elsewhere in the repository are prose only: the Verus crate names
+  in `Cargo.lock` and ADR-003 describe Regorus's resolved dependency graph and
+  its licences, and this record and
+  [1.1](1-1-ratify-assurance-and-release-gates.md) discuss why Verus, Kani, and
+  property tests are not used here. The only Lean theorems are the two `decide`
+  probes in `lean/PoleanSmoke.lean`, whose own module comment states it "states
+  nothing about Polean policies". The technical design's
+  `abstraction_preserves`, `check_sound`, and `witness_sound` obligations
+  remain unproved targets for 1.2.2 and 1.2.3.
 - Hosted runs on `c38370e`, observed 2026-10-21: CI (39647060364), Design
   contracts (39647060407), and Toolchain (39647060569) all completed with
   `success`.
