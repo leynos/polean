@@ -1190,11 +1190,16 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   - [CI run](https://github.com/leynos/polean/actions/runs/39645020530)
   - [Design contracts run](https://github.com/leynos/polean/actions/runs/39645020545)
 
-  Hosted results are not yet known; `pr-babysitting` owns that observation.
-- Pending:
+  All three completed with `success` on `2fd7cc0`. The subsequent `847ac7c`
+  (this record) touches only the ExecPlan, which no workflow path filter
+  matches, so it correctly triggers no run.
+- Final local sweep, 2026-10-21, over `2fd7cc0`: 12 of 12 gates pass, with the
+  three repair commits' changes included. `make markdownlint` initially failed
+  on three bare URLs this record had written; they are now Markdown links and
+  it passes. Logs are `/tmp/final-<gate>-…out`.
 
-- The milestone sweep over the three-commit repair series beginning at
-  `efcdc91`.
+`pr-babysitting` owns hosted CI observation, the two hosted CodeRabbit
+assessments, and the merge.
 
 ## Interfaces and dependencies
 
