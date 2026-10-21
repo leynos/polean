@@ -5,7 +5,7 @@ MDLINT ?= markdownlint-cli2
 CARGO ?= cargo
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties design-boundary audit
+.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts
 
 SHELL := bash
 
@@ -52,6 +52,12 @@ design-boundary: ## Test the harness's orchestration and storage boundaries
 
 audit: ## Audit Rust dependencies for known vulnerabilities
 	$(CARGO) audit
+
+tools: ## Provision the pinned OPA and Lean tools into .polean/tools
+	$(PYTHON) scripts/provision_tools.py
+
+test-scripts: ## Test the provisioning script with pytest
+	$(PYTHON) -m pytest scripts/tests
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

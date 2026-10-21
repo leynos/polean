@@ -14,6 +14,8 @@
     "**/.venv/**",
     "**/node_modules/**",
     "**/target/**",
-    ".uv-cache/**"
+    ".uv-cache/**",
+    "**/.polean/**",
+    "**/.lake/**"
   ]
 }
