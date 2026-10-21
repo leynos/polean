@@ -30,6 +30,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import posixpath
 import re
 import shutil
 import sys
@@ -70,6 +71,11 @@ _TOOL_KEYS = frozenset({"version", "url", "sha256", "size", "kind"})
 _KINDS = {"opa": "binary", "lean": "tar.zst"}
 
 Fetcher = Callable[[str, Path, int], None]
+
+# The one call the default fetcher makes, named so the fetch test can supply a
+# stand-in through the same parameter the install functions already take rather
+# than patching the standard library.
+Opener = Callable[..., Any]
 
 
 class ProvisionError(Exception):
@@ -381,17 +387,52 @@ def _sha256(path: Path) -> str:
 
 
 def _check_archive(path: Path, pin: ToolPin) -> None:
-    """Refuse the archive unless every member is under the pinned root."""
+    """Refuse the archive unless every member stays under the pinned root.
+
+    A leading component equal to the root is not enough. `root/../escape`
+    starts with the root and is neutralised by the `data` filter during
+    extraction, so the member would pass this gate and then disappear into the
+    staging directory rather than being refused. Any `..` component, and any
+    link whose target leaves the root, is therefore rejected here.
+    """
     root = _require_root(pin)
     with tarfile.open(path, mode="r:zst") as archive:
         for member in archive:
             parts = PurePosixPath(member.name).parts
-            if PurePosixPath(member.name).is_absolute() or not parts or parts[0] != root:
-                raise ArchiveEscape(
-                    f"{pin.name}: archive member {member.name!r} is outside "
-                    f"{root!r}; refusing to extract. The archive at {path} is "
-                    "not the pinned layout."
-                )
+            if (
+                PurePosixPath(member.name).is_absolute()
+                or not parts
+                or parts[0] != root
+                or ".." in parts
+            ):
+                raise _escape(pin, member.name, root, path)
+            if member.issym() or member.islnk():
+                _require_link_inside(member, root, pin, path)
+
+
+def _require_link_inside(
+    member: tarfile.TarInfo, root: str, pin: ToolPin, path: Path
+) -> None:
+    """Refuse a link whose target would resolve outside the pinned root."""
+    target = PurePosixPath(member.linkname)
+    # A symbolic link's target is relative to its own directory; a hard link's
+    # name is the target's path from the archive root.
+    if member.issym():
+        base = PurePosixPath(*PurePosixPath(member.name).parts[:-1])
+    else:
+        base = PurePosixPath()
+    resolved = posixpath.normpath((base / target).as_posix())
+    if target.is_absolute() or not (resolved == root or resolved.startswith(f"{root}/")):
+        raise _escape(pin, f"{member.name} -> {member.linkname}", root, path)
+
+
+def _escape(pin: ToolPin, member: str, root: str, path: Path) -> ArchiveEscape:
+    """The one diagnostic for a member that leaves the pinned root."""
+    return ArchiveEscape(
+        f"{pin.name}: archive member {member!r} is outside "
+        f"{root!r}; refusing to extract. The archive at {path} is "
+        "not the pinned layout."
+    )
 
 
 def _extract_archive(path: Path, destination: Path) -> None:
@@ -408,12 +449,23 @@ def fetch_url(url: str, destination: Path, limit: int) -> None:
     for longer than `REQUEST_TIMEOUT_SECONDS` fails the same way rather than
     waiting indefinitely while the tools lock is held.
     """
+    download(url, destination, limit, opener=urllib.request.urlopen)
+
+
+def download(url: str, destination: Path, limit: int, *, opener: Opener) -> None:
+    """`fetch_url` with the HTTP call supplied, so a test can observe it.
+
+    The opener is called as `opener(request, timeout=...)` and must return a
+    readable, context-manageable response. Keeping it a keyword parameter of a
+    real production path is what lets the timeout be tested without replacing
+    anything in the standard library.
+    """
     request = urllib.request.Request(
         url, headers={"User-Agent": "polean-provisioner/1"}
     )
     total = 0
     with (
-        urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response,
+        opener(request, timeout=REQUEST_TIMEOUT_SECONDS) as response,
         destination.open("wb") as handle,
     ):
         while chunk := response.read(CHUNK_SIZE):
