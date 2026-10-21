@@ -401,3 +401,26 @@ def test_load_pins_rejects_a_bad_digest(tmp_path: Path) -> None:
 
     with pytest.raises(provision_tools.PinFileError):
         provision_tools.load_pins(pins_path)
+
+
+def test_main_reports_an_environment_failure_as_a_diagnostic(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unreachable network is a one-line diagnosis, not a traceback.
+
+    `urllib` raises `URLError`, which is an `OSError` and not a
+    `ProvisionError`. The contributor sees the same `provisioning failed:` line
+    and non-zero status as for a refused digest.
+    """
+
+    def offline(url: str, destination: Path, limit: int) -> None:
+        raise OSError("network is unreachable")
+
+    status = provision_tools.main(write_pins(tmp_path), tmp_path / "tools", offline)
+
+    captured = capsys.readouterr()
+    assert status == 1, "an environment failure must exit non-zero"
+    assert "provisioning failed: network is unreachable" in captured.err, (
+        "the failure is reported on stderr as a diagnostic"
+    )
+    assert "Traceback" not in captured.err, "no traceback reaches the contributor"

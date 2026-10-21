@@ -390,7 +390,7 @@ def _check_archive(path: Path, pin: ToolPin) -> None:
     """Refuse the archive unless every member stays under the pinned root.
 
     A leading component equal to the root is not enough. `root/../escape`
-    starts with the root and is neutralised by the `data` filter during
+    starts with the root and is neutralized by the `data` filter during
     extraction, so the member would pass this gate and then disappear into the
     staging directory rather than being refused. Any `..` component, and any
     link whose target leaves the root, is therefore rejected here.
@@ -478,11 +478,22 @@ def download(url: str, destination: Path, limit: int, *, opener: Opener) -> None
             handle.write(chunk)
 
 
-def main() -> int:
-    """Install the pinned tools and print where they are."""
+def main(
+    pins_path: Path = PINS_PATH,
+    tools_dir: Path = TOOLS_DIR,
+    fetcher: Fetcher = fetch_url,
+) -> int:
+    """Install the pinned tools and print where they are.
+
+    A `ProvisionError` is the provisioner's own diagnosis. An `OSError` is the
+    environment failing instead: an unreachable network, a full disk, or a
+    directory the contributor cannot write. Both are reported as one line with
+    exit status 1, because a traceback tells a contributor nothing about which
+    of the two happened or what to try next.
+    """
     try:
-        installed = install_tools(PINS_PATH, TOOLS_DIR, fetch_url)
-    except ProvisionError as error:
+        installed = install_tools(pins_path, tools_dir, fetcher)
+    except (ProvisionError, OSError) as error:
         print(f"provisioning failed: {error}", file=sys.stderr)
         return 1
     print(f"opa:  {installed.opa}")
