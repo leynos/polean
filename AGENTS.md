@@ -52,9 +52,15 @@ make check-fmt
 make typecheck
 make lint
 make test
+make test-scripts
+make toolchain-smoke
 make design-check
 make markdownlint
 ```
+
+`make toolchain-smoke` needs Python 3.14 with `compression.zstd`, and the first
+run needs network access; see the [developer guide](docs/developers-guide.md).
+Run it when a change touches a pin, `scripts/`, `lean/`, or `tests/toolchain/`.
 
 Add regression tests at the boundary where a fault could recur. A new policy
 atom or input distinction requires model semantics, abstraction analysis,

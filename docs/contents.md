@@ -21,6 +21,8 @@ already exist.
   what a passing run proves, trusts, tests, and leaves outside the theorem.
 - [Bootstrap decision](adr-001-repository-bootstrap.md): repository provenance,
   selected Combobulate scaffold elements, and deliberate deferrals.
+- [Toolchain tuple decision](adr-003-pin-the-e0-toolchain-tuple.md): the pinned
+  Rust, Regorus, Lean, and OPA tuple, its provenance, and the remaining gaps.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
   and explicit omissions.
 
