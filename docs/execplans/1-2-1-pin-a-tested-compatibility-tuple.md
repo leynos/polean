@@ -490,6 +490,60 @@ The documentation added here states each of these limits explicitly.
   - A `name:` on the `toolchain-smoke` job. `ci.yml` and `design.yml` name
     neither of their jobs, so adding one here alone is inconsistent, and the
     job identifier already renders in the checks list.
+- Observation: the formal CodeRabbit review
+  ([5604162108](https://github.com/leynos/polean/pull/11#pullrequestreview-5604162108))
+  on `fd992e3` returned `CHANGES_REQUESTED` with five inline comments, while
+  the `CodeRabbit` commit status read `success`. The two are separate signals:
+  the status reports that a review ran, not what it concluded. Each comment was
+  checked against the tree before any change.
+  - Repaired, with the finding restated in this record's own terms:
+    - `scripts/provision_tools.py` — `download` was the only place the
+      `total > limit` guard existed, and no test exercised it. `good_fetcher`
+      raises `DownloadTooLarge` for an oversized payload itself, so deleting
+      the production guard left the suite green. The new test drives the real
+      `download` with an opener that yields one byte past the limit; removing
+      the guard makes it fail.
+    - `scripts/provision_tools.py` — `_is_complete` answered `False` for any
+      `OSError`, so an unreadable `COMPLETE` marker sent `_install_lean` into
+      the repair path, which removes the tree and re-downloads the archive. A
+      marker that cannot be inspected is an environment failure and now
+      propagates; `main` already reports an `OSError` as one line. The new test
+      denies `read_text` on the marker and asserts the install survives and no
+      Lean URL is fetched. Restoring the `except OSError` makes it fail.
+    - `docs/developers-guide.md` — the pin procedure never mentioned
+      `lean/lean-toolchain` or the regenerated `lean/lake-manifest.json`. Both
+      are now numbered steps, and the manifest step says to commit only when
+      the content changed.
+    - `docs/technical-design.md` — Regorus 0.13.0 was released on 2026-10-14,
+      so R3 cannot have been inspected on 2026-10-04. R3 joins R12 and R13 in
+      the exception list, and the `SHA256SUMS` entry was recomputed.
+    - `docs/repository-layout.md` — the install path is
+      `.polean/tools/<name>/<sha256>/`, as `_install_opa` and `_install_lean`
+      both do; the prose omitted the name segment.
+    - This record — `synchronisation` was the only surviving `-ise` spelling
+      this branch introduced, and the new-files inventory omitted
+      `scripts/tests/conftest.py`, `tests/toolchain/engine.rs`, and
+      `tests/toolchain/json.rs`.
+  - Declined, for the reason already recorded above: the NumPy-docstring
+    finding, which repeats the earlier one.
+  - The pre-merge table in the same review's walkthrough edit named the same
+    two code defects under "Testing (Overall)" and "Unit Architecture", plus
+    two warnings. "Developer Documentation" named the incomplete new-files
+    inventory, repaired above. "Testing (Compile-Time / Ui)" asked for the raw
+    AST snapshot to be replaced with a projection; it is declined for the
+    reason already recorded, because O5 requires the raw adapter input and the
+    snapshot is the reviewed artefact.
+  - Deviation from a suggested remedy: "Unit Architecture" proposed a
+    `Result[bool, OSError]` return and propagation through `install_tools`.
+    Letting `OSError` propagate achieves the same observable outcome with no
+    new type, because `main` already catches it and reports one line. A
+    bespoke result type would re-express in-band what Python already carries
+    out of band, and would have to be unwrapped at every call site for a
+    failure the caller cannot handle differently anyway.
+- Note on the reviewer's own suggestion for the guide: it folded the Lean
+  selector and the manifest into step 1's prose. Splitting them into their own
+  numbered steps states the same requirements in an order a contributor
+  follows, so the content was adopted and the suggested shape was not.
 
 ## Decision log
 
@@ -1238,7 +1292,7 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   - Correction: an earlier revision of this record claimed these two commits
     "correctly trigger no run" because they touch only the ExecPlan. That was
     wrong. `ci.yml` and `design.yml` declare no path filter, so they run on
-    every synchronisation; Toolchain's filter is matched by other paths in the
+    every synchronization; Toolchain's filter is matched by other paths in the
     pull request's three-dot diff from the merge base, not by the latest
     commit's alone. The claim had been reasoned from the two commits without
     checking the run list.
@@ -1288,13 +1342,14 @@ New committed files:
 
 - `toolchain-pins.json`
 - `scripts/provision_tools.py`
+- `scripts/tests/conftest.py`
 - `scripts/tests/test_provision_tools.py`
 - `scripts/requirements-test.txt`
 - `lean/lean-toolchain`
 - `lean/lakefile.toml`
 - `lean/lake-manifest.json`
 - `lean/PoleanSmoke.lean`
-- `tests/toolchain/{main,support,regorus,bdd,smoke}.rs`
+- `tests/toolchain/{main,support,engine,json,regorus,bdd,smoke}.rs`
 - `tests/features/regorus_baseline.feature`
 - `tests/toolchain/snapshots/*.snap`
 - `.github/workflows/toolchain.yml`

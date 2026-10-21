@@ -668,9 +668,9 @@ of reference remain the upstream authority for scope. [T1–T3]
 
 ## References
 
-Sources were inspected on 2026-10-04, except R12 and R13, which were inspected
-on 2026-10-21. Moving documentation URLs describe the inspected API, not a
-substitute for release pins.
+Sources were inspected on 2026-10-04, except R3, R12, and R13, which were
+inspected on 2026-10-21. Moving documentation URLs describe the inspected API,
+not a substitute for release pins.
 
 - **R1.**
   [OPA policy language](https://www.openpolicyagent.org/docs/policy-language).

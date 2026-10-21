@@ -105,11 +105,17 @@ of why the tuple is what it is. A pin change is a tuple change:
    `identity`, the complete line `lean --version` must print; the smoke test
    compares that line character for character rather than checking a version
    prefix.
-2. Run `make tools`, which must reject any artefact that does not match the new
+2. For a Lean pin, update `lean/lean-toolchain` so it still selects
+   `leanprover/lean4:v<version>`. The smoke test requires that selection to
+   match the pin exactly, so leaving it behind fails the run.
+3. Run `make tools`, which must reject any artefact that does not match the new
    pin, then `make toolchain-smoke`.
-3. If a Regorus change alters the AST snapshot, review it with
+4. If `lean` or `lake` changed, the pinned Lake regenerates
+   `lean/lake-manifest.json`. Review the diff and commit it when the content
+   changed; a rebuild that produces no content change needs no commit.
+5. If a Regorus change alters the AST snapshot, review it with
    `cargo insta review` and accept only a difference with a documented cause.
-4. Update ADR-003 with the new tuple, its provenance, and the reason, and
+6. Update ADR-003 with the new tuple, its provenance, and the reason, and
    refresh any prose that repeats the version.
 
 Never edit an installed file under `.polean/tools/` to make an observation

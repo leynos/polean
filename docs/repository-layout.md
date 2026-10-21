@@ -53,11 +53,11 @@ package in an isolated job directory instead.
 
 `toolchain-pins.json` is the single authority for the upstream identity of the
 provisioned artefacts; `scripts/provision_tools.py` reads it, verifies each
-download against it, and installs under `.polean/tools/<sha256>/`. Do not
-repeat those digests in prose, where they would become a second authority and
-drift. `tests/toolchain/` observes the same pins at run time. OPA and Lean live
-behind `#[ignore]`, because they need `make tools`; the Regorus observations
-run everywhere.
+download against it, and installs under `.polean/tools/<name>/<sha256>/`. Do
+not repeat those digests in prose, where they would become a second authority
+and drift. `tests/toolchain/` observes the same pins at run time. OPA and Lean
+live behind `#[ignore]`, because they need `make tools`; the Regorus
+observations run everywhere.
 
 The Python validation harness owns design-fixture consistency only. It must not
 claim proof discharge, Rego semantic equivalence, or production runtime
