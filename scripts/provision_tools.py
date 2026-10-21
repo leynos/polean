@@ -113,6 +113,7 @@ class ToolPin:
     size: int
     kind: str
     root: str | None
+    identity: str | None
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,7 @@ def _load_tool(name: str, raw: Any) -> ToolPin:
     """Validate one tool entry from the pin file."""
     if not isinstance(raw, dict):
         raise PinFileError(f"{name}: the pin must be a JSON object")
-    expected = _TOOL_KEYS | ({"root"} if name == "lean" else set())
+    expected = _TOOL_KEYS | ({"root", "identity"} if name == "lean" else set())
     _expect_exact_keys(raw, expected, name)
     version = _require_string(raw["version"], f"{name}.version")
     url = _require_string(raw["url"], f"{name}.url")
@@ -188,12 +189,20 @@ def _load_tool(name: str, raw: Any) -> ToolPin:
     if kind != _KINDS[name]:
         raise PinFileError(f"{name}.kind: expected {_KINDS[name]!r}, found {kind!r}")
     root = None
+    identity = None
     if name == "lean":
         root = _require_string(raw["root"], f"{name}.root")
         if version not in root:
             raise PinFileError(
                 f"{name}.root: {root!r} does not embed the pinned version "
                 f"{version!r}; the archive layout would change silently"
+            )
+        identity = _require_string(raw["identity"], f"{name}.identity")
+        if version not in identity:
+            raise PinFileError(
+                f"{name}.identity: {identity!r} does not embed the pinned "
+                f"version {version!r}; the reported identity would drift from "
+                "the version it is checked against"
             )
     return ToolPin(
         name=name,
@@ -203,6 +212,7 @@ def _load_tool(name: str, raw: Any) -> ToolPin:
         size=size,
         kind=kind,
         root=root,
+        identity=identity,
     )
 
 

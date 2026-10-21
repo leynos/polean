@@ -98,6 +98,7 @@ def lean_pin_for(artefact: bytes, **overrides: object) -> dict[str, object]:
         "size": len(artefact),
         "kind": "tar.zst",
         "root": LEAN_ROOT,
+        "identity": f"Lean (version {LEAN_VERSION}, x86_64-unknown-linux-gnu)",
     }
     pin.update(overrides)
     return pin
@@ -387,6 +388,27 @@ def test_load_pins_rejects_a_root_without_the_version(tmp_path: Path) -> None:
     pins_path = write_pins(
         tmp_path,
         lean=lean_pin_for(lean_archive_bytes(), root="lean-unversioned"),
+    )
+
+    with pytest.raises(provision_tools.PinFileError) as raised:
+        provision_tools.load_pins(pins_path)
+
+    assert LEAN_VERSION in str(raised.value), "the diagnostic names the version"
+
+
+def test_load_pins_rejects_an_identity_without_the_version(tmp_path: Path) -> None:
+    """The reported identity must embed the pinned version.
+
+    The smoke test compares Lean's reported line against this string. An
+    identity naming a different version would make that assertion demand the
+    wrong toolchain, so the pin file refuses it rather than letting the two
+    authorities disagree.
+    """
+    pins_path = write_pins(
+        tmp_path,
+        lean=lean_pin_for(
+            lean_archive_bytes(), identity="Lean (version 4.34.1, x86_64-linux)"
+        ),
     )
 
     with pytest.raises(provision_tools.PinFileError) as raised:

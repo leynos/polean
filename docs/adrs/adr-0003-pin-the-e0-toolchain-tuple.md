@@ -35,8 +35,10 @@ Pin and smoke-test this tuple on `x86_64-unknown-linux-gnu`:
 
 The full digests are in `toolchain-pins.json`, which the provisioning script
 and the tests read, together with the archive's extraction root
-(`lean-4.35.0-linux`). Recording the digests a second time here would create a
-second authority.
+(`lean-4.35.0-linux`) and the complete line `lean --version` must print. The
+smoke test compares that line character for character, because two builds of
+the same version can differ in platform, commit, or build type. Recording the
+digests and the identity a second time here would create a second authority.
 
 ### Why every dev-dependency carries an exact pin
 

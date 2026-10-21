@@ -457,6 +457,25 @@ The documentation added here states each of these limits explicitly.
     docs-only commit on an open pull request still re-runs every unfiltered
     workflow, so a superseded Toolchain run is expected and is cancelled by the
     concurrency group rather than being evidence of a path-filter mistake.
+- Observation: the hosted completeness assessment found that O7 was checked
+  less strictly than it is written. The plan requires `lean --version` to equal
+  the exact recorded string, but the test accepted any line starting
+  `Lean (version 4.35.0,`, which admits a different commit, platform, or build
+  type. The OPA check had the same shape: a substring test accepts
+  `Version: 1.21.20` against a `1.21.2` pin.
+  - Evidence: the assessment reply
+    (`https://github.com/leynos/polean/pull/11#issuecomment-6322631279`), whose
+    finding was re-checked against `tests/toolchain/smoke.rs` before repair.
+    Two negative controls then confirmed the repair is load-bearing: changing
+    one character of the pinned commit, and shortening the OPA version pin,
+    each fail the tightened assertion, while the unmodified pins pass all seven
+    smoke tests.
+  - Impact: the complete Lean identity is now `lean.identity` in
+    `toolchain-pins.json`, so the pin file stays the single authority, and the
+    provisioner rejects an identity that does not embed the pinned version. The
+    OPA and Rego checks compare whole lines. The digest gate always made the
+    practical risk small, as the assessment noted; this closes the acceptance
+    gap rather than an exposure.
 - Observation: three further findings were judged unwarranted and left alone.
   - NumPy-style `Parameters`/`Returns`/`Raises` sections on the
     `provision_tools.py` public functions. No Python in this repository uses
@@ -778,14 +797,20 @@ The obligations follow.
   - Limit: this does not detect axioms in general, `native_decide`, or
     in-file option overrides. That audit is 1.2.3.
 - O7, version identity: the tools report their pinned identities.
-  - `lean --version` equals the exact string recorded in ADR-003, and its
-    version equals the one in `lean/lean-toolchain`:
+  - `lean --version` equals, character for character, the `lean.identity`
+    string in `toolchain-pins.json`:
 
     ```plaintext
     Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)
     ```
 
-  - `opa version` reports `Version: 1.21.2` and `Rego Version: v1`.
+    and `lean/lean-toolchain` selects exactly `leanprover/lean4:v4.35.0`.
+    The identity lives in the pin file rather than in the test, so the pin
+    file stays the single authority; the provisioner rejects an identity that
+    does not embed the pinned version.
+  - `opa version` reports the whole lines `Version: 1.21.2` and
+    `Rego Version: v1`. Whole-line comparison matters: a substring test would
+    accept `Version: 1.21.20` against a `1.21.2` pin.
   - Non-vacuity: the provisioning step re-hashes the installed OPA binary on
     every run, so a replaced binary fails before the version test can pass.
 
@@ -1221,6 +1246,10 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   three repair commits' changes included. `make markdownlint` initially failed
   on three bare URLs this record had written; they are now Markdown links and
   it passes. Logs are `/tmp/final-<gate>-…out`.
+- Hosted assessment repair, 2026-10-21: `make check-fmt`, `typecheck`, `lint`,
+  `test`, `test-scripts` (20 passed), `markdownlint`, and `toolchain-smoke` (7
+  passed) all pass with the tightened O7 assertions. Logs are
+  `/tmp/<gate>-…out` for this branch.
 
 `pr-babysitting` owns hosted CI observation, the two hosted CodeRabbit
 assessments, and the merge.
