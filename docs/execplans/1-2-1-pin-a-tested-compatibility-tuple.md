@@ -194,8 +194,31 @@ The documentation added here states each of these limits explicitly.
   `Cargo.lock`, and the ExecPlan. One low-severity finding: `serialisation`
   should be `serialization` under en-GB-oxendict. Fixed in the same file; the
   review reported no other concern.
-- [ ] EP-M2: pin record and digest-checked provisioning script with pytest
-  tests.
+- [x] (2026-10-21) EP-M2 Red. `scripts/tests/test_provision_tools.py` written
+  against a missing module; `make test-scripts` failed with
+  `ModuleNotFoundError: No module named 'provision_tools'` (1 collection
+  error), as the plan requires.
+- [x] (2026-10-21) EP-M2 Green. `toolchain-pins.json`,
+  `scripts/provision_tools.py` (standard library only), and the `tools` and
+  `test-scripts` targets added. Twelve pytest cases pass, covering O1, O2,
+  pin-file validation, reuse, and the corrupt-cache refetch.
+- [x] (2026-10-21) EP-M2 provisioning evidence. `make tools` installed OPA
+  1.21.2 and Lean 4.35.0 under digest-named directories (3.7 GiB including the
+  retained archive). A second run with `socket.connect` denied succeeded in
+  0.09 s, so a complete install is reused offline. `gh release verify-asset`
+  verified the OPA digest against the v1.21.2 attestation.
+- [x] (2026-10-21) EP-M2 gates, first run: nine of eleven passed
+  (`check-fmt`, `typecheck`, `lint`, `test`, `test-scripts`, `toolchain-smoke`,
+  `audit`, `SHA256SUMS`, `actionlint`). `make markdownlint` failed on 286
+  findings, all inside the gitignored Lean distribution under `.polean/tools/`,
+  and `make design-check` could not start because the scratch interpreter lacked
+  `jsonschema`.
+- [x] (2026-10-21) EP-M2 repair: `.markdownlint-cli2.jsonc` now
+  ignores `**/.polean/**` and `**/.lake/**`, which are generated or provisioned
+  trees; `validation/requirements.txt` was installed into the scratch
+  interpreter. Both gates pass on a direct re-run.
+- [ ] EP-M2 milestone gates, second run, then
+  `coderabbit review --agent`.
 - [ ] EP-M3: Lean smoke package and provisioned OPA and Lean smoke tests.
   `make toolchain-smoke` green. `toolchain` CI workflow added.
 - [ ] EP-M4: ADR-003, design and guide updates, `SHA256SUMS` refresh, and
@@ -298,6 +321,13 @@ The documentation added here states each of these limits explicitly.
   neither (`"immutable": false`; the attestations API returns 404). Both pinned
   digests match the GitHub asset API.
   - Impact: ADR-003 records the provenance of each pin separately.
+- Observation: `cargo audit` reports one allowed warning, not a vulnerability:
+  `basic-toml` 0.1.10 (RUSTSEC-2026-0374, unmaintained), reached through
+  `rstest-bdd` → `i18n-embed` → `i18n-embed-impl` → `i18n-config`. It is a
+  dev-dependency, and no patched `basic-toml` exists.
+  - Evidence: `/tmp/audit-6906cae8-368b-487e-a47f-f2ac511a2316-…out`.
+  - Impact: recorded rather than suppressed; 5.2.2 owns the dependency
+    disposition for non-dev crates.
 - Observation: Python 3.14's `compression.zstd.ZstdCompressor().compress()`
   returned zero bytes on this host, while the module-level
   `compression.zstd.compress(data)` wrote a frame that `tarfile` in `r:zst`
@@ -911,8 +941,24 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   passed). The snapshot accepted under 0.12.0 is unchanged.
 - Accepted snapshot:
   `tests/toolchain/snapshots/toolchain__regorus__baseline_ast_json.snap`.
+- `make audit`, 2026-10-21: 226 crates scanned; one allowed warning
+  (`basic-toml` unmaintained, dev-only). See Surprises.
+- `gh release verify-asset v1.21.2 …`, 2026-10-21:
 
-Pending:
+  ```plaintext
+  Calculated digest …: sha256:830ab11f…77527
+  Resolved tag v1.21.2 to sha1:3f7474e6b3c631821d8aac25ca444f7e75a56483
+  Loaded attestation from GitHub API
+
+  ✓ Verification succeeded! … is present in release v1.21.2
+  ```
+
+- EP-M2 Red transcript:
+  `/tmp/red-test-scripts-polean-1-2-1-pin-a-tested-compatibility-tuple.out`
+  (`ModuleNotFoundError: No module named 'provision_tools'`).
+- EP-M2 Green: `make test-scripts` → 12 passed.
+- EP-M2 provisioning: `make tools` printed both digest-named paths; the
+  offline re-run succeeded in 0.09 s with `socket.connect` denied.
 
 - The `toolchain` workflow run URL.
 
