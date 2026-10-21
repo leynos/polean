@@ -29,3 +29,6 @@ __pycache__/
 # Generated evidence or proof-job scratch directories
 evidence/
 .polean/
+
+# Lake build output for the repository-owned smoke package
+.lake/
