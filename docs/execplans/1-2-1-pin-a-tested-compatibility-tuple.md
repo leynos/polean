@@ -577,6 +577,13 @@ The documentation added here states each of these limits explicitly.
   `success`. Sourcery skipped the pull request for exceeding its diff-size
   limit, and the Codex connector reported its usage limit; neither is a
   required check.
+- Hosted runs on `4a7e2e9`, observed 2026-10-21: CI (39652830678), Toolchain
+  (39652830159), and Design contracts (39652830180) all completed with
+  `success`. That commit records this same reconciliation; it changed no
+  source, test, workflow, or pin, which is why the three checks were
+  re-observed rather than assumed to carry over from `508151a`. The commit that
+  adds this paragraph starts a further set of runs; those are recorded in the
+  delivery ledger, because writing them back here would start another cycle.
 
 ## Decision log
 
