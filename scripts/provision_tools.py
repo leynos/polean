@@ -59,6 +59,11 @@ EXPECTED_PLATFORM = "x86_64-unknown-linux-gnu"
 COMPLETE_MARKER = "COMPLETE"
 CHUNK_SIZE = 1024 * 1024
 
+# A socket that goes quiet for this long is treated as a failed download. The
+# whole run holds the tools lock, so an unbounded read would block every later
+# invocation, and in CI it would hold the job until its timeout.
+REQUEST_TIMEOUT_SECONDS = 60
+
 _DIGEST = re.compile(r"\A[0-9a-f]{64}\Z")
 _TOP_LEVEL_KEYS = frozenset({"format", "platform", "opa", "lean"})
 _TOOL_KEYS = frozenset({"version", "url", "sha256", "size", "kind"})
@@ -126,12 +131,9 @@ def load_pins(path: Path) -> Pins:
     """Read and validate the pin file.
 
     The schema is closed: unknown keys are rejected rather than ignored, so a
-    typo cannot leave a security-relevant field unchecked.
-
-    # Errors
-    #
-    # Raises `PinFileError` when the file is unreadable, is not a JSON object,
-    # has an unknown or missing key, or carries a malformed value.
+    typo cannot leave a security-relevant field unchecked. A file that cannot
+    be read as JSON, is not an object, has an unknown or missing key, or
+    carries a malformed value raises `PinFileError`.
     """
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -218,11 +220,9 @@ def _require_string(value: Any, where: str) -> str:
 def install_tools(pins_path: Path, tools_dir: Path, fetcher: Fetcher) -> Installed:
     """Install every pinned tool, reusing a complete install.
 
-    # Errors
-    #
-    # Raises a `ProvisionError` subclass when the pin file is invalid, a
-    # fetched artefact is the wrong size or digest, or an archive member falls
-    # outside the pinned root.
+    A `ProvisionError` subclass is raised when the pin file is invalid, a
+    fetched artefact is the wrong size or digest, or an archive member falls
+    outside the pinned root.
     """
     pins = load_pins(pins_path)
     tools_dir.mkdir(parents=True, exist_ok=True)
@@ -403,16 +403,19 @@ def _extract_archive(path: Path, destination: Path) -> None:
 def fetch_url(url: str, destination: Path, limit: int) -> None:
     """Download `url` to `destination`, abandoning it beyond `limit` bytes.
 
-    # Errors
-    #
-    # Raises `DownloadTooLarge` as soon as the stream exceeds `limit`, and lets
-    # `urllib` errors propagate for a network or HTTP failure.
+    `DownloadTooLarge` is raised as soon as the stream exceeds `limit`, and
+    `urllib` errors propagate for a network or HTTP failure. A read that blocks
+    for longer than `REQUEST_TIMEOUT_SECONDS` fails the same way rather than
+    waiting indefinitely while the tools lock is held.
     """
     request = urllib.request.Request(
         url, headers={"User-Agent": "polean-provisioner/1"}
     )
     total = 0
-    with urllib.request.urlopen(request) as response, destination.open("wb") as handle:
+    with (
+        urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response,
+        destination.open("wb") as handle,
+    ):
         while chunk := response.read(CHUNK_SIZE):
             total += len(chunk)
             if total > limit:

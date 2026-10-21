@@ -18,9 +18,11 @@ technical design rather than racing ahead to a broad Rego interpreter.
   `scripts/requirements-test.txt`, network access for the first provisioning
   run, and about 3.7 GiB of disk under `.polean/tools`.
 
-`make tools` and `make toolchain-smoke` are the only targets that need the 3.14
-interpreter; point them at one with `make toolchain-smoke PYTHON=...`.
-`cargo-insta` is needed only to review a changed Regorus AST snapshot.
+`make tools`, `make test-scripts`, and `make toolchain-smoke` are the only
+targets that need the 3.14 interpreter, because the tests import the script and
+it imports `compression.zstd` at load time. Point them at one with
+`make toolchain-smoke PYTHON=...`. `cargo-insta` is needed only to review a
+changed Regorus AST snapshot.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
 `mdtablefix` 0.6.0 or later and `markdownlint-cli2` to reproduce every
@@ -65,9 +67,10 @@ already installed and use no network. `.polean/tools/` is untracked, and
 
 `make test-scripts` and `make toolchain-smoke` need the Python 3.14 interpreter
 described above. The `toolchain` workflow runs both on every pull request that
-touches a pin, the script, the Lean package, the smoke tests, the manifests, the
-`Makefile`, or the workflow itself, so an unavailable local interpreter does
-not leave the provisioning path unobserved.
+touches a pin, the script, the Lean package, the smoke tests, the example
+policy they evaluate, the manifests, the `Makefile`, or the workflow itself, so
+an unavailable local interpreter does not leave the provisioning path
+unobserved.
 
 `make design-check` may rewrite the committed validation summary and witness
 files after verifying them. Review those changes rather than assuming any
@@ -94,7 +97,7 @@ of why the tuple is what it is. A pin change is a tuple change:
 2. Run `make tools`, which must reject any artefact that does not match the new
    pin, then `make toolchain-smoke`.
 3. If a Regorus change alters the AST snapshot, review it with
-   `cargo insta review` and accept only a difference you can explain.
+   `cargo insta review` and accept only a difference with a documented cause.
 4. Update ADR-003 with the new tuple, its provenance, and the reason, and
    refresh any prose that repeats the version.
 
@@ -203,6 +206,9 @@ The toolchain observations follow the conventions below.
   separate binary per module would link Regorus more than once, and a module
   used by only one target would be reported as dead code under the denied
   `allow` lint.
+- `engine.rs` holds the runtime configuration and the entry point that both the
+  structural observations and the BDD decisions use, so neither can observe a
+  differently configured Regorus. `json.rs` holds the AST accessors.
 - Observations return `Result<(), String>`, and helpers do too, so a failure
   names what was expected, what was found, and which source produced it. Avoid
   panics except where a test's own assertion is the observation.

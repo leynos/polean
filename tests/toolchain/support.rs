@@ -101,12 +101,3 @@ pub const OWNER_READ_REQUEST: &str = r#"{
   },
   "action": "read"
 }"#;
-
-/// Parse JSON text, naming the source when it is malformed.
-///
-/// # Errors
-///
-/// Returns a diagnostic when `text` is not valid JSON.
-pub fn parse_json(text: &str, source: &str) -> Result<serde_json::Value, String> {
-    serde_json::from_str(text).map_err(|error| format!("{source} is not valid JSON: {error}"))
-}

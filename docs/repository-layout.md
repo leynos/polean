@@ -23,7 +23,7 @@ The module split proposed by the technical design is not yet implemented.
 | `docs/contents.md`                | Canonical documentation index.                                                         |
 | `.github/workflows/ci.yml`        | Hosted Rust, Markdown, and basic repository gate.                                      |
 | `.github/workflows/design.yml`    | Independent design-contract validation lane.                                           |
-| `.github/workflows/toolchain.yml` | Path-filtered provisioning and smoke run for the pinned tuple.                         |
+| `.github/workflows/toolchain.yml` | Path-filtered provisioning and smoke run for the pinned tuple and its example policy.  |
 | `.github/dependabot.yml`          | Cargo and GitHub Actions dependency updates.                                           |
 | `Cargo.toml`, `Cargo.lock`        | Package metadata, lint policy, and dependency lockfile.                                |
 | `rust-toolchain.toml`             | Pinned Rust toolchain and required components.                                         |

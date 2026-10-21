@@ -30,19 +30,16 @@ use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 
-use crate::support::{
-    BASELINE_SOURCE,
-    CROSS_TENANT_ADMIN_REQUEST,
-    OWNER_READ_REQUEST,
-    OWNER_UNLOCKED_REQUEST,
-    SAME_TENANT_ADMIN_LOCKED_REQUEST,
+use crate::{
+    engine::engine_for,
+    support::{
+        BASELINE_SOURCE,
+        CROSS_TENANT_ADMIN_REQUEST,
+        OWNER_READ_REQUEST,
+        OWNER_UNLOCKED_REQUEST,
+        SAME_TENANT_ADMIN_LOCKED_REQUEST,
+    },
 };
-
-/// The entry point named by `contracts/profile.json`.
-const ENTRYPOINT: &str = "data.authz.allow";
-
-/// Source name recorded for the baseline in the AST and in diagnostics.
-const POLICY_FILE: &str = "policy.rego";
 
 /// Cargo recompiles this target when the specification changes.
 ///
@@ -74,13 +71,7 @@ fn state() -> RegorusState { RegorusState::default() }
     "the baseline tenant-write source loaded into Regorus with Rego v1 and strict built-in errors"
 )]
 fn load_baseline(state: &RegorusState) -> Result<(), String> {
-    let mut engine = Engine::new();
-    engine.set_rego_v0(false);
-    engine.set_strict_builtin_errors(true);
-    engine
-        .add_policy(POLICY_FILE.to_owned(), BASELINE_SOURCE.to_owned())
-        .map_err(|error| format!("add_policy rejected the baseline source: {error}"))?;
-    state.engine.set(engine);
+    state.engine.set(engine_for(BASELINE_SOURCE)?);
     Ok(())
 }
 
@@ -118,14 +109,7 @@ fn evaluate_entrypoint(state: &RegorusState) -> Result<(), String> {
         .ok_or_else(|| "no request was selected before evaluation".to_owned())?;
     let outcome = state
         .engine
-        .with_mut(|engine| {
-            engine
-                .set_input_json(&request)
-                .map_err(|error| format!("set_input_json rejected the request: {error}"))?;
-            engine
-                .eval_rule(ENTRYPOINT.to_owned())
-                .map_err(|error| format!("eval_rule failed: {error}"))
-        })
+        .with_mut(|engine| crate::engine::evaluate(engine, &request))
         .ok_or_else(|| "the engine was not loaded before evaluation".to_owned())?;
     state.decision.set(outcome?);
     Ok(())

@@ -12,6 +12,7 @@ name: Toolchain
       - 'scripts/**'
       - 'tests/toolchain/**'
       - 'tests/features/**'
+      - 'examples/tenant-write/**'
       - 'Makefile'
       - '.github/workflows/toolchain.yml'
   push:
@@ -25,6 +26,7 @@ name: Toolchain
       - 'scripts/**'
       - 'tests/toolchain/**'
       - 'tests/features/**'
+      - 'examples/tenant-write/**'
       - 'Makefile'
       - '.github/workflows/toolchain.yml'
   workflow_dispatch:

@@ -38,6 +38,17 @@ and the tests read, together with the archive's extraction root
 (`lean-4.35.0-linux`). Recording the digests a second time here would create a
 second authority.
 
+### Why every dev-dependency carries an exact pin
+
+The seven dev-dependencies are `=` requirements rather than caret ones.
+`Cargo.lock` plus `--locked` would already fix the resolved versions for a
+build, but the crate requirements are the statement of intent that a lockfile
+then satisfies; a caret requirement would make an intended tuple change
+indistinguishable from an incidental one and would let `cargo update` move a
+tool the plan pinned. The 1.2.1 ExecPlan requires an `=` pin for each, and
+`regorus` must keep `=0.13.0` regardless. Relaxing this is a separate decision,
+not a tidy-up.
+
 ### Regorus features
 
 The request is `["ast", "std"]`. `ast` supplies `get_ast_as_json`, and `std`
@@ -89,8 +100,7 @@ silently; the behavioural negative check is the guard.
 ### Provenance of each digest
 
 **OPA.** The v1.21.2 GitHub release reports `"immutable": true`, and the
-attestations API returns an attestation for
-`sha256:830ab11f61ffec760b5e19db0d7ad02bf037e13f5ef4d665faeaf17632177527`.
+attestations API returns an attestation for the pinned digest.
 `gh release verify-asset` resolved the tag to
 `sha1:3f7474e6b3c631821d8aac25ca444f7e75a56483`, loaded the attestation, and
 succeeded. The OPA pin is therefore attested and immutable.
