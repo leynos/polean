@@ -1251,6 +1251,27 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   passed) all pass with the tightened O7 assertions. Logs are
   `/tmp/<gate>-…out` for this branch.
 
+- Hosted completeness/correctness assessment, 2026-10-21, on `c38370e`:
+  CodeRabbit echoed the Assessment-ID `PR11-EP-COMPLETE-20261021` and both
+  SHAs, recorded O7 as satisfied by the repair, retained EP-M1 to EP-M4 as
+  delivered, and found no remaining in-scope omission or correctness defect. It
+  is a bounded assessment, not a guarantee that no defect exists. The reply is
+  issue comment
+  [6322701212](https://github.com/leynos/polean/pull/11#issuecomment-6322701212).
+  Its first assessment named the O7 gap; this record's earlier revision had
+  treated the version-prefix check as sufficient.
+- Proof-specific assessment, 2026-10-21: **not applicable**, and recorded
+  rather than posted. The tree contains no CrossHair, Kani, Verus, or
+  LemmaScript reference outside `Cargo.lock` and ADR-003, and no proof-bearing
+  code changed. The only Lean theorems are the two `decide` probes in
+  `lean/PoleanSmoke.lean`, whose own module comment states it "states nothing
+  about Polean policies". The technical design's `abstraction_preserves`,
+  `check_sound`, and `witness_sound` obligations remain unproved targets for
+  1.2.2 and 1.2.3.
+- Hosted runs on `c38370e`, observed 2026-10-21: CI (39647060364), Design
+  contracts (39647060407), and Toolchain (39647060569) all completed with
+  `success`.
+
 `pr-babysitting` owns hosted CI observation, the two hosted CodeRabbit
 assessments, and the merge.
 
