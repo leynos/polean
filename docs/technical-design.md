@@ -11,6 +11,7 @@ verification workflow for a closed Rego profile.
 - [Vocabulary](context.md)
 - [Bootstrap ADR](adr-001-repository-bootstrap.md)
 - [Assurance boundary ADR](adr-002-first-profile-assurance-boundary.md)
+- [Toolchain tuple ADR](adr-003-pin-the-e0-toolchain-tuple.md)
 - [Contracts](../contracts/profile.json)
 - [Draft-pack validation](../validation/README.md)
 
@@ -297,9 +298,15 @@ the design fixtures; Python is not part of the proposed production checker.
 
 ### 6.1 Frontend
 
-Regorus 0.12.0 exposes `add_policy` and `get_ast_as_json`, the latter behind its
-`ast` feature. Its AST JSON is an adapter input, not Polean's stable proof
-ABI. Pin the exact crate, enabled features, and adapter fixtures. [R3]
+Regorus 0.13.0 is pinned at `=0.13.0` with `default-features = false` and the
+requested features `["ast", "std"]`; Cargo resolves
+`["ast", "msvc_spectre_libs", "rand", "std"]` because `std` names the other
+two. It exposes `add_policy` and `get_ast_as_json`, the latter behind `ast`.
+Its AST JSON is an adapter input, not Polean's stable proof ABI. The exact
+crate, the features, the resolved graph, and the provenance of the whole tuple
+are in [ADR-003](adr-003-pin-the-e0-toolchain-tuple.md). Adapter fixtures are
+the committed example sources and a reviewed snapshot of the baseline module's
+AST JSON. [R3, R12]
 
 The frontend must account for the complete module: package, imports, default,
 all rule heads and bodies, expressions, and any semantically relevant source
@@ -351,6 +358,23 @@ precisely one Boolean decision. Undefined, non-Boolean, multiple, or error
 results produce `conformance_mismatch`, not a Boolean coercion. An OPA process
 can exit normally while its query result is false; inspect the returned value,
 not truthiness or process success. [R7]
+
+The pinned binary was observed to print these shapes under
+`eval --format json`. They are input to 2.3.2's typed classification, not its
+design:
+
+| Case                                        | Standard output                                | Exit |
+| ------------------------------------------- | ---------------------------------------------- | ---- |
+| Defined result                              | `{"result":[{"expressions":[{"value":...}]}]}` | 0    |
+| Undefined, including a misspelt entry point | `{}`                                           | 0    |
+| Conflict, built-in, or parse error          | `{"errors":[{"code":...}]}`                    | 2    |
+| Missing input                               | empty, with the diagnostic on standard error   | 2    |
+
+Without `--strict-builtin-errors`, a built-in error collapses into `{}` with
+exit 0, which is why the smoke observation passes that flag. Regorus, by
+contrast, returns `Ok(Value::Undefined)` and renders it as the string
+`"<undefined>"`, so the two runtimes disagree in text as well as in transport.
+Compare typed values, never serialized text. [R3]
 
 ## 7. Bidirectional conversion and evidence
 
@@ -555,11 +579,14 @@ enforced isolation is an execution failure for the first public profile, not a
 silently degraded security mode.
 
 Provision the trusted Lean package and dependencies before jobs. A submitted
-Lake file must never control a build. Pin the Rust lockfile, Regorus features,
-Lean toolchain/package dependencies, and OPA binary digest. Regorus 0.12.0 is
-an inspected frontend candidate, not a tested complete dependency tuple.
-Resolve Lean, Rust, and OPA pins in E0 below and record them before accepting
-evidence.
+Lake file must never control a build. The tuple is pinned in
+[ADR-003](adr-003-pin-the-e0-toolchain-tuple.md): the Rust toolchain file and
+lockfile, Regorus `=0.13.0` with features `["ast", "std"]`, the Lean release
+and its committed `lake-manifest.json`, and the OPA binary digest recorded in
+`toolchain-pins.json`. `make tools` provisions the two downloadable artefacts
+behind a digest check, and `make toolchain-smoke` replays them. That tuple was
+tested on `x86_64-unknown-linux-gnu`; it is not tested on any other platform,
+and the Lean archive's provenance is trust on first use.
 
 Cache trusted build/toolchain artefacts. Defer proof-result caching until the
 binding and replay path has passed adversarial checks. Build CI should stay
@@ -609,7 +636,7 @@ weaken a prerequisite when a spike fails.
 
 | Prerequisite            | Role                   | E0 needs                                                                                                                                                  | Public release needs                                                                            | Roadmap             |
 | ----------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------- |
-| Toolchain tuple         | maintainer             | A working, recorded Rust, Regorus, Lean, and OPA tuple                                                                                                    | Lockfiles, Regorus features, and OPA digest pinned and replayed cleanly                         | 1.2.1, 4.3.2        |
+| Toolchain tuple         | maintainer             | Met by ADR-003 and `make toolchain-smoke`                                                                                                                 | Lockfiles, Regorus features, and OPA digest pinned and replayed cleanly                         | 1.2.1, 4.3.2        |
 | Admission coverage      | maintainer             | 1.2.2 records what the AST exposes; the E0 command admits through 2.1.2, which fails closed on anything unmapped                                          | Hostile-source coverage of the same fail-closed admission                                       | 1.2.2, 2.1.2, 4.2.3 |
 | Axiom audit             | maintainer             | 1.2.3 investigates the audit interface; 2.2.4 accepts the E0 theorem only with the foundational axioms, rejecting `sorryAx` and native-computation axioms | The same audit applied by `verify` to untrusted evidence                                        | 1.2.3, 2.2.4, 4.1.3 |
 | Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                                                                                       | Enforced offline sandbox with memory and output limits, process-group kill, and private storage | 1.2.4, 4.3.1        |
@@ -641,15 +668,16 @@ of reference remain the upstream authority for scope. [T1–T3]
 
 ## References
 
-Sources were inspected on 2026-10-04. Moving documentation URLs describe the
-inspected API, not a substitute for release pins.
+Sources were inspected on 2026-10-04, except R3, R12, and R13, which were
+inspected on 2026-10-21. Moving documentation URLs describe the inspected API,
+not a substitute for release pins.
 
 - **R1.**
   [OPA policy language](https://www.openpolicyagent.org/docs/policy-language).
 - **R2.**
   [OPA policy testing](https://www.openpolicyagent.org/docs/policy-testing).
 - **R3.**
-  [Regorus 0.12.0 Engine API](https://docs.rs/regorus/0.12.0/regorus/struct.Engine.html):
+  [Regorus 0.13.0 Engine API](https://docs.rs/regorus/0.13.0/regorus/struct.Engine.html):
   AST feature, source evaluation, and explicit error options.
 - **R4.**
   [Cedar Analysis](https://aws.amazon.com/blogs/opensource/introducing-cedar-analysis-open-source-tools-for-verifying-authorization-policies/):
@@ -683,3 +711,10 @@ inspected API, not a substitute for release pins.
   [df12 research protocol](https://github.com/leynos/df12-documentation-skills/blob/main/skills/tech-design-doc/references/research-protocol.md)
   and
   [editing checklist](https://github.com/leynos/df12-documentation-skills/blob/main/skills/tech-design-doc/references/editing-checklist.md).
+- **R12.**
+  [Regorus 0.13.0 changelog](https://github.com/microsoft/regorus/blob/regorus-v0.13.0/CHANGELOG.md):
+  the breaking path changes from 0.12.0 and the baseline it supersedes.
+- **R13.**
+  [Lean 4.35.0 release notes](https://lean-lang.org/doc/reference/latest/releases/v4.35.0/):
+  the `lake check` facilities, their sandbox requirement, and the removal of
+  `Lean.trustCompiler`.

@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "platform": "x86_64-unknown-linux-gnu",
+  "opa": {
+    "version": "1.21.2",
+    "url": "https://github.com/open-policy-agent/opa/releases/download/v1.21.2/opa_linux_amd64_static",
+    "sha256": "830ab11f61ffec760b5e19db0d7ad02bf037e13f5ef4d665faeaf17632177527",
+    "size": 64181524,
+    "kind": "binary"
+  },
+  "lean": {
+    "version": "4.35.0",
+    "url": "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-linux.tar.zst",
+    "sha256": "7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d",
+    "size": 594481375,
+    "kind": "tar.zst",
+    "root": "lean-4.35.0-linux",
+    "identity": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)"
+  }
+}
