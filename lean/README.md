@@ -8,7 +8,7 @@ Experiment E0 resolved the toolchain. `lean-toolchain` selects
 `leanprover/lean4:v4.35.0`, `lakefile.toml` declares the package, and
 `lake-manifest.json` records that the package graph is empty. The version, the
 resolved build, and the provenance of the release archive are recorded in
-[ADR-003](../adr-003-pin-the-e0-toolchain-tuple.md).
+[ADR-003](../docs/adr-003-pin-the-e0-toolchain-tuple.md).
 
 ## The smoke library
 

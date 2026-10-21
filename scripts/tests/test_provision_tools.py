@@ -20,7 +20,6 @@ import hashlib
 import io
 import json
 import tarfile
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -32,15 +31,44 @@ LEAN_VERSION = "4.35.0"
 LEAN_ROOT = f"lean-{LEAN_VERSION}-linux"
 
 
-def make_archive(members: dict[str, bytes]) -> bytes:
-    """Build a zstd-compressed tar archive from relative names and contents."""
+def make_archive(
+    members: dict[str, bytes],
+    links: dict[str, str] | None = None,
+    hard_links: dict[str, str] | None = None,
+) -> bytes:
+    """Build a zstd-compressed tar archive from relative names and contents.
+
+    `links` adds a symbolic link per name, with the given target; `hard_links`
+    does the same for a hard link, whose target is an archive-relative name.
+    """
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as archive:
         for name, payload in members.items():
             info = tarfile.TarInfo(name)
             info.size = len(payload)
             archive.addfile(info, io.BytesIO(payload))
+        for kind, table in ((tarfile.SYMTYPE, links), (tarfile.LNKTYPE, hard_links)):
+            for name, target in (table or {}).items():
+                info = tarfile.TarInfo(name)
+                info.type = kind
+                info.linkname = target
+                archive.addfile(info)
     return compression.zstd.compress(buffer.getvalue())
+
+
+def _write_archive(directory: Path, payload: bytes) -> Path:
+    """Write archive bytes to a fresh file under `directory`."""
+    path = directory / f"archive-{hashlib.sha256(payload).hexdigest()[:16]}.tar.zst"
+    path.write_bytes(payload)
+    return path
+
+
+def _check_archive(directory: Path, payload: bytes) -> None:
+    """Run the archive containment check against `payload` and its own pin."""
+    pins_path = write_pins(directory, lean=lean_pin_for(payload))
+    provision_tools._check_archive(
+        _write_archive(directory, payload), provision_tools.load_pins(pins_path).lean
+    )
 
 
 def lean_archive_bytes(root_name: str = LEAN_ROOT) -> bytes:
@@ -189,58 +217,101 @@ def test_install_rejects_a_truncated_stream(tmp_path: Path) -> None:
     assert not (tools_dir / "opa").exists(), "no OPA install appears"
 
 
-def test_install_refuses_an_escaping_member(tmp_path: Path) -> None:
-    """An archive member outside the pinned root is refused before extraction."""
-    escaping = make_archive(
-        {f"{LEAN_ROOT}/bin/lean": b"lean", "../escape": b"nope"}
-    )
+@pytest.mark.parametrize(
+    ("label", "members"),
+    [
+        pytest.param(
+            "parent-relative",
+            {f"{LEAN_ROOT}/bin/lean": b"lean", "../escape": b"nope"},
+            id="parent-relative",
+        ),
+        pytest.param(
+            "dot-dot-inside-the-root",
+            {f"{LEAN_ROOT}/bin/lean": b"lean", f"{LEAN_ROOT}/../escape": b"nope"},
+            id="dot-dot-inside-the-root",
+        ),
+        pytest.param("absolute", {"/abs": b"nope"}, id="absolute"),
+        pytest.param(
+            "other-top-level", {"other-root/bin/lean": b"lean"}, id="other-top-level"
+        ),
+    ],
+)
+def test_install_refuses_an_escaping_member(
+    tmp_path: Path, label: str, members: dict[str, bytes]
+) -> None:
+    """A member that would leave the pinned root is refused before extraction."""
+    escaping = make_archive(members)
     pins_path = write_pins(
-        tmp_path,
-        opa=pin_for(OPA_BYTES),
-        lean=lean_pin_for(escaping),
+        tmp_path, opa=pin_for(OPA_BYTES), lean=lean_pin_for(escaping)
     )
     tools_dir = tmp_path / "tools"
 
-    with pytest.raises(provision_tools.ArchiveEscape):
+    with pytest.raises(provision_tools.ArchiveEscape) as raised:
         provision_tools.install_tools(
             pins_path, tools_dir, standard_fetcher(lean=escaping)
         )
 
-    assert not (tmp_path / "escape").exists(), "nothing escaped the tools directory"
-    assert not (tmp_path / "tools" / "escape").exists(), (
-        "nothing appeared beside the tools directory"
-    )
+    assert "outside" in str(raised.value), f"{label}: the diagnostic names the escape"
+    assert not (tmp_path / "escape").exists(), f"{label}: nothing escaped the tools directory"
     assert not (tools_dir / "lean" / hashlib.sha256(escaping).hexdigest()).exists(), (
-        "no Lean install appears"
+        f"{label}: no Lean install appears"
     )
 
 
-def test_install_refuses_an_absolute_member(tmp_path: Path) -> None:
-    """An absolute archive member is refused before extraction."""
-    escaping = make_archive({"/abs": b"nope"})
-    pins_path = write_pins(
-        tmp_path, opa=pin_for(OPA_BYTES), lean=lean_pin_for(escaping)
-    )
+def test_install_refuses_a_dot_dot_member_that_the_filter_would_hide(
+    tmp_path: Path,
+) -> None:
+    """`root/../escape` starts with the root, so the root check alone misses it.
 
-    with pytest.raises(provision_tools.ArchiveEscape):
-        provision_tools.install_tools(
-            pins_path, tmp_path / "tools", standard_fetcher(lean=escaping)
-        )
-
-    assert not Path("/abs").exists(), "nothing was written at an absolute path"
-
-
-def test_install_refuses_a_member_outside_the_root(tmp_path: Path) -> None:
-    """A member under a different top-level directory is refused."""
-    escaping = make_archive({"other-root/bin/lean": b"lean"})
-    pins_path = write_pins(
-        tmp_path, opa=pin_for(OPA_BYTES), lean=lean_pin_for(escaping)
+    The `data` filter rewrites this member to `escape` inside the staging
+    directory, so without an explicit `..` check the archive would be accepted
+    and the member silently dropped rather than refused.
+    """
+    escaping = make_archive(
+        {f"{LEAN_ROOT}/bin/lean": b"lean", f"{LEAN_ROOT}/../escape": b"nope"}
     )
 
     with pytest.raises(provision_tools.ArchiveEscape):
-        provision_tools.install_tools(
-            pins_path, tmp_path / "tools", standard_fetcher(lean=escaping)
-        )
+        _check_archive(tmp_path, escaping)
+
+
+def test_install_refuses_a_link_leaving_the_root(tmp_path: Path) -> None:
+    """A symbolic link whose target leaves the pinned root is refused."""
+    escaping = make_archive(
+        {f"{LEAN_ROOT}/bin/lean": b"lean"}, links={f"{LEAN_ROOT}/link": "../../etc/passwd"}
+    )
+
+    with pytest.raises(provision_tools.ArchiveEscape):
+        _check_archive(tmp_path, escaping)
+
+
+def test_install_accepts_a_link_inside_the_root(tmp_path: Path) -> None:
+    """A link that stays under the pinned root is accepted."""
+    archive = make_archive(
+        {f"{LEAN_ROOT}/bin/lean": b"lean"},
+        links={f"{LEAN_ROOT}/bin/alias": "lean"},
+        hard_links={f"{LEAN_ROOT}/bin/hard": f"{LEAN_ROOT}/bin/lean"},
+    )
+
+    _check_archive(tmp_path, archive)
+
+
+def test_install_refuses_a_hard_link_resolved_from_the_wrong_base(
+    tmp_path: Path,
+) -> None:
+    """A hard link's target is archive-relative, not relative to its own directory.
+
+    Resolving `link` against `root/bin` would produce `root/etc/passwd`, which
+    stays under the root and so passes a containment test that used the wrong
+    base.
+    """
+    escaping = make_archive(
+        {f"{LEAN_ROOT}/bin/lean": b"lean"},
+        hard_links={f"{LEAN_ROOT}/bin/link": f"{LEAN_ROOT}/bin/../../etc/passwd"},
+    )
+
+    with pytest.raises(provision_tools.ArchiveEscape):
+        _check_archive(tmp_path, escaping)
 
 
 def test_complete_install_is_reused_offline(tmp_path: Path) -> None:
@@ -278,21 +349,22 @@ def test_corrupt_cached_download_is_refetched(tmp_path: Path) -> None:
     assert installed.opa.read_bytes() == OPA_BYTES, "the fetched copy replaced it"
 
 
-def test_fetch_url_passes_a_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_url_passes_a_timeout(tmp_path: Path) -> None:
     """A stalled connection cannot hold the tools lock indefinitely."""
     observed: dict[str, object] = {}
 
     class Response(io.BytesIO):
         """A response body that ends immediately."""
 
-    def urlopen(request: object, timeout: float) -> Response:
+    def opener(request: object, timeout: float) -> Response:
         observed["timeout"] = timeout
         return Response(OPA_BYTES)
 
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
     destination = tmp_path / "opa"
 
-    provision_tools.fetch_url("https://example.invalid/opa", destination, len(OPA_BYTES))
+    provision_tools.download(
+        "https://example.invalid/opa", destination, len(OPA_BYTES), opener=opener
+    )
 
     assert observed["timeout"] == provision_tools.REQUEST_TIMEOUT_SECONDS, (
         "the download must bound how long a stalled read may block"

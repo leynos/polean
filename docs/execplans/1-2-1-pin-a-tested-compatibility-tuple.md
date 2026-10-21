@@ -385,6 +385,33 @@ The documentation added here states each of these limits explicitly.
     regression test now injects `urlopen` to observe the timeout. One finding
     was rejected: caret dev-dependency requirements would contradict the plan's
     required `=` pins, so ADR-003 now records why the exact pins stand.
+- Observation: the containment check's leading-component test was not a
+  containment proof. `PurePosixPath("root/../escape").parts` is
+  `("root", "..", "escape")`, so `root/../escape` passed the `parts[0] == root`
+  test; the `data` filter then rewrote it to `escape` inside the staging
+  directory, so the member vanished rather than being refused. The second CLI
+  pass found this.
+  - Evidence: a probe of `PurePosixPath(...).parts` and the new
+    `dot-dot-inside-the-root` parametrisation of
+    `test_install_refuses_an_escaping_member`. Without the `..` check that case
+    installs successfully instead of raising.
+  - Impact: `_check_archive` now rejects any `..` component and any link whose
+    target resolves outside the root. A scan of the real pinned archive found
+    18,571 members, 13 symlinks, 0 `..` components, and 0 escaping links, so
+    the hardened check still accepts it; a forced re-extraction of the real
+    archive through `make tools` confirms that end to end.
+- Observation: a hard link's `linkname` is archive-root-relative, while a
+  symbolic link's is relative to the member's own directory. The first version
+  of `_require_link_inside` resolved both against the member's directory, so
+  `root/bin/link -> root/bin/../../etc/passwd` resolved to `root/etc/passwd`
+  and passed.
+  - Evidence: `test_install_refuses_a_hard_link_resolved_from_the_wrong_base`
+    fails with "DID NOT RAISE ArchiveEscape" when the base distinction is
+    removed, and passes with it.
+  - Impact: the base now depends on `member.issym()`. The pinned Lean archive
+    contains no hard links, so this cannot regress on the artefact the
+    repository actually provisions; it matters for the general containment
+    claim.
 
 ## Decision log
 
@@ -1082,10 +1109,23 @@ always safe. Each milestone is one revertable commit, or a small series of them.
   no rate limit or execution failure. Log
   `/tmp/coderabbit-milestone-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
   Dispositions in Surprises; seven repaired, one rejected with its own
-  documented-exception alternative adopted in ADR-003. Pending:
+  documented-exception alternative adopted in ADR-003.
+- Milestone CLI reassessment, 2026-10-21: the same command over the repaired
+  candidate (commit `678ecca`) returned no new rate limit or execution failure.
+  It confirmed the `..` containment gap and the dead ADR-003 link in
+  `lean/README.md`; both are repaired, and the remaining six items are
+  low-priority editorial cleanup. Log
+  `/tmp/coderabbit-reassess-polean-1-2-1-pin-a-tested-compatibility-tuple.out`.
+- Containment repair evidence: `make test-scripts` → 18 passed, including
+  `dot-dot-inside-the-root`, the escaping and inside-root link cases, and the
+  hard-link base case; a scan of the real pinned archive rejected 0 of 18,571
+  members; `make tools` re-extracted it successfully with the hardened check;
+  `make toolchain-smoke` → 7 passed. The hard-link test was confirmed to fail
+  without the base fix.
+- Pending:
 
-- The milestone sweep over the repaired candidate, and the resulting
-  `coderabbit review --agent` reassessment.
+- The milestone sweep over this repaired candidate, and the resulting
+  `coderabbit review --agent` pass.
 - The `toolchain` workflow run URL.
 
 ## Interfaces and dependencies
