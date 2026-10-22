@@ -166,10 +166,14 @@ ported from the reference implementation in `leynos/netsuke`; it is applied to
 `tests/documentation_examples_tests.rs`. Name each marker after the surrounding
 section rather than a positional counter, so reordering a document does not
 renumber unrelated markers. Indented fences count, so an example inside a list
-item is contracted too. The loader reads from column zero, so it measures
-indentation relative to the file rather than to a containing list or block
-quote; an example nested deeper than three spaces therefore escapes the check
-instead of failing it. Keep examples top level or indented within that limit.
+item is contracted too. Both `CommonMark` fence characters count as well: a
+tilde fence needs a marker exactly as a backtick fence does, and each closes
+only on a run of its own character. A closing run may be longer than its opener
+and may carry trailing spaces or tabs. The loader reads from column zero, so it
+measures indentation relative to the file rather than to a containing list or
+block quote; an example nested deeper than three spaces therefore escapes the
+check instead of failing it. Keep examples top level or indented within that
+limit.
 
 The loader enforces the marker contract only. It returns the fenced text; it
 does not execute it. Two fences cannot run yet: the `polean` commands in the

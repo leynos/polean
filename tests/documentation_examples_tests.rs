@@ -155,7 +155,70 @@ fn a_fence_indented_four_spaces_is_not_a_fence() {
     assert!(examples.is_empty(), "an indented code block is not a fence");
 }
 
-/// A fence only has to be a run of at least three backticks to close.
+/// An unmarked tilde fence is rejected rather than silently skipped.
+///
+/// A tilde fence is as valid as a backtick fence, so a loader that recognised
+/// only backticks would let it escape the marker contract.
+#[test]
+fn an_unmarked_tilde_fence_is_rejected() {
+    let document = "~~~bash\nmake lint\n~~~\n";
+    let error = parse_document("fixture.md", document)
+        .expect_err("unmarked tilde fence should be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("fence is missing a tested-example marker"),
+        "expected an unmarked-fence rejection in '{error}'",
+    );
+}
+
+/// A marked tilde fence is read back with its language and body.
+#[test]
+fn a_marked_tilde_fence_is_read_back() {
+    let document = "\
+<!-- tested-example: tilde-sample -->
+~~~bash
+make design-check
+~~~
+";
+    let examples = parse_document("fixture.md", document).expect("tilde example should parse");
+    assert_eq!(
+        examples.first().map(|example| example.language.as_str()),
+        Some("bash"),
+        "the tilde fence's language should be read",
+    );
+    assert_eq!(
+        examples.first().map(|example| example.body.as_str()),
+        Some("make design-check\n"),
+        "the tilde fence's body should be read",
+    );
+}
+
+/// A tilde fence does not close on a backtick run, nor the reverse.
+#[test]
+fn fence_characters_do_not_close_each_other() {
+    let document = "\
+<!-- tested-example: mixed -->
+~~~markdown
+```bash
+make lint
+```
+~~~
+";
+    let examples = parse_document("fixture.md", document)
+        .expect("a backtick run inside a tilde fence is body content");
+    assert_eq!(
+        examples.first().map(|example| example.body.as_str()),
+        Some("```bash\nmake lint\n```\n"),
+        "the inner backtick run should stay in the body",
+    );
+}
+
+/// A closing run at least as long as the opener closes the fence.
+///
+/// The opener is four backticks and the closer five, which is the case the
+/// loader's own name promises: a *longer* run. The three-backtick inner run is
+/// shorter than the opener, so it is body content rather than a closer.
 #[test]
 fn a_longer_closing_fence_closes_an_example() {
     let document = "\
@@ -164,7 +227,7 @@ fn a_longer_closing_fence_closes_an_example() {
 ```mermaid
 flowchart TD
 ```
-````
+`````
 ";
     let examples = parse_document("fixture.md", document).expect("nested fence should parse");
     assert_eq!(examples.len(), 1, "the example should be read as one fence");
@@ -172,6 +235,71 @@ flowchart TD
         examples.first().map(|example| example.language.as_str()),
         Some("markdown"),
         "the outer language should win",
+    );
+    assert_eq!(
+        examples.first().map(|example| example.body.as_str()),
+        Some("```mermaid\nflowchart TD\n```\n"),
+        "the shorter inner run should stay in the body",
+    );
+}
+
+/// Trailing whitespace after a closing fence does not defeat the closer.
+///
+/// `CommonMark` permits spaces and tabs after a closing run, and the shared
+/// loader accepts them. Without this, the closer is not recognised, the
+/// example swallows the rest of the document, and a following example is lost.
+#[test]
+fn trailing_whitespace_after_a_closing_fence_is_tolerated() {
+    let document = "\
+<!-- tested-example: first -->
+```bash
+make lint
+```\t
+<!-- tested-example: second -->
+```bash
+make test
+```
+";
+    let examples = parse_document("fixture.md", document)
+        .expect("a trailing-space closer should still close the fence");
+    assert_eq!(
+        examples.len(),
+        2,
+        "both examples should be read: {examples:?}"
+    );
+    assert_eq!(
+        examples.first().map(|example| example.body.as_str()),
+        Some("make lint\n"),
+        "the closer's trailing whitespace must not reach the body",
+    );
+    assert_eq!(
+        examples.get(1).map(|example| example.id.as_str()),
+        Some("second"),
+        "the following example should survive the closer",
+    );
+}
+
+/// A body line indented less than its fence is de-indented, not truncated.
+///
+/// The body is returned as executable text, so a line's remaining characters
+/// are content. Removing a fixed byte offset would drop them, and would split a
+/// multibyte character when the line carries one.
+#[test]
+fn a_body_line_indented_less_than_its_fence_keeps_its_text() {
+    let document = "\
+<!-- tested-example: ragged -->
+   ```bash
+  make lint
+   make test
+   日本語
+   ```
+";
+    let examples =
+        parse_document("fixture.md", document).expect("a ragged body should still parse");
+    assert_eq!(
+        examples.first().map(|example| example.body.as_str()),
+        Some("make lint\nmake test\n日本語\n"),
+        "only leading spaces up to the fence's own indentation should be removed",
     );
 }
 
