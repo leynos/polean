@@ -194,24 +194,48 @@ make design-check
     );
 }
 
-/// A tilde fence does not close on a backtick run, nor the reverse.
+/// A fence does not close on a run of the other fence character.
+///
+/// Each direction is a separate case: a backtick run inside a tilde fence, and
+/// a tilde run inside a backtick fence. Both are body content, because a closer
+/// must repeat the opening fence's own character.
 #[test]
 fn fence_characters_do_not_close_each_other() {
-    let document = "\
-<!-- tested-example: mixed -->
+    let cases = [
+        (
+            "\
+<!-- tested-example: tildes-outside -->
 ~~~markdown
 ```bash
 make lint
 ```
 ~~~
-";
-    let examples = parse_document("fixture.md", document)
-        .expect("a backtick run inside a tilde fence is body content");
-    assert_eq!(
-        examples.first().map(|example| example.body.as_str()),
-        Some("```bash\nmake lint\n```\n"),
-        "the inner backtick run should stay in the body",
-    );
+",
+            "```bash\nmake lint\n```\n",
+        ),
+        (
+            "\
+<!-- tested-example: backticks-outside -->
+```markdown
+~~~bash
+make lint
+~~~
+```
+",
+            "~~~bash\nmake lint\n~~~\n",
+        ),
+    ];
+
+    for (document, expected) in cases {
+        let examples = parse_document("fixture.md", document)
+            .expect("a run of the other fence character is body content");
+        assert_eq!(examples.len(), 1, "the example should be read as one fence");
+        assert_eq!(
+            examples.first().map(|example| example.body.as_str()),
+            Some(expected),
+            "the inner run should stay in the body: {examples:?}",
+        );
+    }
 }
 
 /// A closing run at least as long as the opener closes the fence.
