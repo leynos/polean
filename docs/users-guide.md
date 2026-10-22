@@ -8,6 +8,7 @@ current repository capability.
 
 The technical design proposes these commands:
 
+<!-- tested-example: guide-proposed-commands -->
 ```bash
 polean check policy.rego \
   --profile polean.tenant-write.v0 \
@@ -69,6 +70,7 @@ exactly what a passing run proves, trusts, and leaves outside the theorem.
 The repository supplies the baseline policy, mutations, schemas, and a Python
 design check:
 
+<!-- tested-example: guide-design-check -->
 ```bash
 python -m pip install -r validation/requirements.txt
 make design-check

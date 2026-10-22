@@ -82,6 +82,25 @@ or validation code is added.
   `docs/adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md` (the
   slug now derives from its title); every inbound link and numeric reference in
   this plan and in the other documents was updated.
+- [x] (2026-10-22) Second follow-up, answering three CodeRabbit findings on the
+  refreshed guide. Ported the documented-example loader from `leynos/netsuke` to
+  `tests/documentation_examples/mod.rs` and applied it to `README.md` and
+  `docs/users-guide.md`, marking all five of their executable fences. The
+  loader enforces the marker contract only; execution is deferred and recorded
+  in the developer guide, because the `polean` commands are unimplemented and
+  the README `make test` fence would re-enter its own gate. The remaining two
+  findings are defects in the canonical text, not in Polean's copy, so they
+  were reported upstream rather than patched locally: the ADR "Required
+  sections" label uses title case where the guide's own sentence-case rule and
+  its template require `Context and problem statement`, and the `add` doc
+  comment example omits the import it needs and carries `no_run`. The three
+  reports are `leynos/agent-helper-scripts` issues
+  [#234](https://github.com/leynos/agent-helper-scripts/issues/234) (portable
+  reference runners),
+  [#235](https://github.com/leynos/agent-helper-scripts/issues/235)
+  (section-label case), and
+  [#236](https://github.com/leynos/agent-helper-scripts/issues/236) (the `add`
+  doctest).
 
 ## Surprises & discoveries
 
@@ -108,6 +127,27 @@ or validation code is added.
   `Classical.choice`, and `Quot.sound`; native computation adds
   `Lean.ofReduceBool`, `Lean.ofReduceNat`, or `Lean.trustCompiler`. E0
   therefore needs no bespoke audit tooling to inspect its one theorem.
+- The first loader draft matched opening fences only at column zero. A fence
+  indented inside a list item is legal Markdown and common in a guide, so such
+  an example would have been invisible to the gate rather than rejected by it:
+  the check would have failed open in exactly the case it exists to catch.
+  Fences are now recognised up to three spaces of indentation. The residual gap
+  is that a line-based loader measures indentation from column zero rather than
+  from the containing list or block quote, so an example nested deeper than
+  three spaces still escapes; closing that needs container-relative
+  indentation, which a line-based parser cannot do. The gap is documented in
+  the module and the developer guide rather than widened with a tolerance that
+  would start treating an indented code block — prose that shows a fence, not a
+  fence — as a contracted example.
+- Three defects in the new loader were caught by gates rather than by reading:
+  a bound on the backtick run length that wrongly rejected legal four-backtick
+  fences (caught by the loader's own table test), an unbackticked `CommonMark`
+  that predated this change (caught by Clippy's `doc_markdown`), and
+  unformatted Rust and two Markdown files whose reflow failed `cargo fmt` and
+  `mdtablefix` (caught by the post-turn hook, before the commit). The last of
+  these is the reason the commit gates run over the staged tree rather than a
+  committed one: a formatter that rewrites tracked files would otherwise be
+  discovered only after the commit existed.
 
 ## Decision log
 

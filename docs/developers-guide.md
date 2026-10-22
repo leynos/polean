@@ -155,6 +155,30 @@ Add the smallest test at the boundary where a defect could recur:
 Passing one class of test does not upgrade another assurance dimension. In
 particular, differential testing is not a source-to-model proof.
 
+### Documented examples
+
+The style guide requires a marker comment on the line immediately before every
+executable fenced example in a user-facing document, and a loader that fails
+the build on an unmarked fence, an unterminated fence, a missing identifier, or
+a duplicate identifier. `tests/documentation_examples/mod.rs` is that loader,
+ported from the reference implementation in `leynos/netsuke`; it is applied to
+`README.md` and `docs/users-guide.md` by
+`tests/documentation_examples_tests.rs`. Name each marker after the surrounding
+section rather than a positional counter, so reordering a document does not
+renumber unrelated markers. Indented fences count, so an example inside a list
+item is contracted too. The loader reads from column zero, so it measures
+indentation relative to the file rather than to a containing list or block
+quote; an example nested deeper than three spaces therefore escapes the check
+instead of failing it. Keep examples top level or indented within that limit.
+
+The loader enforces the marker contract only. It returns the fenced text; it
+does not execute it. Two fences cannot run yet: the `polean` commands in the
+[user guide](users-guide.md) describe an unimplemented checker, and the
+`make test` fence in the [README](../README.md) would re-enter the gate that
+runs this test. A passing loader run is therefore evidence about markers, not
+about whether the documented commands succeed. Treat execution as a separate
+obligation, and do not describe an example as tested until something runs it.
+
 ## Documentation
 
 Start with [documentation contents](contents.md). Update the terms of reference

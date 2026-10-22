@@ -68,6 +68,7 @@ deliberately deferred.
 
 Use Python 3.11 or later:
 
+<!-- tested-example: readme-design-check -->
 ```bash
 python -m venv .venv
 . .venv/bin/activate
@@ -83,6 +84,7 @@ checks that the six requirements characterize the intended decision; replays
 each mutation witness against its rule list; and fails if
 `validation/witnesses/` holds a witness the current run did not generate.
 
+<!-- tested-example: readme-design-properties -->
 ```bash
 make design-properties
 ```
@@ -105,6 +107,7 @@ not upgrade the explicitly trusted source frontend to a checked translation.
 
 The Rust scaffold gates are:
 
+<!-- tested-example: readme-rust-gates -->
 ```bash
 make check-fmt
 make typecheck
