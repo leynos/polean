@@ -33,8 +33,8 @@ frontend remains explicitly trusted, while OPA and Regorus supply tested
 runtime observations rather than a formal refinement theorem. The theorem takes
 the request's subject, resource, and action attributes as given; it does not
 authenticate them. See
-[ADR-002](docs/adr-002-first-profile-assurance-boundary.md) for the accepted
-boundary.
+[ADR 0002](docs/adrs/adr-0002-first-profile-assurance-boundary.md) for the
+accepted boundary.
 
 ## The example policy
 
@@ -59,14 +59,16 @@ strategy, trust boundaries, evidence format, orchestration responsibilities,
 and vertical experiments.
 
 The [documentation index](docs/contents.md) links the remaining guides and
-contracts. The [bootstrap ADR](docs/adr-001-repository-bootstrap.md) records
-which parts of the Combobulate scaffold were adopted and which were
+contracts. The
+[bootstrap ADR](docs/adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md)
+records which parts of the Combobulate scaffold were adopted and which were
 deliberately deferred.
 
 ## Reproduce the design checks
 
 Use Python 3.11 or later:
 
+<!-- tested-example: readme-design-check -->
 ```bash
 python -m venv .venv
 . .venv/bin/activate
@@ -82,6 +84,7 @@ checks that the six requirements characterize the intended decision; replays
 each mutation witness against its rule list; and fails if
 `validation/witnesses/` holds a witness the current run did not generate.
 
+<!-- tested-example: readme-design-properties -->
 ```bash
 make design-properties
 ```
@@ -104,6 +107,7 @@ not upgrade the explicitly trusted source frontend to a checked translation.
 
 The Rust scaffold gates are:
 
+<!-- tested-example: readme-rust-gates -->
 ```bash
 make check-fmt
 make typecheck

@@ -11,9 +11,8 @@ below is pending implementation or a new acceptance decision.
 The GIST structure maps that goal to testable phase ideas, steps that validate
 or falsify each idea, and review-sized tasks with dependencies and observable
 success criteria. It promises no dates. Phases 2–4 follow design experiments
-E0–E2; phase 5 supplies the user-review gate. The
-[bootstrap ADR](adr-001-repository-bootstrap.md), [vocabulary](context.md), and
-[validation record](../validation/README.md)
+E0–E2; phase 5 supplies the user-review gate. The [bootstrap ADR][adr-0001],
+[vocabulary](context.md), and [validation record](../validation/README.md)
 establish the starting boundary.
 
 Each delivery task includes relevant regression tests, documentation, and
@@ -48,8 +47,8 @@ See technical-design.md §§1–2 and 13; terms-of-reference.md §§6–9.
     explicitly outside the theorem, or record a blocking rejection.
 - [x] 1.1.2. Allocate owners and closure evidence for the open gates.
   - Requires 1.1.1.
-  - See technical-design.md §13; terms-of-reference.md §§8–10, OQ1–OQ7;
-    adr-001-repository-bootstrap.md.
+  - See technical-design.md §13; terms-of-reference.md §§8–10, OQ1–OQ7; and
+    [ADR 0001][adr-0001].
   - Success: the technical-design §13 prerequisites table names responsible
     roles for toolchain pins, admission, audit, sandbox, budgets,
     distribution, sponsor review, and unresolved provenance, and separates E0
@@ -64,7 +63,8 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
 
 - [ ] 1.2.1. Pin a tested Rust, Regorus, Lean, and OPA compatibility tuple.
   - Requires 1.1.2.
-  - See technical-design.md §§6 and 11; adr-001-repository-bootstrap.md;
+  - See technical-design.md §§6 and 11;
+    [ADR 0001][adr-0001];
     repository-layout.md §Ownership boundaries.
   - Success: provisioned tools compile a fixed Lean smoke theorem, parse the
     baseline, and evaluate its source; lockfiles, Regorus features, and OPA
@@ -376,7 +376,7 @@ See technical-design.md §§11–14; terms-of-reference.md §9, OQ5.
 - [ ] 5.2.2. Package the pinned local release and dependency provenance.
   - Requires 5.2.1 and 1.1.2.
   - See technical-design.md §§11 and 13; terms-of-reference.md §9, OQ5;
-    adr-001-repository-bootstrap.md.
+    [ADR 0001][adr-0001].
   - Success: the sponsor's distribution decision covers dependency licences;
     a clean install provisions trusted tools once and reproduces accepted
     replay offline. Release claims remain limited to the closed public profile.
@@ -427,9 +427,11 @@ See technical-design.md §§7, 11, and 13; terms-of-reference.md §6.2.
 - [ ] 6.3.1. Record decisions on caching, services, and broader tooling.
   - Requires phase 5.
   - See technical-design.md §§7 and 11; terms-of-reference.md §6.2, N2–N6;
-    adr-001-repository-bootstrap.md §Decision.
+    [ADR 0001][adr-0001] §Decision.
   - Success: proof-result caching is considered only after adversarial replay;
     multiple crates, concurrency, hosted jobs, UI, signatures, registries, and
     bootstrap tooling need measured demand and separate designs. Arbitrary
     submitted proof code, application certification, and stateful security
     claims remain outside this roadmap.
+
+[adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md

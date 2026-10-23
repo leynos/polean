@@ -1,4 +1,4 @@
-# ADR 001: bootstrap Polean from the Combobulate scaffold
+# ADR 0001: bootstrap Polean from the Combobulate scaffold
 
 - **Status:** accepted for the initial repository PR.
 - **Date:** 2026-10-08.

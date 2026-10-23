@@ -8,6 +8,7 @@ current repository capability.
 
 The technical design proposes these commands:
 
+<!-- tested-example: guide-proposed-commands -->
 ```bash
 polean check policy.rego \
   --profile polean.tenant-write.v0 \
@@ -61,14 +62,15 @@ reported outcome is `model_proved`, with assurance `kernel_checked`,
 `trusted_frontend`, and `tested_agreement`; a successful run does not upgrade
 tested runtime agreement to a refinement proof. The theorem takes the request's
 subject, resource, and action attributes as given and does not authenticate
-them. [ADR-002](adr-002-first-profile-assurance-boundary.md) states exactly
-what a passing run proves, trusts, and leaves outside the theorem.
+them. [ADR 0002](adrs/adr-0002-first-profile-assurance-boundary.md) states
+exactly what a passing run proves, trusts, and leaves outside the theorem.
 
 ## Available today
 
 The repository supplies the baseline policy, mutations, schemas, and a Python
 design check:
 
+<!-- tested-example: guide-design-check -->
 ```bash
 python -m pip install -r validation/requirements.txt
 make design-check

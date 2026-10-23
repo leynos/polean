@@ -1,4 +1,4 @@
-# ADR 002: first-profile assurance boundary
+# ADR 0002: first-profile assurance boundary
 
 - **Status:** accepted.
 - **Date:** 2026-10-15.
@@ -7,11 +7,12 @@
 ## Context
 
 Polean's value depends on saying exactly what a successful run establishes and
-nothing more. The [technical design](technical-design.md) proposed a first
-public assurance statement, and the [terms of reference](terms-of-reference.md)
-made its acceptance an open question (OQ2) resting on two assumptions: that the
-source-to-model frontend may remain explicitly trusted in the first experiment
-(A2), and that request attributes come from trusted application components (A3).
+nothing more. The [technical design](../technical-design.md) proposed a first
+public assurance statement, and the
+[terms of reference](../terms-of-reference.md) made its acceptance an open
+question (OQ2) resting on two assumptions: that the source-to-model frontend
+may remain explicitly trusted in the first experiment (A2), and that request
+attributes come from trusted application components (A3).
 
 The proposed statement left attribute provenance implicit, and it named only
 some of what the proof trusts. This record fixes the statement and states each
@@ -105,7 +106,7 @@ the one sentence most likely to be quoted.
 
 2026-10-15: `leynos` accepted this record as written, in conversation, when
 approving the
-[1.1 ExecPlan](execplans/1-1-ratify-assurance-and-release-gates.md). Polean is
-founder-led: the terms of reference describe the sponsor and the technical
+[1.1 ExecPlan](../execplans/1-1-ratify-assurance-and-release-gates.md). Polean
+is founder-led: the terms of reference describe the sponsor and the technical
 reviewer as responsibilities, and `leynos` holds both, so this one acceptance
 covers both. This closes ToR OQ2.

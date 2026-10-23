@@ -17,10 +17,10 @@ already exist.
   vertical experiments.
 - [Implementation roadmap](roadmap.md): GIST delivery phases, dependencies,
   acceptance gates, and conditional extensions.
-- [Assurance boundary decision](adr-002-first-profile-assurance-boundary.md):
-  what a passing run proves, trusts, tests, and leaves outside the theorem.
-- [Bootstrap decision](adr-001-repository-bootstrap.md): repository provenance,
-  selected Combobulate scaffold elements, and deliberate deferrals.
+- [Assurance boundary decision][adr-0002]: what a passing run proves,
+  trusts, tests, and leaves outside the theorem.
+- [Bootstrap decision][adr-0001]: repository provenance, selected Combobulate
+  scaffold elements, and deliberate deferrals.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
   and explicit omissions.
 
@@ -31,7 +31,8 @@ already exist.
   discipline.
 - [Repository layout](repository-layout.md): paths and ownership boundaries.
 - [Documentation style guide](documentation-style-guide.md): prose, Markdown,
-  decision-record, and assurance-language conventions.
+  decision-record, and assurance-language conventions, including the
+  `adr-nnnn-title-slug.md` and `rfc-nnnn-title-slug.md` naming scheme.
 
 ## Shared engineering guidance
 
@@ -51,6 +52,8 @@ already exist.
 [dry-doctests]: rust-doctest-dry-guide.md
 [complexity-guide]: complexity-antipatterns-and-refactoring-strategies.md
 [scripting-standards]: scripting-standards.md
+[adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md
+[adr-0002]: adrs/adr-0002-first-profile-assurance-boundary.md
 
 ## Machine-readable design
 

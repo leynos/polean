@@ -91,7 +91,7 @@ These roles are proposed from the project brief, not research personas.
 | Policy author, primary user                     | Edits a small authorization policy in a repository.                 | A precise pass, counterexample, or inconclusive result tied to that revision. | A new policy language or manual proof work for every routine edit.       | [ASSUMED]                                        |
 | Technical reviewer, secondary user              | Reviews a change and its supporting evidence.                       | Exact assumptions, source binding, and independent replay.                    | An unexplained green badge or proof of a different policy.               | [ASSUMED]                                        |
 | Project maintainer, stakeholder and operator    | Maintains the checker and its semantic boundary.                    | Small scope, reproducible runs, controlled dependency and CI costs.           | A full-language implementation before any user-visible evidence.         | [KNOWN] scope requirement; role allocation open. |
-| Sponsor                                         | Decides whether the capability warrants further investment.         | A defensible proceed, revise, or stop decision.                               | Unbounded implementation effort without a meaningful demonstration.      | [ASSUMED]; acceptance recorded in ADR-002.       |
+| Sponsor                                         | Decides whether the capability warrants further investment.         | A defensible proceed, revise, or stop decision.                               | Unbounded implementation effort without a meaningful demonstration.      | [ASSUMED]; acceptance recorded in ADR 0002.      |
 | Production enforcement operator, non-user of v0 | Owns a live service's authentication and authorization integration. | System-level behaviour.                                                       | Any implication that a model theorem certifies an unexamined deployment. | [KNOWN] outside the initial deliverable.         |
 
 ## 5. Job to be done
@@ -218,8 +218,8 @@ Owners below denote roles to allocate, not named commitments.
 | OQ6 | Is future bidirectional authoring essential, or is source-first verification enough? | Determines whether a native policy authoring surface earns its cost. | Demonstrate a user task that needs round-tripping rather than only source inspection. | Policy author / sponsor |
 | OQ7 | Can the original shared discussion be made available for a precise provenance check? | Separates recovered lessons from the exact supplied transcript.      | Compare an accessible transcript with the sourced design decisions.                   | Sponsor                 |
 
-[ADR-002](adr-002-first-profile-assurance-boundary.md) closes OQ2 by accepting
-the model-proof plus trusted-frontend statement.
+[ADR 0002](adrs/adr-0002-first-profile-assurance-boundary.md) closes OQ2 by
+accepting the model-proof plus trusted-frontend statement.
 
 ## 10. Handoff
 

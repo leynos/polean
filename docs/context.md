@@ -37,5 +37,6 @@ implemented or already verified product.
 
 An application must establish the provenance of subject, resource, and action
 attributes. A theorem about supplied tenant identifiers does not authenticate
-those identifiers. [ADR-002](adr-002-first-profile-assurance-boundary.md)
-states the full assurance boundary.
+those identifiers.
+[ADR 0002](adrs/adr-0002-first-profile-assurance-boundary.md) states the full
+assurance boundary.

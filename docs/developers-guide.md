@@ -155,9 +155,73 @@ Add the smallest test at the boundary where a defect could recur:
 Passing one class of test does not upgrade another assurance dimension. In
 particular, differential testing is not a source-to-model proof.
 
+### Documented examples
+
+The style guide requires a marker comment on the line immediately before every
+executable fenced example in a user-facing document, and a loader that fails
+the build on an unmarked fence, an unterminated fence, a missing identifier, or
+a duplicate identifier. `tests/documentation_examples/mod.rs` is that loader,
+ported from the reference implementation in `leynos/netsuke`; it is applied to
+`README.md` and `docs/users-guide.md` by
+`tests/documentation_examples_tests.rs`. Name each marker after the surrounding
+section rather than a positional counter, so reordering a document does not
+renumber unrelated markers. Indented fences count, so an example inside a list
+item is contracted too. Both `CommonMark` fence characters count as well: a
+tilde fence needs a marker exactly as a backtick fence does, and each closes
+only on a run of its own character. A closing run may be longer than its opener
+and may carry trailing spaces or tabs. The loader reads from column zero, so it
+measures indentation relative to the file rather than to a containing list or
+block quote; an example nested deeper than three spaces therefore escapes the
+check instead of failing it. Keep examples top level or indented within that
+limit.
+
+The loader places no upper bound on a fence run, so runs longer than any the
+sweeps enumerate are accepted. The sweeps in
+`tests/documentation_examples/sweep.rs` are bounded regression coverage over
+the dimensions the rules turn on — both fence characters, closers equal to and
+longer than their opener, opening and closing indentation varied independently
+within the supported range, and body and identifier variants — and they are not
+a proof about arbitrary input. Describe their coverage by its stated bounds
+rather than as exhaustive.
+
+The loader enforces the marker contract only. It returns the fenced text; it
+does not execute it, so a passing run is evidence about markers and not about
+whether the documented commands succeed.
+
+Because the style guide asks for each example to be executable and exercised,
+the repository records the exception instead of leaving it implicit. The
+`ExecutionScope` table in `tests/documentation_examples/scope.rs` classifies
+every contracted example, and the corpus tests hold that table to the
+repository rather than to a comment:
+
+- A `Gate` fence must name only targets the `Makefile` declares. This checks the
+  `make` invocations, not any surrounding environment preparation, which the
+  workflows perform in their own steps; the `make test` fence in the
+  [README](../README.md) also re-enters the gate that loads it, which is why
+  the loader classifies rather than executes.
+- A `DeferredUnimplemented` fence must still have nothing to run. Today that is
+  the `polean` commands in the [user guide](users-guide.md), whose interface
+  has no binary target. The test reads `Cargo.toml` and fails once a `[[bin]]`
+  is declared, so declaring the binary forces the example to be reclassified
+  rather than leaving a stale exemption behind.
+- Adding an example without recording its scope fails, and a scope left behind
+  after its example is removed fails too.
+
+Treat execution as a separate obligation, and do not describe an example as
+tested until something runs it.
+
 ## Documentation
 
 Start with [documentation contents](contents.md). Update the terms of reference
 when the problem, scope, users, or acceptance criteria change. Update the
 technical design when implementation or assurance mechanisms change. Record
 substantive, durable choices as ADRs.
+
+ADRs live in `docs/adrs/` and are named `adr-nnnn-title-slug.md`, where `nnnn`
+is a four-digit, zero-padded serial number and `title-slug` is a kebab-case
+American Standard Code for Information Interchange (ASCII) rendering of the
+title. Proposals that need review before acceptance live in `docs/rfcs/` and
+follow the same pattern with an `rfc-` prefix. Number each series sequentially,
+never renumber a published record, and update every inbound link when a record
+is renamed. The [documentation style guide](documentation-style-guide.md)
+specifies the required sections and templates.
