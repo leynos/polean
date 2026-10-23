@@ -16,7 +16,85 @@ mod documentation_examples;
 
 use std::collections::BTreeSet;
 
-use documentation_examples::{TestedExample, load_documented_examples, parse_document};
+use documentation_examples::{
+    DOCUMENT_PATHS,
+    TestedExample,
+    load_document,
+    load_documented_examples,
+    parse_document,
+    reject_duplicate_ids,
+};
+
+/// Every contracted document is actually loaded, not just the first one.
+///
+/// Asserting only that the corpus is non-empty and unique would pass for a
+/// loader that silently skipped `docs/users-guide.md`, so this pins the count
+/// per document and the total. Deriving the expected count from
+/// [`DOCUMENT_PATHS`] catches a document that loads nothing, but not one that
+/// is dropped from the list altogether, so the document set is pinned
+/// literally as well. Adding or removing a contracted document is therefore a
+/// deliberate edit to both the list and this expectation, which is the point:
+/// narrowing the contract silently is what must not happen. The set is
+/// compared without regard to order, which the contract does not fix.
+#[test]
+fn every_contracted_document_contributes_its_marked_examples() {
+    let mut contracted: Vec<&str> = DOCUMENT_PATHS.to_vec();
+    contracted.sort_unstable();
+    assert_eq!(
+        contracted,
+        ["README.md", "docs/users-guide.md"],
+        "the set of contracted documents changed; update this expectation deliberately if that is \
+         intended",
+    );
+
+    let examples = load_documented_examples().expect("contracted documents should satisfy");
+    let total: usize = DOCUMENT_PATHS
+        .iter()
+        .map(|path| {
+            let loaded = load_document(path).expect("contracted document should load");
+            assert!(
+                !loaded.is_empty(),
+                "{path} should contribute at least one marked example",
+            );
+            loaded.len()
+        })
+        .sum();
+    assert_eq!(
+        examples.len(),
+        total,
+        "the corpus should contain every contracted document's examples",
+    );
+}
+
+/// A repeated identifier is rejected when the examples come from two documents.
+///
+/// [`parse_document`] reads one document at a time, so it cannot see this
+/// collision; the corpus-level check is the only thing that catches it.
+#[test]
+fn a_repeated_identifier_across_documents_is_rejected() {
+    let document = "\
+<!-- tested-example: shared -->
+```bash
+make lint
+```
+";
+    let first = parse_document("one.md", document).expect("first document should parse");
+    let second = parse_document("two.md", document).expect("second document should parse");
+    let corpus: Vec<TestedExample> = first.into_iter().chain(second).collect();
+    assert_eq!(
+        corpus.len(),
+        2,
+        "the fixture should supply two examples, so the check below is exercised",
+    );
+    let error = reject_duplicate_ids(&corpus)
+        .expect_err("an identifier repeated across documents should be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("duplicate tested-example identifier"),
+        "expected a duplicate-identifier rejection in '{error}'",
+    );
+}
 
 /// The contracted documents satisfy the marker contract.
 #[test]
@@ -80,9 +158,16 @@ make design-check
     );
 }
 
-/// An identifier may be reused in a different document.
+/// `parse_document` sees one document at a time, so it cannot see a collision.
+///
+/// This pins that limitation deliberately: an identifier repeated in a
+/// *different* document parses cleanly here, which is why
+/// [`reject_duplicate_ids`] exists as a separate corpus-level check. Reading
+/// this test as licence to reuse an identifier across documents would be
+/// wrong; `a_repeated_identifier_across_documents_is_rejected` states the
+/// rule that actually governs the corpus.
 #[test]
-fn identifiers_are_scoped_to_a_document() {
+fn parse_document_cannot_detect_a_collision_across_documents() {
     let document = "\
 <!-- tested-example: repeated -->
 ```bash
@@ -93,7 +178,7 @@ make lint
     let second = parse_document("two.md", document).expect("second document should parse");
     assert_eq!(
         first, second,
-        "the same identifier should parse in both documents"
+        "each document parses independently of the other",
     );
 }
 
@@ -395,4 +480,63 @@ fn rejections_name_the_document_and_line() {
         error.to_string().starts_with("guide.md:3 "),
         "expected a guide.md:3 prefix in '{error}'",
     );
+}
+
+/// The contract holds across every fence length, indent, and character.
+///
+/// The loader's rules are stated over arbitrary runs and indentation, so this
+/// covers the whole space rather than sampling it: both fence characters,
+/// every supported run length, and every supported indent. A divergence names
+/// the combination that produced it. Larger runs arrive only from a wider
+/// document, never from a new rule, so the bound is exhaustive in the sense
+/// that matters here.
+#[test]
+fn the_contract_holds_for_every_run_indent_and_fence_character() {
+    let combinations = ['`', '~']
+        .into_iter()
+        .flat_map(|character| (3..=7).map(move |run| (character, run)))
+        .flat_map(|(character, run)| (0..=3).map(move |indent| (character, run, indent)));
+
+    for (character, run, indent) in combinations {
+        let fence = format!(
+            "{}{}",
+            " ".repeat(indent),
+            character.to_string().repeat(run)
+        );
+        let document = format!("<!-- tested-example: swept -->\n{fence}bash\nmake lint\n{fence}\n");
+        let examples = parse_document("sweep.md", &document)
+            .unwrap_or_else(|error| panic!("char={character} run={run} indent={indent}: {error}"));
+        assert_eq!(
+            examples.first().map(|example| example.body.as_str()),
+            Some("make lint\n"),
+            "body should round-trip for char={character} run={run} indent={indent}",
+        );
+        assert_eq!(
+            examples.first().map(|example| example.language.as_str()),
+            Some("bash"),
+            "language should be read for char={character} run={run} indent={indent}",
+        );
+    }
+}
+
+/// A closing run shorter than its opener leaves the fence unterminated.
+///
+/// This is the other half of the length rule stated above: a closer must be at
+/// least as long, so every shorter run is content rather than a closer.
+#[test]
+fn a_shorter_closing_run_does_not_close_the_fence() {
+    for character in ['`', '~'] {
+        for run in 4..=7 {
+            let opener = character.to_string().repeat(run);
+            let closer = character.to_string().repeat(run - 1);
+            let document =
+                format!("<!-- tested-example: short -->\n{opener}bash\nmake lint\n{closer}\n");
+            let error = parse_document("sweep.md", &document)
+                .expect_err("a shorter closing run should not close the fence");
+            assert!(
+                error.to_string().contains("fence is not terminated"),
+                "char={character} run={run}: expected an unterminated rejection in '{error}'",
+            );
+        }
+    }
 }

@@ -225,7 +225,18 @@ pub fn parse_document(
 }
 
 /// Reject a repeated identifier across the whole contracted corpus.
-fn reject_duplicate_ids(examples: &[TestedExample]) -> Result<(), TestedExampleError> {
+///
+/// This is the only check that can see a collision between documents:
+/// [`parse_document`] reads one document at a time, so an identifier reused in
+/// a second document passes its own check. The rule the corpus obeys is that
+/// every identifier is unique across every contracted document, so such a
+/// reuse is rejected here rather than allowed. Public so a test can state that
+/// corpus-level rule directly.
+///
+/// # Errors
+///
+/// Returns an error naming the first identifier that repeats.
+pub fn reject_duplicate_ids(examples: &[TestedExample]) -> Result<(), TestedExampleError> {
     let mut seen = HashSet::new();
     for example in examples {
         if !seen.insert(example.id.as_str()) {
