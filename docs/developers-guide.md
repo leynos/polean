@@ -175,6 +175,15 @@ block quote; an example nested deeper than three spaces therefore escapes the
 check instead of failing it. Keep examples top level or indented within that
 limit.
 
+The loader places no upper bound on a fence run, so runs longer than any the
+sweeps enumerate are accepted. The sweeps in
+`tests/documentation_examples/sweep.rs` are bounded regression coverage over
+the dimensions the rules turn on — both fence characters, closers equal to and
+longer than their opener, opening and closing indentation varied independently
+within the supported range, and body and identifier variants — and they are not
+a proof about arbitrary input. Describe their coverage by its stated bounds
+rather than as exhaustive.
+
 The loader enforces the marker contract only. It returns the fenced text; it
 does not execute it. Two fences cannot run yet: the `polean` commands in the
 [user guide](users-guide.md) describe an unimplemented checker, and the

@@ -46,6 +46,8 @@
 //! is recorded here rather than papered over with a tolerance wide enough to swallow an indented
 //! code block, which is prose that shows a fence rather than a fence.
 
+pub mod sweep;
+
 use std::{collections::HashSet, fmt, fs, iter::Enumerate, path::Path, str::Lines};
 
 /// User-facing documents covered by the tested-example contract.
