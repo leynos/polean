@@ -860,6 +860,15 @@ model proof, source-to-model translation, and runtime correspondence separate.
   acceptance criteria. Technical designs describe mechanisms and proof
   obligations. ADRs record durable decisions, their context, consequences, and
   alternatives. Validation records state both what ran and what did not run.
+- Polean enforces the tested-example rule above the marker contract and records
+  each example's execution scope rather than claiming execution it does not
+  perform. One `tested-example` fence, the `polean` commands in the
+  [user guide](users-guide.md), has nothing to execute: no binary target
+  implements that interface. The remaining fences invoke gate targets this
+  repository runs, and the README's `make test` fence would re-enter the gate
+  that loads it were the loader to execute rather than classify it. The
+  [developer guide](developers-guide.md) records how each scope is held to the
+  `Makefile` or the manifest in place of execution.
 
 ______________________________________________________________________
 

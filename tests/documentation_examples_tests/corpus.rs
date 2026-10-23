@@ -13,7 +13,15 @@ use crate::documentation_examples::{
     load_document,
     load_documented_examples,
     parse_document,
+    read_repository_file,
     reject_duplicate_ids,
+    scope::{
+        EXECUTION_SCOPE,
+        ExecutionScope,
+        declared_make_targets,
+        execution_scope,
+        invoked_make_targets,
+    },
 };
 
 /// Every contracted document is actually loaded, not just the first one.
@@ -120,13 +128,91 @@ make lint
     );
 }
 
-/// The contracted documents satisfy the marker contract.
+/// Every contracted example records how far the repository can execute it.
+///
+/// This replaces an earlier check that the corpus was merely non-empty, which
+/// every other test here already implied. The style guide asks for each fenced
+/// example to be executable and exercised, so the interesting question is not
+/// whether examples exist but which of them the repository actually runs. The
+/// two sets are compared rather than asserted non-empty: an example added to a
+/// document without a recorded scope fails, and a scope left behind after its
+/// example is removed fails too.
 #[test]
-fn contracted_documents_satisfy_the_marker_contract() {
+fn every_contracted_example_records_its_execution_scope() {
     let examples = load_documented_examples().expect("contracted documents should satisfy");
+    let declared: BTreeSet<&str> = examples.iter().map(|example| example.id.as_str()).collect();
+    let classified: BTreeSet<&str> = EXECUTION_SCOPE.iter().map(|(id, _)| *id).collect();
+    assert_eq!(
+        declared, classified,
+        "every contracted example needs a recorded execution scope, and every recorded scope \
+         needs a contracted example",
+    );
+}
+
+/// A fence classified as a gate names only targets the `Makefile` declares.
+///
+/// The tie this establishes is narrow and worth stating precisely: it checks
+/// the `make <target>` invocations a gate fence contains, not the entire fence.
+/// Environment preparation around those calls — creating a virtual environment
+/// or installing `validation/requirements.txt` — is performed by the workflows
+/// through their own steps rather than by the loader, and is outside this check.
+/// What the check does pin is the part that can silently rot: a documented gate
+/// command that no longer names a real target fails the build here instead of
+/// being discovered by a reader whose copy-paste fails.
+#[test]
+fn gate_fences_invoke_declared_make_targets() {
+    let makefile = read_repository_file("Makefile").expect("the Makefile should be readable");
+    let declared = declared_make_targets(&makefile);
     assert!(
-        !examples.is_empty(),
-        "the contracted documents should declare at least one marked example",
+        declared.contains("test") && declared.contains("design-check"),
+        "the Makefile parser should find known targets, or this check is vacuous: {declared:?}",
+    );
+
+    let examples = load_documented_examples().expect("contracted documents should satisfy");
+    let mut missing: BTreeSet<String> = BTreeSet::new();
+    for example in &examples {
+        if execution_scope(&example.id) != Some(ExecutionScope::Gate) {
+            continue;
+        }
+        for target in invoked_make_targets(&example.body) {
+            if !declared.contains(&target) {
+                missing.insert(format!("{} -> make {target}", example.id));
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "gate fences name targets the Makefile does not declare: {missing:?}",
+    );
+}
+
+/// A deferred fence is deferred only while it has nothing to run.
+///
+/// The recorded reason for exempting `guide-proposed-commands` is that no
+/// `polean` binary exists, so the commands it documents cannot be executed.
+/// That reason expires the moment a binary target is declared, and this test is
+/// what notices: it keeps the exemption honest rather than letting it outlive
+/// its cause.
+#[test]
+fn deferred_fences_have_no_implementation_to_run() {
+    let manifest = read_repository_file("Cargo.toml").expect("Cargo.toml should be readable");
+    let examples = load_documented_examples().expect("contracted documents should satisfy");
+    let deferred: Vec<&str> = examples
+        .iter()
+        .filter(|example| {
+            execution_scope(&example.id) == Some(ExecutionScope::DeferredUnimplemented)
+        })
+        .map(|example| example.id.as_str())
+        .collect();
+    assert!(
+        !deferred.is_empty(),
+        "no example is recorded as deferred, so this check proves nothing; remove it or \
+         reclassify an example deliberately",
+    );
+    assert!(
+        !manifest.contains("[[bin]]"),
+        "a binary target now exists, so {deferred:?} can be executed and must be reclassified \
+         rather than left deferred",
     );
 }
 

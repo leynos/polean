@@ -9,8 +9,10 @@
 //! behaviour, so a malformed document is rejected rather than silently
 //! skipped.
 //!
-//! The loader does not execute the examples it returns; see the module
-//! documentation for why execution is deferred.
+//! The loader does not execute the examples it returns. Because the style guide
+//! asks for each example to be executable and exercised, the recorded exception
+//! lives in [`documentation_examples::scope`] and the corpus tests hold it to
+//! the repository rather than to a comment.
 //!
 //! The tests are grouped by what they exercise. Only this root declares the
 //! modules: a `#[path]` attribute names each child's file, because a child

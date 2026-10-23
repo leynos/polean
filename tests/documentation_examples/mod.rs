@@ -14,11 +14,20 @@
 //! violation by document name and one-based line number.
 //!
 //! Scope: the loader enforces the marker contract. It does not execute the
-//! examples it returns. Polean's `polean` commands are proposals with no
-//! implementation, and its design-check fences install dependencies or re-enter
-//! `make test`, so execution is deferred. A passing run is evidence that
-//! markers are present, unique, and terminated; it is not evidence that the
-//! documented commands succeed.
+//! examples it returns, so a passing run is evidence that markers are present,
+//! unique, and terminated; it is not evidence that the documented commands
+//! succeed.
+//!
+//! The style guide asks for every fenced example to be executable and
+//! exercised, so this repository states the exception in two places rather than
+//! leaving the gap implicit: the [`ExecutionScope`] table below classifies
+//! every contracted example, and Polean's appendix to
+//! `docs/documentation-style-guide.md` records the rule that follows from it.
+//! The corpus tests hold that table to the repository — each [`ExecutionScope::Gate`]
+//! fence must name targets the `Makefile` declares, and
+//! [`ExecutionScope::DeferredUnimplemented`] must still have no binary to run —
+//! so an exemption fails the build once its cause is gone instead of outliving
+//! it.
 //!
 //! Deliberate differences from the Netsuke port:
 //!
@@ -47,6 +56,8 @@
 //! indented code block, which is prose that shows a fence rather than a fence.
 
 mod fence;
+
+pub mod scope;
 
 pub mod sweep;
 
@@ -144,15 +155,29 @@ pub fn load_documented_examples() -> Result<Vec<TestedExample>, TestedExampleErr
     Ok(examples)
 }
 
+/// Read a repository file relative to the workspace root.
+///
+/// The corpus tests need the `Makefile` and `Cargo.toml` to check a recorded
+/// execution scope against the repository, not just against a comment. Reading
+/// them through one helper keeps that path resolution in the same place as
+/// [`load_document`]'s.
+///
+/// # Errors
+///
+/// Returns an error naming `path` when it cannot be read.
+pub fn read_repository_file(path: &str) -> Result<String, TestedExampleError> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    fs::read_to_string(root.join(path))
+        .map_err(|error| TestedExampleError::at(path, &format!("cannot read file: {error}")))
+}
+
 /// Load every marked example from one document.
 ///
 /// # Errors
 ///
 /// Returns an error when the document cannot be read or violates the contract.
 pub fn load_document(path: &str) -> Result<Vec<TestedExample>, TestedExampleError> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let contents = fs::read_to_string(root.join(path))
-        .map_err(|error| TestedExampleError::at(path, &format!("cannot read document: {error}")))?;
+    let contents = read_repository_file(path)?;
     parse_document(path, &contents)
 }
 

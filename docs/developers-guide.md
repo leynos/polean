@@ -185,12 +185,30 @@ a proof about arbitrary input. Describe their coverage by its stated bounds
 rather than as exhaustive.
 
 The loader enforces the marker contract only. It returns the fenced text; it
-does not execute it. Two fences cannot run yet: the `polean` commands in the
-[user guide](users-guide.md) describe an unimplemented checker, and the
-`make test` fence in the [README](../README.md) would re-enter the gate that
-runs this test. A passing loader run is therefore evidence about markers, not
-about whether the documented commands succeed. Treat execution as a separate
-obligation, and do not describe an example as tested until something runs it.
+does not execute it, so a passing run is evidence about markers and not about
+whether the documented commands succeed.
+
+Because the style guide asks for each example to be executable and exercised,
+the repository records the exception instead of leaving it implicit. The
+`ExecutionScope` table in `tests/documentation_examples/scope.rs` classifies
+every contracted example, and the corpus tests hold that table to the
+repository rather than to a comment:
+
+- A `Gate` fence must name only targets the `Makefile` declares. This checks the
+  `make` invocations, not any surrounding environment preparation, which the
+  workflows perform in their own steps; the `make test` fence in the
+  [README](../README.md) also re-enters the gate that loads it, which is why
+  the loader classifies rather than executes.
+- A `DeferredUnimplemented` fence must still have nothing to run. Today that is
+  the `polean` commands in the [user guide](users-guide.md), whose interface
+  has no binary target. The test reads `Cargo.toml` and fails once a `[[bin]]`
+  is declared, so declaring the binary forces the example to be reclassified
+  rather than leaving a stale exemption behind.
+- Adding an example without recording its scope fails, and a scope left behind
+  after its example is removed fails too.
+
+Treat execution as a separate obligation, and do not describe an example as
+tested until something runs it.
 
 ## Documentation
 
