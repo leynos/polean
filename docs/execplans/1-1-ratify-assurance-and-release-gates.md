@@ -131,7 +131,7 @@ or validation code is added.
   indented inside a list item is legal Markdown and common in a guide, so such
   an example would have been invisible to the gate rather than rejected by it:
   the check would have failed open in exactly the case it exists to catch.
-  Fences are now recognised up to three spaces of indentation. The residual gap
+  Fences are now recognized up to three spaces of indentation. The residual gap
   is that a line-based loader measures indentation from column zero rather than
   from the containing list or block quote, so an example nested deeper than
   three spaces still escapes; closing that needs container-relative

@@ -28,27 +28,31 @@
 //! - Fence runs are honoured properly. Netsuke strips a bare three backticks, so a four-backtick
 //!   fence keeps a stray backtick in its language tag and closes on a shorter run; this loader
 //!   captures the whole run and closes only on a run at least as long, as `CommonMark` requires.
-//! - Both `CommonMark` fence characters are recognised. The guide's rule is that *every* fenced
-//!   example carries a marker, so recognising only backticks would leave a tilde fence outside the
+//! - Both `CommonMark` fence characters are recognized. The guide's rule is that *every* fenced
+//!   example carries a marker, so recognizing only backticks would leave a tilde fence outside the
 //!   contract. A fence closes only on its own character, so a backtick run inside a tilde fence is
 //!   body content.
 //! - A fence whose language is in [`NON_EXECUTABLE_LANGUAGES`] is exempt, matching the shared
 //!   loader, which carves out Mermaid diagrams for the separate diagram gate.
-//! - Indented fences are recognised. A fence inside a list item is indented relative to column
+//! - Indented fences are recognized. A fence inside a list item is indented relative to column
 //!   zero, so a column-zero-only match would let it escape the contract; a fence and its marker may
-//!   each carry up to [`MAXIMUM_INDENT`] leading spaces, and that indentation is stripped from the
-//!   returned body.
+//!   each carry up to [`fence::MAXIMUM_INDENT`] leading spaces, and that indentation is stripped
+//!   from the returned body.
 //!
 //! Known limitation: a fenced block nested in a list or block quote is indented relative to its
 //! container, and a line-based loader cannot measure that. Only indentation from column zero is
-//! modelled, so an example indented further than [`MAXIMUM_INDENT`] escapes the contract instead of
-//! failing it. Reading only the two top-level documents keeps that gap narrow, but it is a gap: it
-//! is recorded here rather than papered over with a tolerance wide enough to swallow an indented
-//! code block, which is prose that shows a fence rather than a fence.
+//! modelled, so an example indented further than [`fence::MAXIMUM_INDENT`] escapes the contract
+//! instead of failing it. Reading only the two top-level documents keeps that gap narrow, but it is
+//! a gap: it is recorded here rather than papered over with a tolerance wide enough to swallow an
+//! indented code block, which is prose that shows a fence rather than a fence.
+
+mod fence;
 
 pub mod sweep;
 
 use std::{collections::HashSet, fmt, fs, iter::Enumerate, path::Path, str::Lines};
+
+use fence::{Fence, is_closing_fence, opening_fence, strip_indent, strip_indent_of};
 
 /// User-facing documents covered by the tested-example contract.
 pub const DOCUMENT_PATHS: &[&str] = &["README.md", "docs/users-guide.md"];
@@ -61,15 +65,6 @@ pub const DOCUMENT_PATHS: &[&str] = &["README.md", "docs/users-guide.md"];
 /// language on every fence, so an unlabelled fence is more likely to be an
 /// overlooked example than a deliberate exemption.
 pub const NON_EXECUTABLE_LANGUAGES: &[&str] = &["mermaid"];
-
-/// Shortest fence run that opens a fence.
-const MINIMUM_FENCE: usize = 3;
-
-/// Most leading spaces a fence, its marker, or a marked body line may carry.
-///
-/// `CommonMark` treats a backtick run indented further than this as an indented
-/// code block, which is prose showing a fence rather than a fence.
-const MAXIMUM_INDENT: usize = 3;
 
 /// Opening text of a tested-example marker comment.
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
@@ -116,51 +111,6 @@ pub struct TestedExample {
     pub language: String,
     /// Exact text inside the fence, including a trailing newline.
     pub body: String,
-}
-
-/// A fence character, one of the two `CommonMark` recognises.
-///
-/// Both are contracted. Recognising only backticks would let a tilde fence
-/// escape the marker check silently, which is the fail-open direction the
-/// style guide's "every fenced example" rule forbids.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum FenceCharacter {
-    /// Backtick, the character the style guide's own examples use.
-    Backtick,
-    /// Tilde, the other `CommonMark` fence character.
-    Tilde,
-}
-
-impl FenceCharacter {
-    /// The fence character a line begins with, if it begins with either.
-    const fn of(character: char) -> Option<Self> {
-        match character {
-            '`' => Some(Self::Backtick),
-            '~' => Some(Self::Tilde),
-            _ => None,
-        }
-    }
-
-    /// The character a closing run must repeat.
-    const fn as_char(self) -> char {
-        match self {
-            Self::Backtick => '`',
-            Self::Tilde => '~',
-        }
-    }
-}
-
-/// An opening fence: its character, run length, indentation, and language tag.
-#[derive(Clone, Copy)]
-struct Fence<'a> {
-    /// Character the opening run is made of.
-    character: FenceCharacter,
-    /// Number of fence characters in the opening run.
-    run: usize,
-    /// Leading spaces before the opening run.
-    indent: usize,
-    /// Language tag, which may be empty when the author omitted one.
-    language: &'a str,
 }
 
 /// A position in the document currently being parsed.
@@ -362,48 +312,6 @@ impl Parser<'_> {
     }
 }
 
-/// Parse an opening fence: a run of three or more fence characters, then a
-/// language.
-///
-/// Both `CommonMark` fence characters are recognised. A backtick fence whose
-/// info string contains a backtick is not a valid fence, so such a line reports
-/// `None` rather than an odd language tag; a tilde fence has no such
-/// restriction.
-fn opening_fence(line: &str) -> Option<Fence<'_>> {
-    let indented = strip_indent(line);
-    let character = FenceCharacter::of(indented.chars().next()?)?;
-    let remainder = indented.trim_start_matches(character.as_char());
-    let run = indented.len().checked_sub(remainder.len())?;
-    if run < MINIMUM_FENCE {
-        return None;
-    }
-    // `remainder` begins at the run, so a later backtick is part of the info
-    // string, which CommonMark forbids for a backtick fence.
-    let language = remainder.trim();
-    if character == FenceCharacter::Backtick && language.contains('`') {
-        return None;
-    }
-    Some(Fence {
-        character,
-        run,
-        indent: line.len() - indented.len(),
-        language,
-    })
-}
-
-/// Report whether a line closes the fence opened by `fence`.
-///
-/// A closer is a run of the same character as the opener, at least as long,
-/// indented by no more than [`MAXIMUM_INDENT`] spaces, followed only by spaces
-/// or tabs. `CommonMark` permits that trailing whitespace, and the shared
-/// loader accepts it, so a document that closes a fence with a trailing space
-/// is contracted rather than silently escaping the check.
-fn is_closing_fence(line: &str, fence: Fence<'_>) -> bool {
-    let run = strip_indent(line).trim_end_matches([' ', '\t']);
-    let remaining = run.trim_start_matches(fence.character.as_char());
-    remaining.is_empty() && run.len() >= fence.run
-}
-
 /// Report whether a fence language sits outside the tested-example contract.
 fn is_non_executable(language: &str) -> bool { NON_EXECUTABLE_LANGUAGES.contains(&language) }
 
@@ -412,28 +320,4 @@ fn marker_identifier(line: &str) -> Option<&str> {
     strip_indent(line)
         .strip_prefix(MARKER_PREFIX)
         .and_then(|value| value.strip_suffix(MARKER_SUFFIX))
-}
-
-/// Remove up to [`MAXIMUM_INDENT`] leading spaces, leaving further indentation.
-fn strip_indent(line: &str) -> &str {
-    let spaces = line
-        .len()
-        .saturating_sub(line.trim_start_matches(' ').len());
-    line.get(spaces.min(MAXIMUM_INDENT)..).unwrap_or_default()
-}
-
-/// Remove up to `indent` leading spaces from a marked example's body line.
-///
-/// The body is returned as Rust source or shell commands for execution, in
-/// which leading indentation is significant rather than Markdown layout, so
-/// each line is de-indented by the opening fence's own indentation. Only
-/// leading spaces are removed, and no more of them than the line actually
-/// carries: a line indented less than its fence keeps its remaining text
-/// instead of losing content to a byte offset that assumed more indentation,
-/// and a line beginning with a multibyte character is never split.
-fn strip_indent_of(line: &str, indent: usize) -> &str {
-    let spaces = line
-        .len()
-        .saturating_sub(line.trim_start_matches(' ').len());
-    line.get(spaces.min(indent)..).unwrap_or_default()
 }
