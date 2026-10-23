@@ -57,6 +57,39 @@ fn every_contracted_document_contributes_its_marked_examples() {
     );
 }
 
+/// The corpus carries exactly the identifiers the contracted documents pin.
+///
+/// The test above compares two counts that both come from this loader, so
+/// deleting a marker lowers the per-document count and the corpus count
+/// together and the comparison still holds. This test closes that fail-open
+/// direction by naming the identifiers literally: an example dropped from
+/// either shipped document fails here even though the loader stays
+/// self-consistent.
+///
+/// The expectation is a literal set rather than a count, so adding an example
+/// to a contracted document is a deliberate edit here as well as in the
+/// document. That is the point: the contract should not narrow or widen
+/// without someone saying so.
+#[test]
+fn the_corpus_carries_exactly_the_expected_identifiers() {
+    let examples = load_documented_examples().expect("contracted documents should satisfy");
+    let ids: BTreeSet<&str> = examples.iter().map(|example| example.id.as_str()).collect();
+    let expected: BTreeSet<&str> = [
+        "guide-design-check",
+        "guide-proposed-commands",
+        "readme-design-check",
+        "readme-design-properties",
+        "readme-rust-gates",
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        ids, expected,
+        "the contracted documents' marker identifiers changed; update this expectation \
+         deliberately if that is intended",
+    );
+}
+
 /// A repeated identifier is rejected when the examples come from two documents.
 ///
 /// [`parse_document`] reads one document at a time, so it cannot see this
