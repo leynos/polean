@@ -33,9 +33,11 @@ import json
 import posixpath
 import re
 import shutil
+import socket as socketmod
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.request
 from collections.abc import Callable, Iterable
@@ -488,6 +490,49 @@ def _extract_archive(path: Path, destination: Path) -> None:
         archive.extractall(destination, filter="data")
 
 
+def _abort_at_deadline(
+    response: Any, expire_at: float, clock: Clock
+) -> tuple[threading.Timer, list[bool]]:
+    """Shut the socket down when the deadline passes, even mid-read.
+
+    Checking the clock between reads is not enough on its own. A single
+    `read1` can be blocked inside `_get_chunk_left`, whose `readline` for a
+    chunk-size line makes as many system calls as it needs (CPython says so in
+    a comment there), and a plain socket read can block for the whole socket
+    timeout. No code of ours runs while that happens, so a timer is needed to
+    interrupt it. `socket.shutdown` is what actually does so: it wakes the
+    blocked call in the same process, which returns short or raises. Closing
+    the response from another thread does not, because the read already holds
+    the file — measured, not assumed.
+
+    The returned flag records that the timer fired, so the caller can report a
+    deadline rather than the socket error the shutdown provokes. The timer is
+    always cancelled by the caller, and is a daemon so a stuck read cannot keep
+    the process alive at exit.
+    """
+    fired: list[bool] = []
+    # The socket sits behind the response's buffered reader; an injected
+    # response in a test need not have one, and then there is nothing to shut
+    # down and the between-reads check remains the only bound.
+    peer = getattr(getattr(getattr(response, "fp", None), "raw", None), "_sock", None)
+
+    def abort() -> None:
+        fired.append(True)
+        if peer is not None:
+            try:
+                peer.shutdown(socketmod.SHUT_RDWR)
+            except OSError:
+                # Already closed, or never connected: the read cannot outlive
+                # the deadline either way, which is all this has to ensure.
+                pass
+
+    delay = max(expire_at - clock(), 0)
+    timer = threading.Timer(delay, abort)
+    timer.daemon = True
+    timer.start()
+    return timer, fired
+
+
 def fetch_url(url: str, destination: Path, limit: int) -> None:
     """Download `url` to `destination`, abandoning it beyond `limit` bytes.
 
@@ -541,27 +586,48 @@ def download(
     # A read that has already begun blocks for its socket timeout before it
     # can return, so the per-operation timeout must not outlive the deadline.
     socket_timeout = min(REQUEST_TIMEOUT_SECONDS, deadline_seconds)
+
+    def expired() -> DownloadTimeout:
+        return DownloadTimeout(
+            f"{url}: the transfer did not finish within "
+            f"{deadline_seconds:g} seconds; the pin file and the "
+            "upstream asset disagree, or the network is too slow."
+        )
+
     with (
         opener(request, timeout=socket_timeout) as response,
         destination.open("wb") as handle,
     ):
-        while True:
-            if clock() >= expire_at:
-                raise DownloadTimeout(
-                    f"{url}: the transfer did not finish within "
-                    f"{deadline_seconds:g} seconds; the pin file and the "
-                    "upstream asset disagree, or the network is too slow."
-                )
-            chunk = response.read1(CHUNK_SIZE)
-            if not chunk:
-                return
-            total += len(chunk)
-            if total > limit:
-                raise DownloadTooLarge(
-                    f"{url}: the stream exceeds the pinned {limit} bytes; "
-                    "the pin file and the upstream asset disagree."
-                )
-            handle.write(chunk)
+        timer, aborted = _abort_at_deadline(response, expire_at, clock)
+        try:
+            while True:
+                if clock() >= expire_at:
+                    raise expired()
+                try:
+                    chunk = response.read1(CHUNK_SIZE)
+                except Exception:
+                    # The watchdog shuts the socket down at the deadline, which
+                    # surfaces here as whatever the interrupted read raises:
+                    # `OSError` for a plain read, `IncompleteRead` when the cut
+                    # lands in chunk framing. Either way, if the watchdog fired
+                    # this is the deadline doing its job, not a transport
+                    # fault, so report the deadline.
+                    if aborted:
+                        raise expired() from None
+                    raise
+                if aborted:
+                    raise expired()
+                if not chunk:
+                    return
+                total += len(chunk)
+                if total > limit:
+                    raise DownloadTooLarge(
+                        f"{url}: the stream exceeds the pinned {limit} bytes; "
+                        "the pin file and the upstream asset disagree."
+                    )
+                handle.write(chunk)
+        finally:
+            timer.cancel()
 
 
 def main(

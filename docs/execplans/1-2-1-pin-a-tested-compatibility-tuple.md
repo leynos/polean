@@ -280,6 +280,22 @@ The documentation added here states each of these limits explicitly.
   dribbling body whose four bytes complete the transfer if `read` were used,
   and one asserts the socket timeout is the smaller bound. Both were checked
   against the old `read` implementation and fail there, so neither is vacuous.
+- [x] (2026-10-25) Round-4 repair on `b268ccd`, review 5642192337. `read1`
+  bounds a *plain* read, not the chunked path. On a chunked response `read1`
+  calls `_read1_chunked` → `_get_chunk_left` → `_read_next_chunk_size`, whose
+  `readline` makes as many system calls as the peer forces it to; CPython's own
+  comment there says so. A server that sends a chunk-size line one byte at a
+  time therefore blocks inside framing where no code of ours runs, and the
+  between-reads check cannot fire. A daemon `threading.Timer` now shuts the
+  socket down at the deadline. Measured rather than assumed: `socket.shutdown`
+  wakes a blocked read in the same process, while `response.close` from another
+  thread does not (4.0 s versus 33.4 s in a two-thread probe). The interrupted
+  read raises `OSError` for a plain read and `IncompleteRead` for chunk
+  framing, so the handler catches `Exception` and reports `DownloadTimeout`
+  whenever the watchdog fired. The regression test drives a real
+  `http.client.HTTPResponse` over a real socket and asserts the deadline bites
+  in under 5 s, when the socket timeout alone is 30 s; with the timer disabled
+  it fails with `TimeoutError`.
 
 ## Surprises & discoveries
 

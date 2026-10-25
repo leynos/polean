@@ -17,9 +17,13 @@ from __future__ import annotations
 
 import compression.zstd
 import hashlib
+import http.client
 import io
 import json
+import socket
 import tarfile
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -606,6 +610,71 @@ def test_download_reads_with_read1_so_a_blocking_read_cannot_hide_the_deadline(
             deadline_seconds=1.0,
             clock=lambda: now[0],
         )
+
+
+def test_download_aborts_a_stalled_chunk_size_line_at_the_deadline(
+    tmp_path: Path,
+) -> None:
+    """A blocked chunked-framing read is interrupted, not merely checked around.
+
+    `read1` on a chunked response calls `_get_chunk_left`, which reads a
+    chunk-size line with `readline`. That call makes as many system calls as
+    the peer forces it to (CPython's own comment there says it "may cause more
+    than one read"), and no code of ours runs while it blocks. Checking the
+    clock between reads therefore cannot bound this case, so a timer shuts the
+    socket down instead.
+
+    This drives a real `http.client.HTTPResponse` over a real socket: the
+    server sends one complete chunk and then stalls part-way through the next
+    chunk-size line. Without the watchdog the download would block for the
+    full 30-second socket timeout; with it, the deadline wins by a wide margin.
+    """
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    release = threading.Event()
+
+    def serve() -> None:
+        try:
+            conn, _ = server.accept()
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Transfer-Encoding: chunked\r\n\r\n"
+                b"5\r\nhello\r\n"
+                b"5"  # a chunk-size line with no CRLF, then silence
+            )
+            release.wait(30)
+            conn.close()
+        finally:
+            server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+
+    def opener(request: object, timeout: float) -> http.client.HTTPResponse:
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+        connection.request("GET", "/opa")
+        return connection.getresponse()
+
+    started = time.monotonic()
+    try:
+        with pytest.raises(provision_tools.DownloadTimeout):
+            provision_tools.download(
+                f"http://127.0.0.1:{port}/opa",
+                tmp_path / "opa",
+                len(OPA_BYTES),
+                opener=opener,
+                deadline_seconds=1.0,
+            )
+    finally:
+        release.set()
+
+    elapsed = time.monotonic() - started
+    assert elapsed < 5.0, (
+        f"the deadline took {elapsed:.1f}s to bite; the socket timeout alone "
+        "would be 30s, so the watchdog did not interrupt the framing read"
+    )
 
 
 def test_download_clips_the_socket_timeout_to_the_deadline(tmp_path: Path) -> None:
