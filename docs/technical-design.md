@@ -370,6 +370,9 @@ design:
 | Conflict, built-in, or parse error          | `{"errors":[{"code":...}]}`                    | 2    |
 | Missing input                               | empty, with the diagnostic on standard error   | 2    |
 
+_Table 4: Output shapes observed from the pinned OPA binary. These are
+observations supplied to 2.3.2's typed classifier, not the classifier's design._
+
 Without `--strict-builtin-errors`, a built-in error collapses into `{}` with
 exit 0, which is why the smoke observation passes that flag. Regorus, by
 contrast, returns `Ok(Value::Undefined)` and renders it as the string

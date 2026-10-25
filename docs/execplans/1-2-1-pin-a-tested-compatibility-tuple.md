@@ -251,6 +251,20 @@ The documentation added here states each of these limits explicitly.
   except one `check-fmt` failure caused by a prose line that began with
   `5604419148.`; see the note on tool-version skew below. Merge has not been
   performed: it awaits explicit user authority.
+- [x] (2026-10-25) Post-rebase review repairs on `55cd425`. CodeRabbit review
+  5641431549 returned one error and one warning with five caption and minor
+  findings. Repaired: `path_exists` in `tests/toolchain/support.rs` and
+  `_present` in `scripts/provision_tools.py` now distinguish "absent" from "I
+  could not find out", because `Path::exists`, `Path::is_file`, and
+  `Path.exists` all answer `False` for a permission error, and every caller
+  reads that as "not installed" and deletes or re-downloads a tree that may be
+  complete. `download` gained an overall `DOWNLOAD_DEADLINE_SECONDS`, which the
+  per-read socket timeout did not supply: a server dribbling one byte inside
+  `REQUEST_TIMEOUT_SECONDS` held the tools lock for ever. Four tests cover the
+  new behaviour, and captions were added to five tables. The `*submitted*` at
+  `docs/repository-layout.md:51` became `_submitted_` because MD049 takes a
+  document's emphasis style from its first emphasis, which is now the
+  underscore caption above it.
 
 ## Surprises & discoveries
 
@@ -315,6 +329,10 @@ The documentation added here states each of these limits explicitly.
   | Undefined, including a misspelt entry point | `{}`                                           | 0    |
   | Conflict, built-in, or parse error          | `{"errors":[{"code":...}]}`                    | 2    |
   | Missing input                               | empty (stderr only)                            | 2    |
+
+  _Table 1: OPA `eval --format json` output shapes observed from the pinned
+  binary. Recorded for 2.3.2's typed classification, which these observations
+  feed rather than define._
 
   - Without `--strict-builtin-errors`, a built-in error becomes `{}` with
     exit 0.
@@ -882,6 +900,9 @@ The obligations follow.
   | Same-tenant administrator write on a locked resource        | T W A ¬O L   | true     |
   | Owner read                                                  | T ¬W ¬A O ¬L | false    |
 
+  _Table 2: The four smoke requests, their fact vectors, and the decision each
+  is expected to receive under `T ∧ W ∧ (A ∨ (O ∧ ¬L))`._
+
   - Regorus: the decision must be exactly `Value::Bool(expected)`. Undefined
     or `Err` fails. Checked in BDD scenarios run by `make test`.
   - OPA: exit 0 and stdout parsing to exactly
@@ -979,6 +1000,9 @@ Stage B, EP-M1, Regorus in process:
      | `serde_json` | 1.0.154 |
      | `rstest-bdd` | 0.6.0 |
      | `rstest-bdd-macros` | 0.6.0 |
+
+     _Table 3: The dev-dependency versions observed on 2026-10-17 and pinned
+     with `=`._
 
    - Create `tests/toolchain/main.rs`, with a crate-level `//!` doc and module
      declarations.

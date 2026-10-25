@@ -493,6 +493,105 @@ def test_load_pins_rejects_an_identity_without_the_version(tmp_path: Path) -> No
     assert LEAN_VERSION in str(raised.value), "the diagnostic names the version"
 
 
+def test_download_stops_at_the_overall_deadline(tmp_path: Path) -> None:
+    """A trickling stream cannot run past the deadline.
+
+    A per-read socket timeout is not a bound on the transfer: a server that
+    returns one byte just inside `REQUEST_TIMEOUT_SECONDS` keeps the read
+    returning for ever, and the run holds the tools lock the whole time. This
+    drives the real `download` with a response that never ends and a zero
+    deadline, and asserts it refuses instead of looping.
+    """
+    reads: list[int] = []
+
+    class Trickle(io.BytesIO):
+        """A body that yields one byte per read, without end."""
+
+        def read(self, size: int = -1) -> bytes:
+            reads.append(size)
+            return b"x"
+
+    def opener(request: object, timeout: float) -> Trickle:
+        return Trickle()
+
+    destination = tmp_path / "opa"
+
+    with pytest.raises(provision_tools.DownloadTimeout) as refused:
+        provision_tools.download(
+            "https://example.invalid/opa",
+            destination,
+            len(OPA_BYTES),
+            opener=opener,
+            deadline_seconds=0,
+        )
+
+    assert "did not finish within" in str(refused.value), (
+        "the failure names the deadline rather than a digest or size fault"
+    )
+    assert destination.read_bytes() == b"", "no trickled byte is kept"
+
+
+def test_download_deadline_is_checked_before_each_read(tmp_path: Path) -> None:
+    """The deadline is not merely a first-iteration guard.
+
+    A guard checked only before the loop would let an endless stream through.
+    This response ends after a few chunks, with a clock that advances past the
+    deadline part-way, so passing proves the check runs inside the loop.
+    """
+    now = [0.0]
+
+    class Chunks(io.BytesIO):
+        """Three chunks, then end of stream."""
+
+        def __init__(self) -> None:
+            super().__init__(b"a" * 3)
+
+        def read(self, size: int = -1) -> bytes:
+            now[0] += 0.4
+            return super().read(1)
+
+    def opener(request: object, timeout: float) -> Chunks:
+        return Chunks()
+
+    with (
+        pytest.MonkeyPatch.context() as patch,
+        pytest.raises(provision_tools.DownloadTimeout),
+    ):
+        patch.setattr(provision_tools.time, "monotonic", lambda: now[0])
+        provision_tools.download(
+            "https://example.invalid/opa",
+            tmp_path / "opa",
+            len(OPA_BYTES),
+            opener=opener,
+            deadline_seconds=1.0,
+        )
+
+
+def test_present_lets_an_unreadable_parent_raise(tmp_path: Path) -> None:
+    """`_present` reports absence, not every failure to find out.
+
+    `Path.exists` answers `False` for a permission error too. Here a directory
+    with no execute permission makes `stat` fail with `PermissionError`; the
+    helper must raise it rather than answer `False`, because a caller that
+    treats `False` as "not installed" would delete a complete tree.
+    """
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o000)
+    try:
+        with pytest.raises(PermissionError):
+            provision_tools._present(locked / "COMPLETE")
+    finally:
+        locked.chmod(0o755)
+
+
+def test_present_reports_an_absent_path_as_absent(tmp_path: Path) -> None:
+    """The one answer that means "not installed" stays `False`."""
+    assert provision_tools._present(tmp_path / "COMPLETE") is False, (
+        "a genuinely missing marker is absence, not an environment failure"
+    )
+
+
 def test_load_pins_rejects_a_bad_digest(tmp_path: Path) -> None:
     """A digest that is not 64 lowercase hex characters is rejected."""
     pins_path = write_pins(tmp_path, opa=pin_for(OPA_BYTES, sha256="not-a-digest"))

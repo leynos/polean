@@ -33,6 +33,8 @@ Pin and smoke-test this tuple on `x86_64-unknown-linux-gnu`:
 | Lean archive | `lean-4.35.0-linux.tar.zst`, 594,481,375 bytes            |
 | OPA          | `opa_linux_amd64_static` v1.21.2, 64,181,524 bytes        |
 
+_Table 1: The pinned `x86_64-unknown-linux-gnu` tuple._
+
 The full digests are in `toolchain-pins.json`, which the provisioning script
 and the tests read, together with the archive's extraction root
 (`lean-4.35.0-linux`) and the complete line `lean --version` must print. The

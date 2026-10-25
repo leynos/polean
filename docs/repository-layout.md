@@ -35,6 +35,8 @@ The module split proposed by the technical design is not yet implemented.
 | `.rustfmt.toml`, `clippy.toml`    | Rust formatting and lint policy.                                                       |
 | `README.md`, `LICENSE`            | Project introduction and ISC licence.                                                  |
 
+_Table 1: Repository paths and their responsibilities._
+
 ## Ownership boundaries
 
 Keep implementation under `src/` until a working vertical slice creates a real
@@ -46,7 +48,7 @@ tests or documentation.
 `lean/` is repository-owned. Its `lakefile.toml`, `lean-toolchain`, and
 `lake-manifest.json` are reviewed like any other source, and a change to them
 is a toolchain-tuple change that needs the evidence ADR-003 describes. The
-earlier prohibition on Lake configuration applies to *submitted* configuration:
+earlier prohibition on Lake configuration applies to _submitted_ configuration:
 a policy author's Lake file, package, or compiled proof module is never
 verifier input, and the worker checks generated data against the trusted
 package in an isolated job directory instead.

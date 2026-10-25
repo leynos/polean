@@ -9,10 +9,35 @@
 //! The path helpers build from `CARGO_MANIFEST_DIR` rather than the process
 //! working directory, so the provisioned smoke tests work from any directory.
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
 /// The repository root, as recorded by Cargo at compile time.
 const REPOSITORY_ROOT: &str = env!("CARGO_MANIFEST_DIR");
+
+/// Whether `path` exists, failing rather than guessing when it cannot be asked.
+///
+/// `Path::exists` and `is_file` answer `false` for a permission error as well
+/// as for a genuinely absent path. In a smoke test that difference decides
+/// whether the contributor is told "run `make tools`" when the truth is that
+/// the installed tree is unreadable, which sends them to re-download an
+/// archive that is already there. `metadata` separates the one answer that
+/// means "not installed" from every failure to find out.
+///
+/// # Errors
+///
+/// Returns a diagnostic naming `path` and the underlying error for any
+/// failure other than `NotFound`.
+pub fn path_exists(path: &Path) -> Result<bool, String> {
+    match fs::metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("cannot inspect {}: {error}", path.display())),
+    }
+}
 
 /// The path to the committed pin file.
 #[must_use]

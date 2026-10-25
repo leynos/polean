@@ -36,6 +36,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -64,6 +65,12 @@ CHUNK_SIZE = 1024 * 1024
 # whole run holds the tools lock, so an unbounded read would block every later
 # invocation, and in CI it would hold the job until its timeout.
 REQUEST_TIMEOUT_SECONDS = 60
+
+# A per-operation socket timeout does not bound the whole transfer: a server
+# that dribbles one byte just inside `REQUEST_TIMEOUT_SECONDS` keeps the read
+# returning for ever. The deadline is what makes "this download finishes or
+# fails" true regardless of how the bytes arrive.
+DOWNLOAD_DEADLINE_SECONDS = 30 * 60
 
 _DIGEST = re.compile(r"\A[0-9a-f]{64}\Z")
 _TOP_LEVEL_KEYS = frozenset({"format", "platform", "opa", "lean"})
@@ -100,6 +107,27 @@ class ArchiveEscape(ProvisionError):
 
 class DownloadTooLarge(ProvisionError):
     """A download exceeded the pinned size and was abandoned."""
+
+
+class DownloadTimeout(ProvisionError):
+    """A download did not finish inside the overall deadline."""
+
+
+def _present(path: Path) -> bool:
+    """Whether `path` exists, letting an environment failure propagate.
+
+    `Path.exists` answers `False` for a permission error as well as for a
+    genuinely absent path. Every caller here treats `False` as "not installed"
+    and deletes or re-downloads; answering that for an unreadable tree would
+    destroy a complete install because the contributor cannot read it. `stat`
+    separates the one answer that means "absent" from every failure to find
+    out.
+    """
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -271,7 +299,7 @@ def _entries(directory: Path, prefixes: tuple[str, ...]) -> Iterable[Path]:
 def _install_opa(pin: ToolPin, tools_dir: Path, downloads: Path, fetcher: Fetcher) -> Path:
     """Install the OPA binary, re-hashing an existing install first."""
     final = tools_dir / "opa" / pin.sha256 / "opa"
-    if final.exists():
+    if _present(final):
         _verify_digest(final, pin)
         return final
     artefact = _ensure_downloaded(pin, downloads, fetcher)
@@ -297,7 +325,7 @@ def _install_lean(pin: ToolPin, tools_dir: Path, downloads: Path, fetcher: Fetch
     final = tools_dir / "lean" / pin.sha256
     if _is_complete(final, pin):
         return final
-    if final.exists():
+    if _present(final):
         shutil.rmtree(final)
     artefact = _ensure_downloaded(pin, downloads, fetcher)
     _check_archive(artefact, pin)
@@ -309,7 +337,7 @@ def _install_lean(pin: ToolPin, tools_dir: Path, downloads: Path, fetcher: Fetch
         parent = tools_dir / "lean"
         parent.mkdir(exist_ok=True)
         target = parent / pin.sha256
-        if target.exists():
+        if _present(target):
             shutil.rmtree(target)
         inner.rename(target)
     finally:
@@ -331,13 +359,11 @@ def _is_complete(directory: Path, pin: ToolPin) -> bool:
     incomplete install, so `OSError` propagates. `Path.is_file` would answer
     `False` for a permission error too, sending the caller down the repair path
     and deleting a tree that may be complete; a re-download of 600 MiB is the
-    wrong response to an unreadable directory. `stat` distinguishes the one
+    wrong response to an unreadable directory. `_present` distinguishes the one
     answer that means "not installed" from every failure to find out.
     """
     marker = directory / COMPLETE_MARKER
-    try:
-        marker.stat()
-    except FileNotFoundError:
+    if not _present(marker):
         return False
     recorded = marker.read_text(encoding="utf-8").strip()
     return recorded == pin.sha256
@@ -355,7 +381,7 @@ def _ensure_downloaded(pin: ToolPin, downloads: Path, fetcher: Fetcher) -> Path:
     fetched again rather than trusted.
     """
     cached = downloads / f"{pin.name}-{pin.sha256}"
-    if cached.exists():
+    if _present(cached):
         try:
             _verify(cached, pin)
         except (SizeMismatch, DigestMismatch):
@@ -463,29 +489,53 @@ def fetch_url(url: str, destination: Path, limit: int) -> None:
 
     `DownloadTooLarge` is raised as soon as the stream exceeds `limit`, and
     `urllib` errors propagate for a network or HTTP failure. A read that blocks
-    for longer than `REQUEST_TIMEOUT_SECONDS` fails the same way rather than
+    for longer than `REQUEST_TIMEOUT_SECONDS`, or a transfer that runs past
+    `DOWNLOAD_DEADLINE_SECONDS` in total, fails the same way rather than
     waiting indefinitely while the tools lock is held.
     """
     download(url, destination, limit, opener=urllib.request.urlopen)
 
 
-def download(url: str, destination: Path, limit: int, *, opener: Opener) -> None:
+def download(
+    url: str,
+    destination: Path,
+    limit: int,
+    *,
+    opener: Opener,
+    deadline_seconds: float = DOWNLOAD_DEADLINE_SECONDS,
+) -> None:
     """`fetch_url` with the HTTP call supplied, so a test can observe it.
 
     The opener is called as `opener(request, timeout=...)` and must return a
     readable, context-manageable response. Keeping it a keyword parameter of a
     real production path is what lets the timeout be tested without replacing
     anything in the standard library.
+
+    `deadline_seconds` bounds the whole transfer, not each `read`. The check
+    runs before every read, so a stream that keeps trickling cannot extend the
+    download past the deadline; the failure is a `ProvisionError` because a
+    pinned asset that cannot be fetched in `deadline_seconds` is a pin or
+    network fault the contributor must act on, not an internal error.
     """
     request = urllib.request.Request(
         url, headers={"User-Agent": "polean-provisioner/1"}
     )
     total = 0
+    expire_at = time.monotonic() + deadline_seconds
     with (
         opener(request, timeout=REQUEST_TIMEOUT_SECONDS) as response,
         destination.open("wb") as handle,
     ):
-        while chunk := response.read(CHUNK_SIZE):
+        while True:
+            if time.monotonic() >= expire_at:
+                raise DownloadTimeout(
+                    f"{url}: the transfer did not finish within "
+                    f"{deadline_seconds:g} seconds; the pin file and the "
+                    "upstream asset disagree, or the network is too slow."
+                )
+            chunk = response.read(CHUNK_SIZE)
+            if not chunk:
+                return
             total += len(chunk)
             if total > limit:
                 raise DownloadTooLarge(

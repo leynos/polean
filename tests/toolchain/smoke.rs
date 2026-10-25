@@ -29,6 +29,7 @@ use crate::{
         baseline_source_path,
         lean_root,
         opa_path,
+        path_exists,
         pins_path,
         repository_path,
     },
@@ -88,7 +89,7 @@ fn read_pin(tool: &str) -> Result<Pin, String> {
 ///
 /// Returns a diagnostic naming the path and `make tools`.
 fn require_executable(path: &Path) -> Result<(), String> {
-    if path.is_file() {
+    if path_exists(path)? {
         return Ok(());
     }
     Err(format!(
@@ -286,7 +287,7 @@ fn opa_decides_baseline_source(
 fn pinned_lean() -> Result<(PathBuf, Pin), String> {
     let pin = read_pin("lean")?;
     let root = lean_root(&pin.sha256);
-    if !root.is_dir() {
+    if !path_exists(&root)? {
         return Err(format!(
             "{} is missing; run `make tools` to install the pinned tools",
             root.display()
@@ -355,7 +356,7 @@ fn lean_builds_smoke_library() -> Result<(), String> {
         &repository_path("."),
     )?;
     let olean = package.join(".lake/build/lib/lean/PoleanSmoke.olean");
-    if !olean.is_file() {
+    if !path_exists(&olean)? {
         return Err(format!(
             "the build reported success but {} is absent; the target did not build",
             olean.display()
