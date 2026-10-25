@@ -24,6 +24,7 @@ import socket
 import tarfile
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -361,7 +362,7 @@ def test_fetch_url_passes_a_timeout(tmp_path: Path) -> None:
     class Response(io.BytesIO):
         """A response body that ends immediately."""
 
-    def opener(request: object, timeout: float) -> Response:
+    def opener(request: object, *, timeout: float, watch: object) -> Response:
         observed["timeout"] = timeout
         return Response(OPA_BYTES)
 
@@ -394,7 +395,7 @@ def test_download_refuses_a_stream_over_the_limit(tmp_path: Path) -> None:
     class Response(io.BytesIO):
         """A response body served in two chunks."""
 
-    def opener(request: object, timeout: float) -> Response:
+    def opener(request: object, *, timeout: float, watch: object) -> Response:
         return Response(b"".join(chunks))
 
     destination = tmp_path / "opa"
@@ -515,7 +516,7 @@ def test_download_stops_at_the_overall_deadline(tmp_path: Path) -> None:
             reads.append(size)
             return b"x"
 
-    def opener(request: object, timeout: float) -> Trickle:
+    def opener(request: object, *, timeout: float, watch: object) -> Trickle:
         return Trickle()
 
     destination = tmp_path / "opa"
@@ -554,7 +555,7 @@ def test_download_deadline_is_checked_before_each_read(tmp_path: Path) -> None:
             now[0] += 0.4
             return super().read1(1)
 
-    def opener(request: object, timeout: float) -> Chunks:
+    def opener(request: object, *, timeout: float, watch: object) -> Chunks:
         return Chunks()
 
     with pytest.raises(provision_tools.DownloadTimeout):
@@ -598,7 +599,7 @@ def test_download_reads_with_read1_so_a_blocking_read_cannot_hide_the_deadline(
                 "bytes arrive, which defeats the deadline check"
             )
 
-    def opener(request: object, timeout: float) -> Dribble:
+    def opener(request: object, *, timeout: float, watch: object) -> Dribble:
         return Dribble()
 
     with pytest.raises(provision_tools.DownloadTimeout):
@@ -652,8 +653,36 @@ def test_download_aborts_a_stalled_chunk_size_line_at_the_deadline(
 
     threading.Thread(target=serve, daemon=True).start()
 
-    def opener(request: object, timeout: float) -> http.client.HTTPResponse:
-        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+    interrupted: list[bool] = []
+
+    class Recorded:
+        """Passed to the watchdog so the test can see a shutdown happen."""
+
+        def __init__(self, sock: socket.socket) -> None:
+            self._sock = sock
+
+        def shutdown(self, how: int) -> None:
+            interrupted.append(True)
+            self._sock.shutdown(how)
+
+    def opener(
+        request: object, *, timeout: float, watch: Callable[[socket.socket], None]
+    ) -> http.client.HTTPResponse:
+        # A fixed 30-second socket timeout, deliberately *not* the clipped one
+        # the download passes. Forwarding it would make the socket timeout a
+        # second candidate for ending the stall, and the test could then pass
+        # without the watchdog doing anything. Registration is required for
+        # the same reason it is required in production: an unregistered socket
+        # cannot be shut down, so the watchdog would have nothing to interrupt.
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        create = connection._create_connection
+
+        def create_and_watch(*args: object, **kwargs: object) -> socket.socket:
+            sock = create(*args, **kwargs)
+            watch(Recorded(sock))
+            return sock
+
+        connection._create_connection = create_and_watch
         connection.request("GET", "/opa")
         return connection.getresponse()
 
@@ -671,10 +700,177 @@ def test_download_aborts_a_stalled_chunk_size_line_at_the_deadline(
         release.set()
 
     elapsed = time.monotonic() - started
+    assert interrupted, (
+        "the watchdog never shut the socket down, so something else ended the "
+        "read and the deadline did not bound it"
+    )
     assert elapsed < 5.0, (
         f"the deadline took {elapsed:.1f}s to bite; the socket timeout alone "
-        "would be 30s, so the watchdog did not interrupt the framing read"
+        "would be 30s, so the read was not interrupted in time"
     )
+
+
+def test_download_aborts_a_stalled_header_block_at_the_deadline(
+    tmp_path: Path,
+) -> None:
+    """A stalled *header* parse is bounded too, not only the body.
+
+    `urlopen` connects, sends the request, and parses the status line and
+    headers inside `getresponse()`. A server that sends a status line and then
+    dribbles header bytes just inside the socket timeout holds that call open
+    before any response object exists, so a watchdog armed after the opener
+    returns can never fire. Here the socket timeout is 30s and the deadline is
+    1s, so only a watchdog armed *before* the opener can end this in time.
+    """
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    release = threading.Event()
+
+    def serve() -> None:
+        try:
+            conn, _ = server.accept()
+            conn.sendall(b"HTTP/1.1 200 OK\r\n")
+            while not release.is_set():
+                conn.sendall(b"X")  # never a CRLF: the header block never ends
+                time.sleep(0.3)
+            conn.close()
+        finally:
+            server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+
+    interrupted: list[bool] = []
+
+    class Recorded:
+        """Passed to the watchdog so the test can see a shutdown happen."""
+
+        def __init__(self, sock: socket.socket) -> None:
+            self._sock = sock
+
+        def shutdown(self, how: int) -> None:
+            interrupted.append(True)
+            self._sock.shutdown(how)
+
+    def opener(
+        request: object, *, timeout: float, watch: Callable[[socket.socket], None]
+    ) -> http.client.HTTPResponse:
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        create = connection._create_connection
+
+        def create_and_watch(*args: object, **kwargs: object) -> socket.socket:
+            sock = create(*args, **kwargs)
+            watch(Recorded(sock))
+            return sock
+
+        connection._create_connection = create_and_watch
+        connection.request("GET", "/opa")
+        return connection.getresponse()
+
+    started = time.monotonic()
+    try:
+        with pytest.raises(provision_tools.DownloadTimeout):
+            provision_tools.download(
+                f"http://127.0.0.1:{port}/opa",
+                tmp_path / "opa",
+                len(OPA_BYTES),
+                opener=opener,
+                deadline_seconds=1.0,
+            )
+    finally:
+        release.set()
+
+    elapsed = time.monotonic() - started
+    assert interrupted, (
+        "the watchdog never shut the socket down, so the header parse was not "
+        "interrupted and nothing bounded the call"
+    )
+    assert elapsed < 5.0, (
+        f"the deadline took {elapsed:.1f}s to bite; the socket timeout alone "
+        "would be 30s, so the watchdog did not cover the header parse"
+    )
+
+
+def test_a_read_clipped_by_the_socket_timeout_reports_the_deadline(
+    tmp_path: Path,
+) -> None:
+    """A read ended by its clipped timeout is reported as a deadline, not raw.
+
+    The socket timeout is clipped to `deadline_seconds`, so a read that blocks
+    for the whole deadline raises a plain `TimeoutError` even when the watchdog
+    timer has not got round to firing. That is the deadline doing its job, and
+    the contributor should be told so rather than shown a bare socket error.
+    """
+    now = [0.0]
+
+    class Stalled(io.BytesIO):
+        def read1(self, size: int) -> bytes:
+            now[0] += 2.0
+            raise TimeoutError("timed out")
+
+    def opener(request: object, *, timeout: float, watch: object) -> Stalled:
+        return Stalled()
+
+    with pytest.raises(provision_tools.DownloadTimeout) as raised:
+        provision_tools.download(
+            "https://example.invalid/opa",
+            tmp_path / "opa",
+            len(OPA_BYTES),
+            opener=opener,
+            deadline_seconds=1.0,
+            clock=lambda: now[0],
+        )
+
+    assert "did not finish within" in str(raised.value), (
+        "the diagnostic names the deadline rather than the socket error"
+    )
+    assert not (tmp_path / "opa").read_bytes(), "no partial body is kept"
+
+
+def test_fetch_url_watches_the_connection_it_opens(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The production path registers its socket, so the watchdog can reach it.
+
+    `fetch_url` is the only caller that builds the real opener. If its handler
+    stopped passing `watch` through, every test above would still pass with an
+    injected opener while the shipped script had an uninterruptible download.
+    """
+    registered: list[socket.socket] = []
+
+    class Recorder(provision_tools._Deadline):
+        def watch(self, sock: object) -> None:
+            registered.append(sock)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(provision_tools, "_Deadline", Recorder)
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+
+    def serve() -> None:
+        try:
+            conn, _ = server.accept()
+            conn.recv(65536)
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Length: " + str(len(OPA_BYTES)).encode() + b"\r\n"
+                b"\r\n" + OPA_BYTES
+            )
+            conn.close()
+        finally:
+            server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+
+    provision_tools.fetch_url(f"http://127.0.0.1:{port}/opa", tmp_path / "opa", 4096)
+
+    assert registered, "the connection's socket reached the watchdog"
+    assert registered[0].family == socket.AF_INET, "it is the connected socket"
 
 
 def test_download_clips_the_socket_timeout_to_the_deadline(tmp_path: Path) -> None:
@@ -687,7 +883,7 @@ def test_download_clips_the_socket_timeout_to_the_deadline(tmp_path: Path) -> No
     """
     seen: list[float] = []
 
-    def opener(request: object, timeout: float) -> io.BytesIO:
+    def opener(request: object, *, timeout: float, watch: object) -> io.BytesIO:
         seen.append(timeout)
         return io.BytesIO(OPA_BYTES)
 

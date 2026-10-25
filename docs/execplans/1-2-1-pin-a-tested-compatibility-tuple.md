@@ -296,6 +296,31 @@ The documentation added here states each of these limits explicitly.
   `http.client.HTTPResponse` over a real socket and asserts the deadline bites
   in under 5 s, when the socket timeout alone is 30 s; with the timer disabled
   it fails with `TimeoutError`.
+- [x] (2026-10-25) Round-5 repair on `9329bc9`, review 5642637894. Three
+  findings, all legitimate, and together they showed the watchdog was covering
+  only the last third of the transfer. `urlopen` connects, writes the request,
+  and parses the status line and headers *inside* `getresponse()`, so the
+  watchdog — armed after the opener returned — could never see a server that
+  dribbles header bytes: measured, the call blocked indefinitely. The single
+  `_abort_at_deadline` was replaced by one `_Deadline` that is armed before the
+  opener and to which every socket registers as it is created, so connect,
+  request write, header parse, body and chunk framing are all bounded by the
+  same timer. The production opener is built by `_watched_opener`, whose HTTP
+  and HTTPS handlers subclass the defaults (`build_opener` then drops the
+  built-ins, so no request escapes unwatched) and register via
+  `_create_connection`, the instance attribute `connect` assigns `self.sock`
+  through. Two further findings: a read ended by the clipped socket timeout is
+  now reported as a deadline rather than a bare `TimeoutError`; and the
+  chunked-stream test had been forwarding the clipped timeout, so the socket
+  timeout could end the stall and the test could pass with the watchdog doing
+  nothing — it now uses a fixed 30 s timeout and records that a shutdown
+  actually happened. The previously inline read-failure handler was removed
+  after a mutation run showed the outer guard subsumes it: all 32 tests pass
+  with the inner handler deleted. Mutation-tested: arming after the opener and
+  disabling the timer both hang the header and framing tests past the 30 s
+  socket timeout, and removing registration fails
+  `test_fetch_url_watches_the_connection_it_opens`, which is the only test that
+  drives the shipped opener rather than an injected one. 32 pytest tests pass.
 
 ## Surprises & discoveries
 

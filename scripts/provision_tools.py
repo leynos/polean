@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import http.client
 import json
 import posixpath
 import re
@@ -83,7 +84,10 @@ Fetcher = Callable[[str, Path, int], None]
 
 # The one call the default fetcher makes, named so the fetch test can supply a
 # stand-in through the same parameter the install functions already take rather
-# than patching the standard library.
+# than patching the standard library. It is called as
+# `opener(request, timeout=..., watch=...)`, and every socket it opens must be
+# registered with `watch`: the deadline cannot reach a socket it was not told
+# about, and a read blocked on that socket cannot be interrupted from outside.
 Opener = Callable[..., Any]
 
 # A monotonic-seconds source, injected so a deadline can be driven past in a
@@ -490,47 +494,134 @@ def _extract_archive(path: Path, destination: Path) -> None:
         archive.extractall(destination, filter="data")
 
 
-def _abort_at_deadline(
-    response: Any, expire_at: float, clock: Clock
-) -> tuple[threading.Timer, list[bool]]:
-    """Shut the socket down when the deadline passes, even mid-read.
+class _Deadline:
+    """Interrupt every watched socket when the deadline passes.
 
-    Checking the clock between reads is not enough on its own. A single
-    `read1` can be blocked inside `_get_chunk_left`, whose `readline` for a
-    chunk-size line makes as many system calls as it needs (CPython says so in
-    a comment there), and a plain socket read can block for the whole socket
-    timeout. No code of ours runs while that happens, so a timer is needed to
-    interrupt it. `socket.shutdown` is what actually does so: it wakes the
-    blocked call in the same process, which returns short or raises. Closing
-    the response from another thread does not, because the read already holds
-    the file — measured, not assumed.
+    Checking the clock between reads is not enough on its own, for three
+    separate reasons, and one mechanism covers all of them.
+
+    A single `read1` can block inside `_get_chunk_left`, whose `readline` for a
+    chunk-size line makes as many system calls as it needs — CPython says so in
+    a comment there — and a plain socket read can block for the whole socket
+    timeout. Before any of that, the opener itself blocks: `urlopen` connects,
+    sends the request, and parses the status line and headers inside
+    `getresponse()`, so a server that dribbles header bytes slowly holds the
+    call open before a response object even exists to attach a timer to. No
+    code of ours runs during any of those, so a timer is what bounds them, and
+    it has to be armed before the opener is called.
+
+    `socket.shutdown` is what actually interrupts a read already in progress:
+    it wakes the blocked call in the same process, which returns short or
+    raises. Closing the response from another thread does not, because the read
+    already holds the file — measured, not assumed.
+
+    Sockets are registered by `watch` as each one is created. A socket the
+    caller never registers cannot be interrupted, which is why the production
+    opener registers its connection before it is used.
 
     The returned flag records that the timer fired, so the caller can report a
     deadline rather than the socket error the shutdown provokes. The timer is
     always cancelled by the caller, and is a daemon so a stuck read cannot keep
     the process alive at exit.
     """
-    fired: list[bool] = []
-    # The socket sits behind the response's buffered reader; an injected
-    # response in a test need not have one, and then there is nothing to shut
-    # down and the between-reads check remains the only bound.
-    peer = getattr(getattr(getattr(response, "fp", None), "raw", None), "_sock", None)
 
-    def abort() -> None:
-        fired.append(True)
-        if peer is not None:
-            try:
-                peer.shutdown(socketmod.SHUT_RDWR)
-            except OSError:
-                # Already closed, or never connected: the read cannot outlive
-                # the deadline either way, which is all this has to ensure.
-                pass
+    def __init__(self, expire_at: float, clock: Clock) -> None:
+        self._expire_at = expire_at
+        self._clock = clock
+        self._sockets: list[Any] = []
+        self._lock = threading.Lock()
+        self._fired: list[bool] = []
 
-    delay = max(expire_at - clock(), 0)
-    timer = threading.Timer(delay, abort)
-    timer.daemon = True
-    timer.start()
-    return timer, fired
+    def watch(self, sock: Any) -> None:
+        """Register `sock` so the deadline can shut it down.
+
+        Registration is locked against the timer: a socket that connects just
+        as the deadline passes must either be seen by the timer or see the
+        fired flag, never neither.
+        """
+        with self._lock:
+            self._sockets.append(sock)
+            already = bool(self._fired)
+        if already:
+            self._abort_one(sock)
+
+    def fired(self) -> bool:
+        """Whether the deadline has passed and the watchdog has run."""
+        with self._lock:
+            return bool(self._fired)
+
+    def _abort_one(self, sock: Any) -> None:
+        try:
+            sock.shutdown(socketmod.SHUT_RDWR)
+        except OSError:
+            # Already closed, or never connected: the read cannot outlive the
+            # deadline either way, which is all this has to ensure.
+            pass
+
+    def _abort(self) -> None:
+        with self._lock:
+            self._fired.append(True)
+            sockets = list(self._sockets)
+        for sock in sockets:
+            self._abort_one(sock)
+
+    def start(self) -> threading.Timer:
+        """Arm the watchdog and return the timer, for the caller to cancel."""
+        delay = max(self._expire_at - self._clock(), 0)
+        timer = threading.Timer(delay, self._abort)
+        timer.daemon = True
+        timer.start()
+        return timer
+
+
+def _watched_connection(base: type[http.client.HTTPConnection]) -> type:
+    """A connection class that hands each new socket to the watchdog.
+
+    `HTTPConnection.connect` assigns `self.sock` through `self._create_connection`,
+    which is looked up on the instance, so replacing it is enough to see every
+    socket the opener creates — including the one `HTTPSConnection.connect`
+    later wraps for TLS. Registering at creation rather than after
+    `getresponse()` returns is the point: the header parse happens inside that
+    call, and a server dribbling header bytes blocks there with no response
+    object yet in existence.
+    """
+
+    class Watched(base):  # type: ignore[misc, valid-type]
+        def __init__(self, *args: Any, watch: Callable[[Any], None], **kwargs: Any):
+            super().__init__(*args, **kwargs)
+            create = self._create_connection
+
+            def create_and_watch(*create_args: Any, **create_kwargs: Any) -> Any:
+                sock = create(*create_args, **create_kwargs)
+                watch(sock)
+                return sock
+
+            self._create_connection = create_and_watch
+
+    return Watched
+
+
+def _watched_opener(watch: Callable[[Any], None]) -> Any:
+    """An opener whose every HTTP and HTTPS connection is watched.
+
+    `build_opener` drops a default handler when it is given a subclass of it,
+    so passing these two replaces the built-in pair rather than adding to them:
+    no request can reach the network on a socket the watchdog was not told
+    about. Redirects go back through these handlers, so the connection a
+    redirect opens is watched too.
+    """
+    http_class = _watched_connection(http.client.HTTPConnection)
+    https_class = _watched_connection(http.client.HTTPSConnection)
+
+    class HTTPHandler(urllib.request.HTTPHandler):
+        def http_open(self, req: Any) -> Any:
+            return self.do_open(http_class, req, watch=watch)
+
+    class HTTPSHandler(urllib.request.HTTPSHandler):
+        def https_open(self, req: Any) -> Any:
+            return self.do_open(https_class, req, context=self._context, watch=watch)
+
+    return urllib.request.build_opener(HTTPHandler, HTTPSHandler)
 
 
 def fetch_url(url: str, destination: Path, limit: int) -> None:
@@ -539,10 +630,14 @@ def fetch_url(url: str, destination: Path, limit: int) -> None:
     `DownloadTooLarge` is raised as soon as the stream exceeds `limit`, and
     `urllib` errors propagate for a network or HTTP failure. A read that blocks
     for longer than `REQUEST_TIMEOUT_SECONDS`, or a transfer that runs past
-    `DOWNLOAD_DEADLINE_SECONDS` in total, fails the same way rather than
-    waiting indefinitely while the tools lock is held.
+    `DOWNLOAD_DEADLINE_SECONDS` in total, fails as `DownloadTimeout` rather
+    than waiting indefinitely while the tools lock is held.
     """
-    download(url, destination, limit, opener=urllib.request.urlopen)
+
+    def opener(request: Any, *, timeout: float, watch: Callable[[Any], None]) -> Any:
+        return _watched_opener(watch).open(request, timeout=timeout)
+
+    download(url, destination, limit, opener=opener)
 
 
 def download(
@@ -556,12 +651,13 @@ def download(
 ) -> None:
     """`fetch_url` with the HTTP call and clock supplied, so a test sees both.
 
-    The opener is called as `opener(request, timeout=...)` and must return a
-    readable, context-manageable response. Keeping it a keyword parameter of a
-    real production path is what lets the timeout be tested without replacing
-    anything in the standard library. `clock` is injectable for the same
-    reason: a test that wants the deadline to pass must be able to say so
-    without patching the `time` module out from under every other caller.
+    The opener is called as `opener(request, timeout=..., watch=...)` and must
+    return a readable, context-manageable response, passing every socket it
+    creates to `watch`. Keeping it a keyword parameter of a real production
+    path is what lets the timeout be tested without replacing anything in the
+    standard library. `clock` is injectable for the same reason: a test that
+    wants the deadline to pass must be able to say so without patching the
+    `time` module out from under every other caller.
 
     `deadline_seconds` bounds the whole transfer, not each read. The bound
     works because the loop reads with `read1`, which makes at most one
@@ -573,6 +669,11 @@ def download(
     deadline. A read that has already begun can still block for its socket
     timeout, which is why that timeout is itself clipped to
     `deadline_seconds`.
+
+    The watchdog covers what the between-reads check cannot: the connect, the
+    request write, and the header parse inside the opener. It is armed before
+    the opener is called, so a server that never finishes its headers is
+    interrupted rather than waited out.
 
     The failure is a `ProvisionError` because a pinned asset that cannot be
     fetched in `deadline_seconds` is a pin or network fault the contributor
@@ -586,6 +687,7 @@ def download(
     # A read that has already begun blocks for its socket timeout before it
     # can return, so the per-operation timeout must not outlive the deadline.
     socket_timeout = min(REQUEST_TIMEOUT_SECONDS, deadline_seconds)
+    watchdog = _Deadline(expire_at, clock)
 
     def expired() -> DownloadTimeout:
         return DownloadTimeout(
@@ -594,29 +696,16 @@ def download(
             "upstream asset disagree, or the network is too slow."
         )
 
-    with (
-        opener(request, timeout=socket_timeout) as response,
-        destination.open("wb") as handle,
-    ):
-        timer, aborted = _abort_at_deadline(response, expire_at, clock)
-        try:
+    timer = watchdog.start()
+    try:
+        with (
+            opener(request, timeout=socket_timeout, watch=watchdog.watch) as response,
+            destination.open("wb") as handle,
+        ):
             while True:
                 if clock() >= expire_at:
                     raise expired()
-                try:
-                    chunk = response.read1(CHUNK_SIZE)
-                except Exception:
-                    # The watchdog shuts the socket down at the deadline, which
-                    # surfaces here as whatever the interrupted read raises:
-                    # `OSError` for a plain read, `IncompleteRead` when the cut
-                    # lands in chunk framing. Either way, if the watchdog fired
-                    # this is the deadline doing its job, not a transport
-                    # fault, so report the deadline.
-                    if aborted:
-                        raise expired() from None
-                    raise
-                if aborted:
-                    raise expired()
+                chunk = response.read1(CHUNK_SIZE)
                 if not chunk:
                     return
                 total += len(chunk)
@@ -626,8 +715,25 @@ def download(
                         "the pin file and the upstream asset disagree."
                     )
                 handle.write(chunk)
-        finally:
-            timer.cancel()
+    except ProvisionError:
+        # A guard's own refusal is already the right answer; only a foreign
+        # exception can be the deadline's doing and need relabelling.
+        raise
+    except Exception:
+        # One guard covers the whole transfer, the opener included, because
+        # the watchdog covers the opener: a connect or header parse cut off at
+        # the deadline surfaces from the `with` itself, before there is a
+        # response to read from. Every way the deadline can end the transfer
+        # arrives here as a foreign exception whose type depends on where the
+        # cut landed — `OSError` for a plain read, `IncompleteRead` in chunk
+        # framing, a plain timeout for a read the clipped socket timeout ended.
+        # Once the deadline has passed it is the cause in all three cases, so
+        # it is what gets reported.
+        if watchdog.fired() or clock() >= expire_at:
+            raise expired() from None
+        raise
+    finally:
+        timer.cancel()
 
 
 def main(
