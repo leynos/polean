@@ -303,21 +303,27 @@ The documentation added here states each of these limits explicitly.
   watchdog — armed after the opener returned — could never see a server that
   dribbles header bytes: measured, the call blocked indefinitely. The single
   `_abort_at_deadline` was replaced by one `_Deadline` that is armed before the
-  opener and to which every socket registers as it connects, so request write,
-  header parsing, body reads, and chunk framing are all bounded by the same
-  timer. The production opener is built by `_watched_opener`, whose HTTP and
-  HTTPS handlers subclass the defaults (`build_opener` then drops the
-  built-ins, so no request escapes unwatched) and register their connection's
-  socket. Two further findings: a read ended by the clipped socket timeout is
-  now reported as a deadline rather than a bare `TimeoutError`; and the
-  chunked-stream test had been forwarding the clipped timeout, so the socket
-  timeout could end the stall and the test could pass with the watchdog doing
-  nothing — it now uses a fixed 30 s timeout and records that a shutdown
-  actually happened. The previously inline read-failure handler was removed
-  after a mutation run showed the outer guard subsumes it: all 32 tests passed
-  with the inner handler deleted. Mutation-tested: arming after the opener and
-  disabling the timer both hang the header and framing tests past the 30 s
-  socket timeout, and removing registration fails
+  opener and to which every socket registers once its connection is
+  established. From that point request write, header parsing, body reads, and
+  chunk framing are bounded by the same timer. What the timer does not bound is
+  everything before registration: name resolution, and the TCP and TLS
+  handshakes themselves. The TCP connect is bounded by the clipped socket
+  timeout, and each TLS handshake read is bounded by it too, but that timeout
+  ends one read rather than the handshake as a whole. Name resolution happens
+  before any socket exists, so nothing here bounds it; the resolver is. The
+  production opener is built by `_watched_opener`, whose HTTP and HTTPS
+  handlers subclass the defaults (`build_opener` then drops the built-ins, so
+  no request escapes unwatched) and register their connection's socket. Two
+  further findings: a read ended by the clipped socket timeout is now reported
+  as a deadline rather than a bare `TimeoutError`, and the chunked-stream test
+  had been forwarding the clipped timeout, so the socket timeout could end the
+  stall and the test could pass with the watchdog doing nothing — it now uses a
+  fixed 30 s timeout and records that a shutdown actually happened. The
+  previously inline read-failure handler was removed after a mutation run
+  showed the outer guard subsumes it: all 32 tests passed with the inner
+  handler deleted. Mutation-tested: arming after the opener and disabling the
+  timer both hang the header and framing tests past the 30 s socket timeout,
+  and removing registration fails
   `test_fetch_url_watches_the_connection_it_opens`, which is the only test that
   drives the shipped opener rather than an injected one. 32 pytest tests passed.
 - [x] (2026-10-25) Round-6 repair on `a6e8512`, review 5643157781. Four
@@ -343,7 +349,19 @@ The documentation added here states each of these limits explicitly.
   rather than replacing a module attribute. Mutation-tested: accepting an empty
   read fails the stalled-`Content-Length` test with `DID NOT RAISE`, and
   registering at creation instead fails the TLS test with `fileno() == -1`. 34
-  pytest tests pass; the TLS test skips when `openssl` is unavailable.
+  pytest tests pass; the TLS test skips when `openssl` is unavailable. The
+  first of the four findings was against the Round-5 prose above, and two of
+  its corrections had not actually landed when the rest of this round was
+  committed. The entry said registration happened "as it connects", which
+  overstates the boundary, and it kept a semicolon where a conjunction
+  belonged. It now says registration happens once a connection is established,
+  and names what lies outside the deadline: name resolution, and the TCP and
+  TLS handshakes. The clipped socket timeout bounds the TCP connect and each
+  individual handshake read, but ends one read rather than a whole handshake,
+  and name resolution happens before a socket exists, so the resolver is what
+  bounds it. All nine gates re-run on `efb0d53`: `check-fmt`, `typecheck`,
+  `lint`, `test`, `test-scripts`, `markdownlint`, `design-check`,
+  `design-properties`, `design-boundary` — all rc=0.
 
 ## Surprises & discoveries
 
