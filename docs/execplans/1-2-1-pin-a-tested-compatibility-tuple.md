@@ -362,6 +362,23 @@ The documentation added here states each of these limits explicitly.
   bounds it. All nine gates re-run on `efb0d53`: `check-fmt`, `typecheck`,
   `lint`, `test`, `test-scripts`, `markdownlint`, `design-check`,
   `design-properties`, `design-boundary` — all rc=0.
+- [x] (2026-10-25) Round-8 repair on `2104646`, review 5644007695. Two
+  findings, both in the test file and both legitimate. First:
+  `_tls_credentials` ran `openssl` with no timeout, so a hung child process
+  would have blocked the suite for ever. It now passes `timeout=60`, and the
+  `TimeoutExpired` is deliberately *not* caught — catching it would convert a
+  broken environment into a `None` that reads as "openssl is unavailable" and
+  skips the TLS coverage instead of failing. Second, and the same defect class
+  as round 5: the stalled-`Content-Length` test passed
+  `provision_tools.watched_opener` straight to `download`, so `download`'s clip
+  gave it a socket timeout of `min(60, 1.0)` = 1 s — exactly the deadline. The
+  socket timeout was therefore an equally good candidate for ending the stall,
+  and the test could have passed with the watchdog doing nothing. It now wraps
+  the shipped opener with a fixed 30 s socket timeout and a recording `watch`,
+  and asserts a shutdown happened; mutation-tested by forwarding the clipped
+  timeout and dropping the recording, which fails on `assert []`.
+  `test-scripts` (34 passed, Python 3.14), `check-fmt` and `lint` re-run on the
+  result.
 
 ## Surprises & discoveries
 

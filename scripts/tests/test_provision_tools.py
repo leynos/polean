@@ -907,6 +907,13 @@ def test_download_aborts_a_stalled_content_length_body_at_the_deadline(
     explicit check a truncated download would be written out and then fail the
     digest check with a misleading message. The chunked case raises instead;
     this is the case where it does not.
+
+    The opener fixes the socket timeout at 30 s and records that a shutdown
+    happened, for the same reason as the chunked test above: `download` clips
+    the socket timeout to `deadline_seconds`, and with a 1 s deadline here
+    that clip is 1 s, so the socket timeout is an equally good candidate for
+    ending the stall. Asserting the shutdown is what distinguishes the
+    watchdog from the timeout, and the timeout case has its own test.
     """
     promised = 1000
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -930,6 +937,32 @@ def test_download_aborts_a_stalled_content_length_body_at_the_deadline(
 
     threading.Thread(target=serve, daemon=True).start()
 
+    interrupted: list[bool] = []
+
+    class Recorded:
+        """Passed to the watchdog so the test can see a shutdown happen."""
+
+        def __init__(self, sock: socket.socket) -> None:
+            self._sock = sock
+
+        def shutdown(self, how: int) -> None:
+            interrupted.append(True)
+            self._sock.shutdown(how)
+
+    def opener(
+        request: object, *, timeout: float, watch: Callable[[socket.socket], None]
+    ) -> http.client.HTTPResponse:
+        # The shipped opener, so the production wiring stays under test, with
+        # two deliberate substitutions. The socket timeout is pinned at 30 s
+        # rather than forwarded, because `download` clips it to the 1 s
+        # deadline and a 1 s socket timeout could end the stall on its own. And
+        # every socket is wrapped so a shutdown is recorded: without that
+        # assertion the test cannot tell an interrupted read from one the
+        # timeout ended.
+        return provision_tools.watched_opener(
+            request, timeout=30, watch=lambda sock: watch(Recorded(sock))
+        )
+
     started = time.monotonic()
     try:
         with pytest.raises(provision_tools.DownloadTimeout):
@@ -937,12 +970,16 @@ def test_download_aborts_a_stalled_content_length_body_at_the_deadline(
                 f"http://127.0.0.1:{port}/opa",
                 tmp_path / "opa",
                 4096,
-                opener=provision_tools.watched_opener,
+                opener=opener,
                 deadline_seconds=1.0,
             )
     finally:
         release.set()
 
+    assert interrupted, (
+        "the watchdog never shut the socket down, so the socket timeout ended "
+        "the read and the test proves nothing about the deadline"
+    )
     assert time.monotonic() - started < 5.0, "the deadline, not the timeout, ended it"
 
 
@@ -951,6 +988,12 @@ def _tls_credentials(directory: Path) -> tuple[Path, Path] | None:
 
     Only the *test* shells out. The provisioner itself launches no subprocess,
     so the certificate is generated here rather than by anything under test.
+
+    `timeout` is set so a hung `openssl` cannot block the whole suite. It is
+    deliberately not caught: a `TimeoutExpired` escaping here is the clearest
+    possible statement that the environment is broken, and swallowing it would
+    turn a real fault into a `None` that reads as "openssl is unavailable" and
+    skips the TLS coverage instead.
     """
     if shutil.which("openssl") is None:
         return None
@@ -965,6 +1008,7 @@ def _tls_credentials(directory: Path) -> tuple[Path, Path] | None:
         ],
         capture_output=True,
         check=False,
+        timeout=60,
     )
     if generated.returncode != 0 or not certificate.is_file():
         return None
