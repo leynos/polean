@@ -24,6 +24,7 @@ import shutil
 import socket
 import ssl
 import subprocess
+import sys
 import tarfile
 import threading
 import time
@@ -136,6 +137,7 @@ def good_fetcher(artefacts: dict[str, bytes]) -> provision_tools.Fetcher:
     """Return a fetcher that serves `artefacts` by URL."""
 
     def fetch(url: str, destination: Path, limit: int) -> None:
+        """Serve each artefact, refusing one over the caller's limit."""
         payload = artefacts[url]
         if len(payload) > limit:
             raise provision_tools.DownloadTooLarge(url, limit)
@@ -367,6 +369,7 @@ def test_fetch_url_passes_a_timeout(tmp_path: Path) -> None:
         """A response body that ends immediately."""
 
     def opener(request: object, *, timeout: float, watch: object) -> Response:
+        """Record the timeout, then return a body that ends at once."""
         observed["timeout"] = timeout
         return Response(OPA_BYTES)
 
@@ -400,6 +403,7 @@ def test_download_refuses_a_stream_over_the_limit(tmp_path: Path) -> None:
         """A response body served in two chunks."""
 
     def opener(request: object, *, timeout: float, watch: object) -> Response:
+        """Return the oversize body in two chunks."""
         return Response(b"".join(chunks))
 
     destination = tmp_path / "opa"
@@ -436,6 +440,7 @@ def test_unreadable_marker_is_not_treated_as_an_incomplete_install(
     real_read_text = Path.read_text
 
     def deny_marker(self: Path, *args: object, **kwargs: object) -> str:
+        """Refuse the marker read, and pass every other read through."""
         if self == marker:
             raise PermissionError(13, "Permission denied", str(marker))
         return real_read_text(self, *args, **kwargs)
@@ -446,6 +451,7 @@ def test_unreadable_marker_is_not_treated_as_an_incomplete_install(
     standard = standard_fetcher()
 
     def recording(url: str, destination: Path, limit: int) -> None:
+        """Record the URL, then serve it as the standard fetcher does."""
         fetched.append(url)
         standard(url, destination, limit)
 
@@ -517,10 +523,12 @@ def test_download_stops_at_the_overall_deadline(tmp_path: Path) -> None:
         """A body that yields one byte per read, without end."""
 
         def read1(self, size: int = -1) -> bytes:
+            """Yield one more byte, however many are asked for."""
             reads.append(size)
             return b"x"
 
     def opener(request: object, *, timeout: float, watch: object) -> Trickle:
+        """Return the endless one-byte body."""
         return Trickle()
 
     destination = tmp_path / "opa"
@@ -553,13 +561,16 @@ def test_download_deadline_is_checked_before_each_read(tmp_path: Path) -> None:
         """Three chunks, then end of stream."""
 
         def __init__(self) -> None:
+            """Start the body at three bytes."""
             super().__init__(b"a" * 3)
 
         def read1(self, size: int = -1) -> bytes:
+            """Advance the clock, then yield one byte."""
             now[0] += 0.4
             return super().read1(1)
 
     def opener(request: object, *, timeout: float, watch: object) -> Chunks:
+        """Return the three-chunk body with an advancing clock."""
         return Chunks()
 
     with pytest.raises(provision_tools.DownloadTimeout):
@@ -591,19 +602,23 @@ def test_download_reads_with_read1_so_a_blocking_read_cannot_hide_the_deadline(
         """Four bytes, each in its own syscall, with the clock advancing."""
 
         def __init__(self) -> None:
+            """Start the body at four bytes."""
             super().__init__(b"abcd")
 
         def read1(self, size: int = -1) -> bytes:
+            """Advance the clock, then yield one byte."""
             now[0] += 0.5
             return super().read1(1)
 
         def read(self, size: int = -1) -> bytes:
+            """Refuse a blocking read, which would defeat the deadline check."""
             raise AssertionError(
                 "download must use read1; read(n) loops on syscalls until n "
                 "bytes arrive, which defeats the deadline check"
             )
 
     def opener(request: object, *, timeout: float, watch: object) -> Dribble:
+        """Return the four-byte body that refuses `read`."""
         return Dribble()
 
     with pytest.raises(provision_tools.DownloadTimeout):
@@ -642,6 +657,7 @@ def test_download_aborts_a_stalled_chunk_size_line_at_the_deadline(
     release = threading.Event()
 
     def serve() -> None:
+        """Send one complete chunk, then stall inside a chunk-size line."""
         try:
             conn, _ = server.accept()
             conn.sendall(
@@ -663,25 +679,29 @@ def test_download_aborts_a_stalled_chunk_size_line_at_the_deadline(
         """Passed to the watchdog so the test can see a shutdown happen."""
 
         def __init__(self, sock: socket.socket) -> None:
+            """Wrap the real socket."""
             self._sock = sock
 
         def shutdown(self, how: int) -> None:
+            """Record the shutdown, then perform it."""
             interrupted.append(True)
             self._sock.shutdown(how)
 
     def opener(
         request: object, *, timeout: float, watch: Callable[[socket.socket], None]
     ) -> http.client.HTTPResponse:
-        # A fixed 30-second socket timeout, deliberately *not* the clipped one
-        # the download passes. Forwarding it would make the socket timeout a
-        # second candidate for ending the stall, and the test could then pass
-        # without the watchdog doing anything. Registration is required for
-        # the same reason it is required in production: an unregistered socket
-        # cannot be shut down, so the watchdog would have nothing to interrupt.
+        """Open with a fixed 30-second timeout and a recorded socket."""
+        # Deliberately *not* the clipped timeout the download passes.
+        # Forwarding it would make the socket timeout a second candidate for
+        # ending the stall, and the test could then pass without the watchdog
+        # doing anything. Registration is required for the same reason it is
+        # required in production: an unregistered socket cannot be shut down,
+        # so the watchdog would have nothing to interrupt.
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
         create = connection._create_connection
 
         def create_and_watch(*args: object, **kwargs: object) -> socket.socket:
+            """Connect, register the socket, then return it."""
             sock = create(*args, **kwargs)
             watch(Recorded(sock))
             return sock
@@ -734,6 +754,7 @@ def test_download_aborts_a_stalled_header_block_at_the_deadline(
     release = threading.Event()
 
     def serve() -> None:
+        """Send a status line, then dribble header bytes that never end it."""
         try:
             conn, _ = server.accept()
             conn.sendall(b"HTTP/1.1 200 OK\r\n")
@@ -752,19 +773,23 @@ def test_download_aborts_a_stalled_header_block_at_the_deadline(
         """Passed to the watchdog so the test can see a shutdown happen."""
 
         def __init__(self, sock: socket.socket) -> None:
+            """Wrap the real socket."""
             self._sock = sock
 
         def shutdown(self, how: int) -> None:
+            """Record the shutdown, then perform it."""
             interrupted.append(True)
             self._sock.shutdown(how)
 
     def opener(
         request: object, *, timeout: float, watch: Callable[[socket.socket], None]
     ) -> http.client.HTTPResponse:
+        """Open with a fixed timeout and register the socket."""
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
         create = connection._create_connection
 
         def create_and_watch(*args: object, **kwargs: object) -> socket.socket:
+            """Connect, register the socket, then return it."""
             sock = create(*args, **kwargs)
             watch(Recorded(sock))
             return sock
@@ -811,10 +836,12 @@ def test_a_read_clipped_by_the_socket_timeout_reports_the_deadline(
 
     class Stalled(io.BytesIO):
         def read1(self, size: int) -> bytes:
+            """Outlast the socket timeout, then fail as a timed-out read."""
             now[0] += 2.0
             raise TimeoutError("timed out")
 
     def opener(request: object, *, timeout: float, watch: object) -> Stalled:
+        """Return the body whose single read outlives the socket timeout."""
         return Stalled()
 
     with pytest.raises(provision_tools.DownloadTimeout) as raised:
@@ -849,15 +876,19 @@ def test_fetch_url_watches_the_connection_it_opens(tmp_path: Path) -> None:
 
     class Recorder:
         def __init__(self, expire_at: float, clock: object) -> None:
+            """Record the deadline the download computed."""
             self._expire_at = expire_at
 
         def watch(self, sock: object) -> None:
+            """Record each socket the opener registers."""
             registered.append(sock)
 
         def fired(self) -> bool:
+            """Report that the deadline has not passed."""
             return False
 
         def start(self) -> threading.Timer:
+            """Arm a timer long enough never to fire during the test."""
             timer = threading.Timer(3600, lambda: None)
             timer.daemon = True
             timer.start()
@@ -870,6 +901,7 @@ def test_fetch_url_watches_the_connection_it_opens(tmp_path: Path) -> None:
     port = server.getsockname()[1]
 
     def serve() -> None:
+        """Answer one request with a complete `Content-Length` body."""
         try:
             conn, _ = server.accept()
             conn.recv(65536)
@@ -924,6 +956,7 @@ def test_download_aborts_a_stalled_content_length_body_at_the_deadline(
     release = threading.Event()
 
     def serve() -> None:
+        """Promise more bytes than are sent, then stall before the body ends."""
         try:
             conn, _ = server.accept()
             conn.sendall(
@@ -943,15 +976,18 @@ def test_download_aborts_a_stalled_content_length_body_at_the_deadline(
         """Passed to the watchdog so the test can see a shutdown happen."""
 
         def __init__(self, sock: socket.socket) -> None:
+            """Wrap the real socket."""
             self._sock = sock
 
         def shutdown(self, how: int) -> None:
+            """Record the shutdown, then perform it."""
             interrupted.append(True)
             self._sock.shutdown(how)
 
     def opener(
         request: object, *, timeout: float, watch: Callable[[socket.socket], None]
     ) -> http.client.HTTPResponse:
+        """Drive the shipped opener with a recorded socket and a pinned timeout."""
         # The shipped opener, so the production wiring stays under test, with
         # two deliberate substitutions. The socket timeout is pinned at 30 s
         # rather than forwarded, because `download` clips it to the 1 s
@@ -1042,6 +1078,7 @@ def test_download_watches_the_tls_socket_not_the_one_it_replaces(
     port = server.getsockname()[1]
 
     def serve() -> None:
+        """Accept one TLS connection, then stall before answering it."""
         try:
             raw, _ = server.accept()
             tls = context.wrap_socket(raw, server_side=True)
@@ -1098,6 +1135,7 @@ def test_download_clips_the_socket_timeout_to_the_deadline(tmp_path: Path) -> No
     seen: list[float] = []
 
     def opener(request: object, *, timeout: float, watch: object) -> io.BytesIO:
+        """Record the timeout the download clipped, then serve the body."""
         seen.append(timeout)
         return io.BytesIO(OPA_BYTES)
 
@@ -1159,6 +1197,7 @@ def test_main_reports_an_environment_failure_as_a_diagnostic(
     """
 
     def offline(url: str, destination: Path, limit: int) -> None:
+        """Fail the way an unreachable network does."""
         raise OSError("network is unreachable")
 
     status = provision_tools.main(write_pins(tmp_path), tmp_path / "tools", offline)
@@ -1169,3 +1208,141 @@ def test_main_reports_an_environment_failure_as_a_diagnostic(
         "the failure is reported on stderr as a diagnostic"
     )
     assert "Traceback" not in captured.err, "no traceback reaches the contributor"
+
+
+def test_a_second_process_waits_for_the_tools_lock(tmp_path: Path) -> None:
+    """A concurrent run blocks on the lock rather than racing the install.
+
+    `install_tools` holds an exclusive `flock` on `.polean/tools/.lock` for the
+    whole run, which is what makes two contributors (or two CI jobs) safe on a
+    shared tree. A thread would not prove this: `flock` is per open file
+    description, so two threads in one process can both hold it. This holds the
+    lock in a *child process* and checks the parent's install waits.
+
+    The child signals readiness on stdout once it holds the lock, so the test
+    cannot race ahead of it, and it exits when the parent closes the pipe.
+    """
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+    pins_path = write_pins(tmp_path)
+    ready = threading.Event()
+    release = threading.Event()
+
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import fcntl, sys\n"
+                "lock = open(sys.argv[1], 'a+')\n"
+                "fcntl.flock(lock.fileno(), fcntl.LOCK_EX)\n"
+                "print('held', flush=True)\n"
+                "sys.stdin.readline()\n"
+            ),
+            str(tools_dir / ".lock"),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held", "the child took the lock"
+
+        fetched: list[str] = []
+
+        def fetcher(url: str, destination: Path, limit: int) -> None:
+            """Record the URL, then serve it as the standard fetcher does."""
+            fetched.append(url)
+            standard_fetcher()(url, destination, limit)
+
+        def run_install() -> None:
+            """Run a whole install, then report that it finished."""
+            provision_tools.install_tools(pins_path, tools_dir, fetcher)
+            ready.set()
+
+        worker = threading.Thread(target=run_install, daemon=True)
+        worker.start()
+        assert not ready.wait(1.0), (
+            "the install finished while another process held the tools lock, so "
+            "the lock is not serialising anything"
+        )
+        assert not fetched, "nothing may be downloaded before the lock is taken"
+    finally:
+        if holder.stdin is not None:
+            holder.stdin.write("\n")
+            holder.stdin.flush()
+        holder.wait(timeout=30)
+
+    assert ready.wait(60), "the install completes once the lock is released"
+    assert fetched, "the install went on to download once it held the lock"
+
+
+def test_stale_temporary_siblings_are_removed_before_installing(
+    tmp_path: Path,
+) -> None:
+    """A killed run's leftovers are deleted rather than reused or reported.
+
+    An interrupted run leaves `.install-*` staging directories and `.part-*`
+    partial downloads behind. `_remove_stale` deletes both at the start of the
+    next run, under the lock, so a half-written artefact can never be mistaken
+    for a cached one.
+    """
+    tools_dir = tmp_path / "tools"
+    downloads = tools_dir / "downloads"
+    downloads.mkdir(parents=True)
+    stale_install = tools_dir / ".install-opa-deadbeef"
+    stale_install.mkdir()
+    (stale_install / "half-written").write_bytes(b"partial")
+    stale_part = downloads / (".part-" + "a" * 64)
+    stale_part.write_bytes(b"partial")
+    kept = downloads / "keep-me"
+    kept.write_bytes(b"not a temporary file")
+
+    provision_tools.install_tools(
+        write_pins(tmp_path), tools_dir, standard_fetcher()
+    )
+
+    assert not stale_install.exists(), "the stale install staging directory is gone"
+    assert not stale_part.exists(), "the stale partial download is gone"
+    assert kept.exists(), "a file without a temporary prefix is left alone"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"format": "polean-pins/v2"}, "unsupported format"),
+        ({"platform": "aarch64-unknown-linux-gnu"}, "is not"),
+        ({"opa": {"version": "1.21.2"}}, r"missing key\(s\)"),
+        ({"opa": dict(pin_for(OPA_BYTES), url="http://example.invalid/opa")}, "https://"),
+        ({"opa": dict(pin_for(OPA_BYTES), version="")}, "non-empty string"),
+        ({"opa": dict(pin_for(OPA_BYTES), size=0)}, "positive integer"),
+        ({"opa": dict(pin_for(OPA_BYTES), size=True)}, "positive integer"),
+        ({"opa": dict(pin_for(OPA_BYTES), kind="tar.zst")}, "expected 'binary'"),
+        ({"opa": "not-an-object"}, "must be a JSON object"),
+        (
+            {"lean": dict(lean_pin_for(lean_archive_bytes()), root="lean-9.9.9")},
+            "does not embed the pinned version",
+        ),
+        (
+            {
+                "lean": dict(
+                    lean_pin_for(lean_archive_bytes()), identity="Lean (version 9.9.9)"
+                )
+            },
+            "does not embed the pinned version",
+        ),
+    ],
+)
+def test_load_pins_rejects_each_malformed_pin(
+    tmp_path: Path, overrides: dict[str, object], expected: str
+) -> None:
+    """Every closed-schema rejection names the field and fails as `PinFileError`.
+
+    A pin file is the single authority for what gets installed, so a typo or a
+    downgraded scheme must stop the run rather than leave a field unchecked.
+    """
+    pins_path = write_pins(tmp_path, **overrides)
+
+    with pytest.raises(provision_tools.PinFileError, match=expected):
+        provision_tools.load_pins(pins_path)

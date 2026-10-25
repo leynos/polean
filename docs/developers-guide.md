@@ -293,6 +293,14 @@ These observations follow the conventions below.
   test would read as a pass.
 - A missing tool is not a skip. `make toolchain-smoke` runs the ignored module
   by name, so an absent binary is a failure.
+- The presence check itself is covered without provisioning, in
+  `support/tests.rs` and `smoke/tests.rs`. They drive `path_exists` and
+  `require_executable` through an explicit `Path`, so `make test` exercises the
+  "install is unreadable" branch on any Linux host. `smoke` and `support` stay
+  under the module line budget because their test children are separate files.
+  Both are `mod.rs` directories, because the denied
+  `clippy::self_named_module_files` lint forbids the `smoke.rs` plus `smoke/`
+  sibling idiom.
 
 ## Documentation
 

@@ -70,14 +70,15 @@ pub fn repository_path(relative: &str) -> PathBuf {
 pub fn baseline_source_path() -> PathBuf { repository_path("examples/tenant-write/policy.rego") }
 
 /// Baseline policy source, the admitted reference module.
-pub const BASELINE_SOURCE: &str = include_str!("../../examples/tenant-write/policy.rego");
+pub const BASELINE_SOURCE: &str = include_str!("../../../examples/tenant-write/policy.rego");
 
 /// Deny-all mutation source, which keeps no non-default rule.
 pub const DENY_ALL_SOURCE: &str =
-    include_str!("../../examples/tenant-write/mutations/deny-all/policy.rego");
+    include_str!("../../../examples/tenant-write/mutations/deny-all/policy.rego");
 
 /// Owner-unlocked write fixture request: `T W ¬A O ¬L`. Expected admission.
-pub const OWNER_UNLOCKED_REQUEST: &str = include_str!("../../examples/tenant-write/request.json");
+pub const OWNER_UNLOCKED_REQUEST: &str =
+    include_str!("../../../examples/tenant-write/request.json");
 
 /// Cross-tenant administrator write: `¬T W A ¬O ¬L`. Expected denial.
 ///
@@ -126,3 +127,6 @@ pub const OWNER_READ_REQUEST: &str = r#"{
   },
   "action": "read"
 }"#;
+
+#[cfg(test)]
+mod tests;

@@ -1,11 +1,13 @@
 //! Provisioned OPA and Lean smoke observations.
 //!
-//! Every test here is `#[ignore]`d because it needs the digest-checked
-//! artefacts that `make tools` installs. `make toolchain-smoke` provisions
-//! them and then runs this module by name.
+//! The `#[ignore]`d tests need the digest-checked artefacts that `make tools`
+//! installs; `make toolchain-smoke` provisions them and then runs this module
+//! by name. A missing tool fails with a remediation message rather than being
+//! skipped, because a silently skipped provisioned test would look like a pass.
 //!
-//! A missing tool fails with a remediation message rather than being skipped:
-//! a silently skipped provisioned test would look like a pass.
+//! The `tests` module covers the presence check itself and runs under
+//! `make test` on any host: it takes an explicit path, so it never starts a
+//! pinned process, deletes a tree, or fetches an archive.
 //!
 //! These are smoke observations. OPA agreeing with Regorus on four requests is
 //! not conformance evidence, and a compiled Lean smoke library is not a
@@ -283,16 +285,12 @@ fn opa_decides_baseline_source(
 ///
 /// # Errors
 ///
-/// Returns a diagnostic when the pin file or the installed root is missing.
+/// Returns a diagnostic when the pin file or the installed root is missing, or
+/// when the installed root cannot be inspected.
 fn pinned_lean() -> Result<(PathBuf, Pin), String> {
     let pin = read_pin("lean")?;
     let root = lean_root(&pin.sha256);
-    if !path_exists(&root)? {
-        return Err(format!(
-            "{} is missing; run `make tools` to install the pinned tools",
-            root.display()
-        ));
-    }
+    require_executable(&root)?;
     Ok((root, pin))
 }
 
@@ -364,3 +362,6 @@ fn lean_builds_smoke_library() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

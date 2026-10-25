@@ -531,6 +531,7 @@ class _Deadline:
     """
 
     def __init__(self, expire_at: float, clock: Clock) -> None:
+        """Record the deadline, the clock to read it from, and empty registries."""
         self._expire_at = expire_at
         self._clock = clock
         self._sockets: list[Any] = []
@@ -556,6 +557,7 @@ class _Deadline:
             return bool(self._fired)
 
     def _abort_one(self, sock: Any) -> None:
+        """Shut one socket down, treating an already-closed socket as already safe."""
         try:
             sock.shutdown(socketmod.SHUT_RDWR)
         except OSError:
@@ -564,6 +566,7 @@ class _Deadline:
             pass
 
     def _abort(self) -> None:
+        """Mark the deadline fired, then shut every registered socket down."""
         with self._lock:
             self._fired.append(True)
             sockets = list(self._sockets)
@@ -603,10 +606,12 @@ def _watched_connection(base: type[http.client.HTTPConnection]) -> type:
         def __init__(
             self, *args: Any, watch: Callable[[Any], None], **kwargs: Any
         ) -> None:
+            """Record the callback that registers each connected socket."""
             super().__init__(*args, **kwargs)
             self._polean_watch = watch
 
         def connect(self) -> None:
+            """Connect, then hand the finished socket to the watchdog."""
             super().connect()
             # `self.sock` is the finished socket: for HTTPS this is the TLS
             # wrapper, because `HTTPSConnection.connect` assigns it last.
@@ -629,10 +634,12 @@ def _watched_opener(watch: Callable[[Any], None]) -> Any:
 
     class HTTPHandler(urllib.request.HTTPHandler):
         def http_open(self, req: Any) -> Any:
+            """Open an HTTP request on a watched connection."""
             return self.do_open(http_class, req, watch=watch)
 
     class HTTPSHandler(urllib.request.HTTPSHandler):
         def https_open(self, req: Any) -> Any:
+            """Open an HTTPS request on a watched TLS connection."""
             return self.do_open(https_class, req, context=self._context, watch=watch)
 
     return urllib.request.build_opener(HTTPHandler, HTTPSHandler)
@@ -742,6 +749,7 @@ def download(
     watchdog = deadline_factory(expire_at, clock)
 
     def expired() -> DownloadTimeout:
+        """The refusal raised when the transfer outlives the deadline."""
         return DownloadTimeout(
             f"{url}: the transfer did not finish within "
             f"{deadline_seconds:g} seconds; the pin file and the "

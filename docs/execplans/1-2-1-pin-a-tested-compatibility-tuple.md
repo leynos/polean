@@ -213,8 +213,8 @@ The documentation added here states each of these limits explicitly.
   not yet runnable without a pin file.
 - [x] (2026-10-21) EP-M3 Green. `lean/lean-toolchain`, `lean/lakefile.toml`,
   `lean/PoleanSmoke.lean`, and the pinned lake's `lean/lake-manifest.json` were
-  added; `tests/toolchain/smoke.rs` runs OPA 1.21.2 and the pinned Lake under
-  `env_clear()`. Both O6 negative controls failed the build as required: a
+  added; `tests/toolchain/smoke/mod.rs` runs OPA 1.21.2 and the pinned Lake
+  under `env_clear()`. Both O6 negative controls failed the build as required: a
   `sorry` declaration, and an altered `#guard_msgs` text.
 - [x] (2026-10-21) EP-M3 CI. `.github/workflows/toolchain.yml` added with
   path filters, `permissions: contents: read`, every action pinned by SHA, and
@@ -253,7 +253,7 @@ The documentation added here states each of these limits explicitly.
   performed: it awaits explicit user authority.
 - [x] (2026-10-25) Post-rebase review repairs on `55cd425`. CodeRabbit review
   5641431549 returned one error and one warning with five caption and minor
-  findings. Repaired: `path_exists` in `tests/toolchain/support.rs` and
+  findings. Repaired: `path_exists` in `tests/toolchain/support/mod.rs` and
   `_present` in `scripts/provision_tools.py` now distinguish "absent" from "I
   could not find out", because `Path::exists`, `Path::is_file`, and
   `Path.exists` all answer `False` for a permission error, and every caller
@@ -379,6 +379,54 @@ The documentation added here states each of these limits explicitly.
   timeout and dropping the recording, which fails on `assert []`.
   `test-scripts` (34 passed, Python 3.14), `check-fmt` and `lint` re-run on the
   result.
+- [x] (2026-10-25) Pre-merge repair, walkthrough comment 6233449536. Two error
+  rows, both legitimate against code this branch adds, and four warnings.
+  - "Testing (Overall)" asked for deterministic tests of the tools lock across
+    processes, of stale `.install-*` and `.part-*` cleanup, and of every
+    remaining pin-schema rejection. Three groups added to
+    `scripts/tests/test_provision_tools.py`: a child process that holds the
+    `flock` while the parent asserts `install_tools` has not fetched, a stale
+    staging directory and partial download beside a file that must survive,
+    and eleven parametrised malformed pins asserting `PinFileError`. The lock
+    test is mutation-tested: deleting `fcntl.flock` makes it fail on
+    `assert not ready.wait(1.0)`. 47 pytest tests pass.
+  - "Unit Architecture" asked for tests of `path_exists` and, through it, of
+    unreadable OPA and Lean paths. `tests/toolchain/{support,smoke}/tests.rs`
+    drive the helpers through an explicit `Path`, so they run under
+    `make test` with nothing provisioned. The unreadable cases traverse a
+    regular file, which yields `ENOTDIR` and so reaches the error arm on every
+    host; the permission case asserts only that its result is never `Ok(false)`,
+    and states why a process holding `CAP_DAC_OVERRIDE` sees presence.
+    Mutation-tested twice: making `path_exists` answer `Ok(false)` for an
+    inspection failure fails three of the tests, and replacing the helper's
+    presence check with `Path::exists` fails the diagnostic test. `pinned_lean`
+    now goes through `require_executable`, so the Lean root gets the same
+    remediation message as the other three tools instead of a second copy of it.
+  - "Docstring Coverage" was 73.41% against an 80% threshold. The 48 functions
+    it counted without a docstring now have one: eight in
+    `scripts/provision_tools.py` and forty in `scripts/tests/test_provision_tools.py`,
+    all one line each and stating what the function does rather than restating
+    its signature. Where an existing block comment explains a choice, the
+    docstring was placed above it so the comment stays next to the code it
+    describes.
+  - "Testing (Property / Proof)", "Testing (Compile-Time / Ui)", and
+    "Observability" are disclosed in `## Outcomes & retrospective` and are not
+    being implemented. The first would add Hypothesis to a two-file test
+    dependency for invariants already covered by exhaustive parametrisation.
+    The second asks for the raw AST snapshot to be replaced by a projection,
+    which the earlier rounds declined because O5 requires the raw adapter input
+    and the snapshot is the reviewed artefact. The third asks for an event
+    stream from a script that reports one diagnostic line and exits.
+  - Splitting the two Rust test children out of their parents first produced
+    `tests/toolchain/smoke.rs` beside `tests/toolchain/smoke/`, which the
+    denied `clippy::self_named_module_files` lint rejects. Both parents became
+    `mod.rs` directories instead, so `mod smoke;` and `mod support;` in
+    `tests/toolchain/main.rs` still resolve and the test children are owned
+    files rather than an idiom the lint forbids.
+  - Gates on the result: `check-fmt`, `typecheck`, `lint`, `test` (2 stub +
+    15 toolchain of which 7 ignored + 1 doctest), `test-scripts` (47 passed on
+    Python 3.14). The two split modules stay under the 400-line budget because
+    their test children are separate files, not exemptions.
 
 ## Surprises & discoveries
 
@@ -606,7 +654,7 @@ The documentation added here states each of these limits explicitly.
   `Version: 1.21.20` against a `1.21.2` pin.
   - Evidence: the assessment reply
     (`https://github.com/leynos/polean/pull/11#issuecomment-6322631279`), whose
-    finding was re-checked against `tests/toolchain/smoke.rs` before repair.
+    finding was re-checked against `tests/toolchain/smoke/mod.rs` before repair.
     Two negative controls then confirmed the repair is load-bearing: changing
     one character of the pinned commit, and shortening the OPA version pin,
     each fail the tightened assertion, while the unmodified pins pass all seven
@@ -805,8 +853,9 @@ The documentation added here states each of these limits explicitly.
     4.3.2 keeps clean-environment replay and resource measurement.
   - This is a small pull-forward of CI coverage the owner may strike.
   - (Agent, 2026-10-17; from the supply-chain review.)
-- Decision: keep three smoke requests inline in `tests/toolchain/support.rs`,
-  and take the owner case from `examples/tenant-write/request.json`.
+- Decision: keep three smoke requests inline in
+  `tests/toolchain/support/mod.rs`, and take the owner case from
+  `examples/tenant-write/request.json`.
   - Rationale: they are tool smoke inputs, not profile fixtures. Adding them to
     `examples/` would widen the design pack that the Python harness owns.
   - (Agent, 2026-10-17.)
@@ -861,6 +910,31 @@ hosted run observed on it concluded `success`, and CodeRabbit approved
 `a43c76e` in review 5604419148 after both pre-readiness assessments and the
 formal review's findings were reconciled. Approval is not a merge. The merge
 remains unperformed, and awaits the user's explicit authority.
+
+Open pre-merge warnings, with the reason each is not being actioned:
+
+- **Testing (Property / Proof).** It asks for Hypothesis tests over arbitrary
+  archive member names, link targets, and response chunk partitions. The
+  invariants are already checked exhaustively over the shapes the grammar
+  admits: `_check_archive` rejects each `..` component, each escape, and each
+  link target that resolves outside the pinned root, and the parametrised cases
+  name each form separately. Adding Hypothesis would put a generative
+  dependency into a two-file pin (`pytest` only) for a search over the same
+  small input space, and a failing example would still have to be written out
+  as a regression case to stay deterministic. Recorded rather than silently
+  dropped; a later task that widens the grammar should reconsider it.
+- **Testing (Compile-Time / Ui).** It asks for the raw AST snapshot at
+  `tests/toolchain/regorus.rs` to be replaced with a projection of the fields
+  the adapter consumes. Declined in earlier rounds for a stated reason: O5 is
+  written as an observation of the *raw adapter input*, and the snapshot is the
+  reviewed artefact a future frontend change is diffed against. A projection
+  would define the contract it is meant to check.
+- **Observability.** It asks for bounded structured events at each
+  provisioning boundary. The script's contract is one diagnostic line on
+  failure and two lines on success, asserted by
+  `test_main_reports_an_environment_failure_as_a_diagnostic`; an event stream
+  is a different product surface, and nothing in this repository consumes one
+  yet. Recorded rather than built speculatively.
 
 Lessons worth carrying forward:
 
@@ -1120,7 +1194,7 @@ Stage B, EP-M1, Regorus in process:
 
    - Create `tests/toolchain/main.rs`, with a crate-level `//!` doc and module
      declarations.
-   - Create `tests/toolchain/support.rs`: the baseline and deny-all sources
+   - Create `tests/toolchain/support/mod.rs`: the baseline and deny-all sources
      via `include_str!`, the O4 request table, and repository-relative paths
      built from `env!("CARGO_MANIFEST_DIR")`.
    - Create `tests/toolchain/regorus.rs` for O3 and O5.
@@ -1212,8 +1286,8 @@ Stage C, EP-M2, pins and provisioning:
 
 Stage D, EP-M3, Lean package, provisioned smoke checks, and CI:
 
-1. Red. Write `tests/toolchain/smoke.rs`. Every test in it is `#[rstest]` plus
-   `#[ignore = "needs make tools; run make toolchain-smoke"]`:
+1. Red. Write `tests/toolchain/smoke/mod.rs`. Every test in it is `#[rstest]`
+   plus `#[ignore = "needs make tools; run make toolchain-smoke"]`:
    - `opa_reports_pinned_version`
    - `opa_decides_baseline_source`, the O4 table with
      `opa eval --format json --strict-builtin-errors -d <baseline path> -I
@@ -1553,7 +1627,9 @@ New committed files:
 - `lean/lakefile.toml`
 - `lean/lake-manifest.json`
 - `lean/PoleanSmoke.lean`
-- `tests/toolchain/{main,support,engine,json,regorus,bdd,smoke}.rs`
+- `tests/toolchain/{main,engine,json,regorus,bdd}.rs`
+- `tests/toolchain/{support,smoke}/mod.rs`
+- `tests/toolchain/{support,smoke}/tests.rs`
 - `tests/features/regorus_baseline.feature`
 - `tests/toolchain/snapshots/*.snap`
 - `.github/workflows/toolchain.yml`
