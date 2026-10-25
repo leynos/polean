@@ -600,7 +600,9 @@ def _watched_connection(base: type[http.client.HTTPConnection]) -> type:
     """
 
     class Watched(base):  # type: ignore[misc, valid-type]
-        def __init__(self, *args: Any, watch: Callable[[Any], None], **kwargs: Any):
+        def __init__(
+            self, *args: Any, watch: Callable[[Any], None], **kwargs: Any
+        ) -> None:
             super().__init__(*args, **kwargs)
             self._polean_watch = watch
 
