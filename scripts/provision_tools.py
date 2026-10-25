@@ -94,6 +94,11 @@ Opener = Callable[..., Any]
 # test without patching the `time` module that every other caller shares.
 Clock = Callable[[], float]
 
+# Builds the watchdog for one transfer. Injected so a test can observe the
+# sockets the **real** opener registers, rather than replacing the module
+# attribute `fetch_url` resolves and so being blind to a wiring change.
+DeadlineFactory = Callable[[float, Clock], "_Deadline"]
+
 
 class ProvisionError(Exception):
     """A provisioning failure the contributor must act on."""
@@ -575,28 +580,35 @@ class _Deadline:
 
 
 def _watched_connection(base: type[http.client.HTTPConnection]) -> type:
-    """A connection class that hands each new socket to the watchdog.
+    """A connection class that hands its socket to the watchdog once connected.
 
-    `HTTPConnection.connect` assigns `self.sock` through `self._create_connection`,
-    which is looked up on the instance, so replacing it is enough to see every
-    socket the opener creates — including the one `HTTPSConnection.connect`
-    later wraps for TLS. Registering at creation rather than after
-    `getresponse()` returns is the point: the header parse happens inside that
-    call, and a server dribbling header bytes blocks there with no response
-    object yet in existence.
+    Registration happens at the end of `connect`, on `self.sock`. That is the
+    only socket that can usefully be shut down, and for HTTPS it is not the one
+    the TCP layer produced: `HTTPSConnection.connect` replaces `self.sock` with
+    the TLS socket from `wrap_socket`, and the socket underneath is closed by
+    that call — measured, its `fileno()` is `-1` afterwards and `shutdown`
+    raises `EBADF`. Registering at creation would therefore register a dead
+    handle for every HTTPS download, which is exactly the case the watchdog
+    exists for.
+
+    Registering after `connect` rather than after `getresponse` returns still
+    covers the header parse, because that parse happens inside
+    `getresponse()` — after `connect` has returned and this registration has
+    run. What lies outside is name resolution and the TCP and TLS handshakes
+    themselves: each handshake read is bounded by the clipped socket timeout,
+    but `getaddrinfo` is not bounded by anything here.
     """
 
     class Watched(base):  # type: ignore[misc, valid-type]
         def __init__(self, *args: Any, watch: Callable[[Any], None], **kwargs: Any):
             super().__init__(*args, **kwargs)
-            create = self._create_connection
+            self._polean_watch = watch
 
-            def create_and_watch(*create_args: Any, **create_kwargs: Any) -> Any:
-                sock = create(*create_args, **create_kwargs)
-                watch(sock)
-                return sock
-
-            self._create_connection = create_and_watch
+        def connect(self) -> None:
+            super().connect()
+            # `self.sock` is the finished socket: for HTTPS this is the TLS
+            # wrapper, because `HTTPSConnection.connect` assigns it last.
+            self._polean_watch(self.sock)
 
     return Watched
 
@@ -624,7 +636,26 @@ def _watched_opener(watch: Callable[[Any], None]) -> Any:
     return urllib.request.build_opener(HTTPHandler, HTTPSHandler)
 
 
-def fetch_url(url: str, destination: Path, limit: int) -> None:
+def watched_opener(
+    request: Any, *, timeout: float, watch: Callable[[Any], None]
+) -> Any:
+    """The production opener: every socket it opens registers with `watch`.
+
+    It is module-level, rather than a closure inside `fetch_url`, so a test can
+    drive the *shipped* opener through `download` while supplying something
+    other than the default watchdog. A closure would force such a test to
+    reproduce the wiring it is meant to be checking.
+    """
+    return _watched_opener(watch).open(request, timeout=timeout)
+
+
+def fetch_url(
+    url: str,
+    destination: Path,
+    limit: int,
+    *,
+    deadline_factory: DeadlineFactory = _Deadline,
+) -> None:
     """Download `url` to `destination`, abandoning it beyond `limit` bytes.
 
     `DownloadTooLarge` is raised as soon as the stream exceeds `limit`, and
@@ -632,12 +663,19 @@ def fetch_url(url: str, destination: Path, limit: int) -> None:
     for longer than `REQUEST_TIMEOUT_SECONDS`, or a transfer that runs past
     `DOWNLOAD_DEADLINE_SECONDS` in total, fails as `DownloadTimeout` rather
     than waiting indefinitely while the tools lock is held.
+
+    `deadline_factory` is threaded through to `download` so a test can watch
+    the real opener register its socket, without replacing any module
+    attribute. Production callers use the default.
     """
 
-    def opener(request: Any, *, timeout: float, watch: Callable[[Any], None]) -> Any:
-        return _watched_opener(watch).open(request, timeout=timeout)
-
-    download(url, destination, limit, opener=opener)
+    download(
+        url,
+        destination,
+        limit,
+        opener=watched_opener,
+        deadline_factory=deadline_factory,
+    )
 
 
 def download(
@@ -648,6 +686,7 @@ def download(
     opener: Opener,
     deadline_seconds: float = DOWNLOAD_DEADLINE_SECONDS,
     clock: Clock = time.monotonic,
+    deadline_factory: DeadlineFactory = _Deadline,
 ) -> None:
     """`fetch_url` with the HTTP call and clock supplied, so a test sees both.
 
@@ -658,6 +697,13 @@ def download(
     standard library. `clock` is injectable for the same reason: a test that
     wants the deadline to pass must be able to say so without patching the
     `time` module out from under every other caller.
+
+    `deadline_factory` is the same idea for the watchdog itself. It exists so
+    a test can observe what reaches `watch` through the real production path
+    without replacing the module attribute the shipped code calls: patching
+    `provision_tools._Deadline` would pass even if `fetch_url` stopped routing
+    the real opener's registrations here, which is the very thing such a test
+    is for.
 
     `deadline_seconds` bounds the whole transfer, not each read. The bound
     works because the loop reads with `read1`, which makes at most one
@@ -670,10 +716,14 @@ def download(
     timeout, which is why that timeout is itself clipped to
     `deadline_seconds`.
 
-    The watchdog covers what the between-reads check cannot: the connect, the
-    request write, and the header parse inside the opener. It is armed before
-    the opener is called, so a server that never finishes its headers is
-    interrupted rather than waited out.
+    The watchdog covers what the between-reads check cannot: the request write
+    and the header parse, which happen inside the opener and return no control
+    to this function. It is armed before the opener is called, so a server that
+    never finishes its headers is interrupted rather than waited out. It cannot
+    cover name resolution or the TCP and TLS handshakes, because no socket
+    exists to register until those finish; each handshake read is bounded by
+    the clipped socket timeout, and `getaddrinfo` is bounded only by the
+    resolver.
 
     The failure is a `ProvisionError` because a pinned asset that cannot be
     fetched in `deadline_seconds` is a pin or network fault the contributor
@@ -687,7 +737,7 @@ def download(
     # A read that has already begun blocks for its socket timeout before it
     # can return, so the per-operation timeout must not outlive the deadline.
     socket_timeout = min(REQUEST_TIMEOUT_SECONDS, deadline_seconds)
-    watchdog = _Deadline(expire_at, clock)
+    watchdog = deadline_factory(expire_at, clock)
 
     def expired() -> DownloadTimeout:
         return DownloadTimeout(
@@ -707,6 +757,16 @@ def download(
                     raise expired()
                 chunk = response.read1(CHUNK_SIZE)
                 if not chunk:
+                    # An empty read means end of stream, not only a clean one.
+                    # The watchdog implements the deadline by shutting the
+                    # socket down, and a shutdown makes `read1` return `b""`
+                    # — measured — so a body cut short at the deadline, of a
+                    # promised `Content-Length` or of chunked framing, arrives
+                    # here looking exactly like a complete one. Reporting the
+                    # deadline first is what keeps a truncated download from
+                    # being accepted as whole.
+                    if watchdog.fired() or clock() >= expire_at:
+                        raise expired()
                     return
                 total += len(chunk)
                 if total > limit:

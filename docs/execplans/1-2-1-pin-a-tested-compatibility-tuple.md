@@ -303,24 +303,47 @@ The documentation added here states each of these limits explicitly.
   watchdog — armed after the opener returned — could never see a server that
   dribbles header bytes: measured, the call blocked indefinitely. The single
   `_abort_at_deadline` was replaced by one `_Deadline` that is armed before the
-  opener and to which every socket registers as it is created, so connect,
-  request write, header parse, body and chunk framing are all bounded by the
-  same timer. The production opener is built by `_watched_opener`, whose HTTP
-  and HTTPS handlers subclass the defaults (`build_opener` then drops the
-  built-ins, so no request escapes unwatched) and register via
-  `_create_connection`, the instance attribute `connect` assigns `self.sock`
-  through. Two further findings: a read ended by the clipped socket timeout is
+  opener and to which every socket registers as it connects, so request write,
+  header parsing, body reads, and chunk framing are all bounded by the same
+  timer. The production opener is built by `_watched_opener`, whose HTTP and
+  HTTPS handlers subclass the defaults (`build_opener` then drops the
+  built-ins, so no request escapes unwatched) and register their connection's
+  socket. Two further findings: a read ended by the clipped socket timeout is
   now reported as a deadline rather than a bare `TimeoutError`; and the
   chunked-stream test had been forwarding the clipped timeout, so the socket
   timeout could end the stall and the test could pass with the watchdog doing
   nothing — it now uses a fixed 30 s timeout and records that a shutdown
   actually happened. The previously inline read-failure handler was removed
-  after a mutation run showed the outer guard subsumes it: all 32 tests pass
+  after a mutation run showed the outer guard subsumes it: all 32 tests passed
   with the inner handler deleted. Mutation-tested: arming after the opener and
   disabling the timer both hang the header and framing tests past the 30 s
   socket timeout, and removing registration fails
   `test_fetch_url_watches_the_connection_it_opens`, which is the only test that
-  drives the shipped opener rather than an injected one. 32 pytest tests pass.
+  drives the shipped opener rather than an injected one. 32 pytest tests passed.
+- [x] (2026-10-25) Round-6 repair on `a6e8512`, review 5643157781. Four
+  findings. The round-5 registration was wrong for HTTPS: it hooked
+  `_create_connection`, so it registered the socket *before* the TLS wrap, and
+  `HTTPSConnection.connect` replaces `self.sock` with the TLS socket while
+  closing the one underneath. Measured: the pre-wrap socket reports
+  `fileno() == -1` and `shutdown` raises `EBADF`, so no HTTPS download could be
+  interrupted at all. Registration now happens at the end of `connect`, on
+  `self.sock`, which is the live socket in both cases. What remains outside the
+  deadline is name resolution and the TCP and TLS handshakes themselves; each
+  handshake read is bounded by the clipped socket timeout, but `getaddrinfo` is
+  not bounded by anything here. Second: an empty read is *not* only a clean end
+  of stream. The watchdog implements the deadline with `shutdown`, and a
+  shutdown makes `read1` return `b""` — measured — so a truncated
+  `Content-Length` body arrived at the loop looking complete and would have
+  been written out to fail the digest check with a misleading message. The loop
+  now checks `watchdog.fired()` before accepting an empty read as the end.
+  Third: the monkey-patch of `_Deadline` in
+  `test_fetch_url_watches_the_connection_it_opens` was removed in favour of a
+  `deadline_factory` injection seam threaded through `fetch_url` and
+  `download`, so the test drives the real opener with a recording watchdog
+  rather than replacing a module attribute. Mutation-tested: accepting an empty
+  read fails the stalled-`Content-Length` test with `DID NOT RAISE`, and
+  registering at creation instead fails the TLS test with `fileno() == -1`. 34
+  pytest tests pass; the TLS test skips when `openssl` is unavailable.
 
 ## Surprises & discoveries
 

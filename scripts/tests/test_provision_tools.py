@@ -20,10 +20,14 @@ import hashlib
 import http.client
 import io
 import json
+import shutil
 import socket
+import ssl
+import subprocess
 import tarfile
 import threading
 import time
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
@@ -829,22 +833,35 @@ def test_a_read_clipped_by_the_socket_timeout_reports_the_deadline(
     assert not (tmp_path / "opa").read_bytes(), "no partial body is kept"
 
 
-def test_fetch_url_watches_the_connection_it_opens(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_fetch_url_watches_the_connection_it_opens(tmp_path: Path) -> None:
     """The production path registers its socket, so the watchdog can reach it.
 
     `fetch_url` is the only caller that builds the real opener. If its handler
-    stopped passing `watch` through, every test above would still pass with an
-    injected opener while the shipped script had an uninterruptible download.
+    stopped passing `watch` through, every test using an injected opener would
+    still pass while the shipped script had an uninterruptible download.
+
+    The recording watchdog is supplied through `deadline_factory`, so this
+    drives the real `fetch_url` and the real opener. Replacing the module
+    attribute instead would test a name rather than the wiring: `fetch_url`
+    resolving a different factory would go unnoticed.
     """
-    registered: list[socket.socket] = []
+    registered: list[object] = []
 
-    class Recorder(provision_tools._Deadline):
+    class Recorder:
+        def __init__(self, expire_at: float, clock: object) -> None:
+            self._expire_at = expire_at
+
         def watch(self, sock: object) -> None:
-            registered.append(sock)  # type: ignore[arg-type]
+            registered.append(sock)
 
-    monkeypatch.setattr(provision_tools, "_Deadline", Recorder)
+        def fired(self) -> bool:
+            return False
+
+        def start(self) -> threading.Timer:
+            timer = threading.Timer(3600, lambda: None)
+            timer.daemon = True
+            timer.start()
+            return timer
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -867,10 +884,163 @@ def test_fetch_url_watches_the_connection_it_opens(
 
     threading.Thread(target=serve, daemon=True).start()
 
-    provision_tools.fetch_url(f"http://127.0.0.1:{port}/opa", tmp_path / "opa", 4096)
+    provision_tools.fetch_url(
+        f"http://127.0.0.1:{port}/opa",
+        tmp_path / "opa",
+        4096,
+        deadline_factory=Recorder,
+    )
 
     assert registered, "the connection's socket reached the watchdog"
-    assert registered[0].family == socket.AF_INET, "it is the connected socket"
+    assert isinstance(registered[0], socket.socket), "it is the connected socket"
+    assert (tmp_path / "opa").read_bytes() == OPA_BYTES, "the body still arrived"
+
+
+def test_download_aborts_a_stalled_content_length_body_at_the_deadline(
+    tmp_path: Path,
+) -> None:
+    """A body cut short at the deadline is not mistaken for a complete one.
+
+    The watchdog implements the deadline by shutting the socket down, and a
+    shutdown makes `read1` return `b""` — measured. For a `Content-Length`
+    body that is indistinguishable from a clean end of stream, so without an
+    explicit check a truncated download would be written out and then fail the
+    digest check with a misleading message. The chunked case raises instead;
+    this is the case where it does not.
+    """
+    promised = 1000
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    release = threading.Event()
+
+    def serve() -> None:
+        try:
+            conn, _ = server.accept()
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Length: " + str(promised).encode() + b"\r\n\r\n" + OPA_BYTES
+            )
+            release.wait(30)  # ten bytes of a promised thousand, then silence
+            conn.close()
+        finally:
+            server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+
+    started = time.monotonic()
+    try:
+        with pytest.raises(provision_tools.DownloadTimeout):
+            provision_tools.download(
+                f"http://127.0.0.1:{port}/opa",
+                tmp_path / "opa",
+                4096,
+                opener=provision_tools.watched_opener,
+                deadline_seconds=1.0,
+            )
+    finally:
+        release.set()
+
+    assert time.monotonic() - started < 5.0, "the deadline, not the timeout, ended it"
+
+
+def _tls_credentials(directory: Path) -> tuple[Path, Path] | None:
+    """A self-signed certificate for 127.0.0.1, or `None` if `openssl` is absent.
+
+    Only the *test* shells out. The provisioner itself launches no subprocess,
+    so the certificate is generated here rather than by anything under test.
+    """
+    if shutil.which("openssl") is None:
+        return None
+    certificate = directory / "cert.pem"
+    key = directory / "key.pem"
+    generated = subprocess.run(
+        [
+            "openssl", "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", str(key), "-out", str(certificate),
+            "-days", "1", "-nodes", "-subj", "/CN=127.0.0.1",
+            "-addext", "subjectAltName=IP:127.0.0.1",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if generated.returncode != 0 or not certificate.is_file():
+        return None
+    return certificate, key
+
+
+def test_download_watches_the_tls_socket_not_the_one_it_replaces(
+    tmp_path: Path,
+) -> None:
+    """HTTPS registers the socket that survives the handshake.
+
+    `HTTPSConnection.connect` replaces `self.sock` with the TLS socket from
+    `wrap_socket`, and that call closes the socket underneath it. Registering
+    at creation — as an earlier revision did — therefore registered a dead
+    handle for every HTTPS download: `fileno()` is `-1` and `shutdown` raises
+    `EBADF`, so the watchdog could never interrupt anything. This test asserts
+    the registered socket is usable after `connect()` returns.
+    """
+    credentials = _tls_credentials(tmp_path)
+    if credentials is None:
+        pytest.skip("openssl is unavailable, so no TLS server can be started")
+    certificate, key = credentials
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(str(certificate), str(key))
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+
+    def serve() -> None:
+        try:
+            raw, _ = server.accept()
+            tls = context.wrap_socket(raw, server_side=True)
+            try:
+                tls.recv(65536)
+                tls.sendall(
+                    b"HTTP/1.1 200 OK\r\n"
+                    b"Content-Length: " + str(len(OPA_BYTES)).encode() + b"\r\n"
+                    b"\r\n" + OPA_BYTES
+                )
+            finally:
+                tls.close()
+        except (OSError, ssl.SSLError):
+            # The client shuts the socket down on purpose; that is the behaviour
+            # under test, not a fault in this thread.
+            pass
+        finally:
+            server.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+
+    registered: list[socket.socket] = []
+    client_context = ssl.create_default_context()
+    client_context.check_hostname = False
+    client_context.verify_mode = ssl.CERT_NONE
+
+    connection = provision_tools._watched_connection(
+        http.client.HTTPSConnection
+    )(  # noqa: SLF001
+        "127.0.0.1", port, timeout=30, context=client_context,
+        watch=registered.append,
+    )
+    connection.connect()
+    try:
+        assert registered, "the connection registered a socket"
+        live = registered[0]
+        assert live.fileno() != -1, (
+            "the registered socket was the pre-TLS one; wrap_socket closed it, "
+            "so shutdown would raise EBADF and the watchdog could not interrupt"
+        )
+        live.shutdown(socket.SHUT_RDWR)
+    finally:
+        connection.close()
 
 
 def test_download_clips_the_socket_timeout_to_the_deadline(tmp_path: Path) -> None:
