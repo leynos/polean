@@ -84,6 +84,10 @@ Fetcher = Callable[[str, Path, int], None]
 # than patching the standard library.
 Opener = Callable[..., Any]
 
+# A monotonic-seconds source, injected so a deadline can be driven past in a
+# test without patching the `time` module that every other caller shares.
+Clock = Callable[[], float]
+
 
 class ProvisionError(Exception):
     """A provisioning failure the contributor must act on."""
@@ -503,37 +507,52 @@ def download(
     *,
     opener: Opener,
     deadline_seconds: float = DOWNLOAD_DEADLINE_SECONDS,
+    clock: Clock = time.monotonic,
 ) -> None:
-    """`fetch_url` with the HTTP call supplied, so a test can observe it.
+    """`fetch_url` with the HTTP call and clock supplied, so a test sees both.
 
     The opener is called as `opener(request, timeout=...)` and must return a
     readable, context-manageable response. Keeping it a keyword parameter of a
     real production path is what lets the timeout be tested without replacing
-    anything in the standard library.
+    anything in the standard library. `clock` is injectable for the same
+    reason: a test that wants the deadline to pass must be able to say so
+    without patching the `time` module out from under every other caller.
 
-    `deadline_seconds` bounds the whole transfer, not each `read`. The check
-    runs before every read, so a stream that keeps trickling cannot extend the
-    download past the deadline; the failure is a `ProvisionError` because a
-    pinned asset that cannot be fetched in `deadline_seconds` is a pin or
-    network fault the contributor must act on, not an internal error.
+    `deadline_seconds` bounds the whole transfer, not each read. The bound
+    works because the loop reads with `read1`, which makes at most one
+    underlying system call per iteration, so control returns to the deadline
+    check as soon as one byte arrives. Reading with `read` instead would
+    defeat the check: `BufferedReader.read(n)` keeps issuing system calls until
+    it has `n` bytes, so a server dribbling a byte just inside
+    `REQUEST_TIMEOUT_SECONDS` would hold a single call open long past the
+    deadline. A read that has already begun can still block for its socket
+    timeout, which is why that timeout is itself clipped to
+    `deadline_seconds`.
+
+    The failure is a `ProvisionError` because a pinned asset that cannot be
+    fetched in `deadline_seconds` is a pin or network fault the contributor
+    must act on, not an internal error.
     """
     request = urllib.request.Request(
         url, headers={"User-Agent": "polean-provisioner/1"}
     )
     total = 0
-    expire_at = time.monotonic() + deadline_seconds
+    expire_at = clock() + deadline_seconds
+    # A read that has already begun blocks for its socket timeout before it
+    # can return, so the per-operation timeout must not outlive the deadline.
+    socket_timeout = min(REQUEST_TIMEOUT_SECONDS, deadline_seconds)
     with (
-        opener(request, timeout=REQUEST_TIMEOUT_SECONDS) as response,
+        opener(request, timeout=socket_timeout) as response,
         destination.open("wb") as handle,
     ):
         while True:
-            if time.monotonic() >= expire_at:
+            if clock() >= expire_at:
                 raise DownloadTimeout(
                     f"{url}: the transfer did not finish within "
                     f"{deadline_seconds:g} seconds; the pin file and the "
                     "upstream asset disagree, or the network is too slow."
                 )
-            chunk = response.read(CHUNK_SIZE)
+            chunk = response.read1(CHUNK_SIZE)
             if not chunk:
                 return
             total += len(chunk)

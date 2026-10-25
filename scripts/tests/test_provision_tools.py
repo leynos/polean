@@ -507,7 +507,7 @@ def test_download_stops_at_the_overall_deadline(tmp_path: Path) -> None:
     class Trickle(io.BytesIO):
         """A body that yields one byte per read, without end."""
 
-        def read(self, size: int = -1) -> bytes:
+        def read1(self, size: int = -1) -> bytes:
             reads.append(size)
             return b"x"
 
@@ -546,25 +546,94 @@ def test_download_deadline_is_checked_before_each_read(tmp_path: Path) -> None:
         def __init__(self) -> None:
             super().__init__(b"a" * 3)
 
-        def read(self, size: int = -1) -> bytes:
+        def read1(self, size: int = -1) -> bytes:
             now[0] += 0.4
-            return super().read(1)
+            return super().read1(1)
 
     def opener(request: object, timeout: float) -> Chunks:
         return Chunks()
 
-    with (
-        pytest.MonkeyPatch.context() as patch,
-        pytest.raises(provision_tools.DownloadTimeout),
-    ):
-        patch.setattr(provision_tools.time, "monotonic", lambda: now[0])
+    with pytest.raises(provision_tools.DownloadTimeout):
         provision_tools.download(
             "https://example.invalid/opa",
             tmp_path / "opa",
             len(OPA_BYTES),
             opener=opener,
             deadline_seconds=1.0,
+            clock=lambda: now[0],
         )
+
+
+def test_download_reads_with_read1_so_a_blocking_read_cannot_hide_the_deadline(
+    tmp_path: Path,
+) -> None:
+    """Each read makes one syscall, so the deadline is rechecked between them.
+
+    `BufferedReader.read(n)` keeps issuing system calls until it has `n` bytes,
+    so a single `read(CHUNK_SIZE)` on a dribbling connection can outlive the
+    whole deadline and the check before it never runs. `read1` returns after at
+    most one system call, which is what lets the loop observe a clock that has
+    passed the deadline *during* the transfer. This response would have
+    completed if `read` were used: it ends after four bytes.
+    """
+    now = [0.0]
+
+    class Dribble(io.BytesIO):
+        """Four bytes, each in its own syscall, with the clock advancing."""
+
+        def __init__(self) -> None:
+            super().__init__(b"abcd")
+
+        def read1(self, size: int = -1) -> bytes:
+            now[0] += 0.5
+            return super().read1(1)
+
+        def read(self, size: int = -1) -> bytes:
+            raise AssertionError(
+                "download must use read1; read(n) loops on syscalls until n "
+                "bytes arrive, which defeats the deadline check"
+            )
+
+    def opener(request: object, timeout: float) -> Dribble:
+        return Dribble()
+
+    with pytest.raises(provision_tools.DownloadTimeout):
+        provision_tools.download(
+            "https://example.invalid/opa",
+            tmp_path / "opa",
+            len(OPA_BYTES),
+            opener=opener,
+            deadline_seconds=1.0,
+            clock=lambda: now[0],
+        )
+
+
+def test_download_clips_the_socket_timeout_to_the_deadline(tmp_path: Path) -> None:
+    """A read already blocked cannot outlive the deadline by its own timeout.
+
+    The deadline check runs between reads, so a read that has begun blocks for
+    its socket timeout before returning. If that timeout stayed at
+    `REQUEST_TIMEOUT_SECONDS` it could exceed a shorter deadline; it is clipped
+    so no single blocking read outlasts the bound.
+    """
+    seen: list[float] = []
+
+    def opener(request: object, timeout: float) -> io.BytesIO:
+        seen.append(timeout)
+        return io.BytesIO(OPA_BYTES)
+
+    provision_tools.download(
+        "https://example.invalid/opa",
+        tmp_path / "opa",
+        len(OPA_BYTES),
+        opener=opener,
+        deadline_seconds=5.0,
+    )
+
+    assert seen == [5.0], "the socket timeout is the smaller of the two bounds"
+    assert provision_tools.REQUEST_TIMEOUT_SECONDS > 5.0, (
+        "this test is vacuous unless the deadline is the smaller bound"
+    )
 
 
 def test_present_lets_an_unreadable_parent_raise(tmp_path: Path) -> None:

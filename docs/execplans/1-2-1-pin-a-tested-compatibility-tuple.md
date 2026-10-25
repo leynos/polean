@@ -265,6 +265,21 @@ The documentation added here states each of these limits explicitly.
   `docs/repository-layout.md:51` became `_submitted_` because MD049 takes a
   document's emphasis style from its first emphasis, which is now the
   underscore caption above it.
+- [x] (2026-10-25) Round-3 repair on `4ec8ae4`, review 5641887061. The
+  deadline added in the previous round was not yet a bound on a *blocking* read:
+  `download` called `response.read(CHUNK_SIZE)`, and on a real `HTTPResponse`
+  that reaches `BufferedReader.read(n)`, which keeps issuing system calls until
+  it has `n` bytes or sees EOF. A server dribbling a byte just inside the
+  60-second socket timeout therefore held one call open far past
+  `DOWNLOAD_DEADLINE_SECONDS`, and the check between reads never ran. The loop
+  now calls `read1`, which makes at most one system call per iteration, and the
+  socket timeout is clipped to `min(REQUEST_TIMEOUT_SECONDS, deadline_seconds)`
+  so a read already in progress cannot outlast the deadline either. `download`
+  takes an injected `clock`, replacing a `monkeypatch` of `time.monotonic` that
+  reached across every other caller. Two tests cover this: one drives a
+  dribbling body whose four bytes complete the transfer if `read` were used,
+  and one asserts the socket timeout is the smaller bound. Both were checked
+  against the old `read` implementation and fail there, so neither is vacuous.
 
 ## Surprises & discoveries
 
@@ -330,9 +345,9 @@ The documentation added here states each of these limits explicitly.
   | Conflict, built-in, or parse error          | `{"errors":[{"code":...}]}`                    | 2    |
   | Missing input                               | empty (stderr only)                            | 2    |
 
-  _Table 1: OPA `eval --format json` output shapes observed from the pinned
+  *Table 1: OPA `eval --format json` output shapes observed from the pinned
   binary. Recorded for 2.3.2's typed classification, which these observations
-  feed rather than define._
+  feed rather than define.*
 
   - Without `--strict-builtin-errors`, a built-in error becomes `{}` with
     exit 0.
@@ -900,8 +915,8 @@ The obligations follow.
   | Same-tenant administrator write on a locked resource        | T W A ¬O L   | true     |
   | Owner read                                                  | T ¬W ¬A O ¬L | false    |
 
-  _Table 2: The four smoke requests, their fact vectors, and the decision each
-  is expected to receive under `T ∧ W ∧ (A ∨ (O ∧ ¬L))`._
+  *Table 2: The four smoke requests, their fact vectors, and the decision each
+  is expected to receive under `T ∧ W ∧ (A ∨ (O ∧ ¬L))`.*
 
   - Regorus: the decision must be exactly `Value::Bool(expected)`. Undefined
     or `Err` fails. Checked in BDD scenarios run by `make test`.
@@ -1001,8 +1016,8 @@ Stage B, EP-M1, Regorus in process:
      | `rstest-bdd` | 0.6.0 |
      | `rstest-bdd-macros` | 0.6.0 |
 
-     _Table 3: The dev-dependency versions observed on 2026-10-17 and pinned
-     with `=`._
+     *Table 3: The dev-dependency versions observed on 2026-10-17 and pinned
+     with `=`.*
 
    - Create `tests/toolchain/main.rs`, with a crate-level `//!` doc and module
      declarations.
