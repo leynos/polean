@@ -908,8 +908,27 @@ it in their own comments.
 Delivery state at the close of implementation: the branch is published, every
 hosted run observed on it concluded `success`, and CodeRabbit approved
 `a43c76e` in review 5604419148 after both pre-readiness assessments and the
-formal review's findings were reconciled. Approval is not a merge. The merge
-remains unperformed, and awaits the user's explicit authority.
+formal review's findings were reconciled. Approval is not a merge.
+
+Rebase and pre-merge repair state (2026-10-25). The branch was rebased onto
+`origin/main` (`c0c6005`) and republished as `c7cf3d5`, then advanced by
+`66d54f9` for the two error rows and the docstring-coverage warning recorded
+under `## Progress`. `origin/main` is still an ancestor of `66d54f9`, so the
+rebased branch needs no further replay. Gates on `66d54f9` run sequentially:
+`check-fmt`, `typecheck`, `lint`, `test` (2 stub, 15 toolchain with 7 ignored,
+1 doctest), `test-scripts` (47 passed on Python 3.14), and `markdownlint`, all
+green. Hosted runs on `66d54f9` — `CI`, `Design contracts`, `Toolchain`, and the
+`rust-and-docs`, `design-check`, and `toolchain-smoke` check runs — all
+concluded `success`; `Sourcery review` reports `skipped`, which is its normal
+state on this repository.
+
+Two rows are now stale rather than unaddressed: the pre-merge table in
+walkthrough comment 6233449536 still shows "Testing (Overall)" and "Unit
+Architecture" as errors against the previous head, and it is regenerated only
+by a CodeRabbit run. A `@coderabbitai resume` is queued for `66d54f9`; until
+that run completes the table describes a superseded candidate. "Docstring
+Coverage" should clear on the same run. The remaining three warnings are
+dispositioned above and are not being implemented.
 
 Open pre-merge warnings, with the reason each is not being actioned:
 
