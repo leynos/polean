@@ -96,8 +96,8 @@ every commit. It is not in `make all` for that reason.
 ## Changing a toolchain pin
 
 `toolchain-pins.json` is the authoritative identity of the provisioned
-artefacts, and [ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md) is the record
-of why the tuple is what it is. A pin change is a tuple change:
+artefacts, and [ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md) is the
+record of why the tuple is what it is. A pin change is a tuple change:
 
 1. Edit `toolchain-pins.json` — the upstream URL, the SHA-256, and the byte
    size — or, for Regorus or Rust, `Cargo.toml` and `rust-toolchain.toml`. A

@@ -229,7 +229,8 @@ The documentation added here states each of these limits explicitly.
   ignores `**/.polean/**` and `**/.lake/**`, which are generated or provisioned
   trees; `validation/requirements.txt` was installed into the scratch
   interpreter. Both gates pass on a direct re-run.
-- [x] (2026-10-21) EP-M4 records. `docs/adrs/adr-0003-pin-the-e0-toolchain-tuple.md`
+- [x] (2026-10-21) EP-M4 records.
+      `docs/adrs/adr-0003-pin-the-e0-toolchain-tuple.md`
   written and indexed in `docs/contents.md`; technical design §6.1, §6.3, §11,
   §13, and References updated; **Toolchain tuple** added to `docs/context.md`;
   `lean/README.md`, `docs/repository-layout.md`, `docs/developers-guide.md`,

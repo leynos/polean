@@ -304,9 +304,9 @@ requested features `["ast", "std"]`; Cargo resolves
 two. It exposes `add_policy` and `get_ast_as_json`, the latter behind `ast`.
 Its AST JSON is an adapter input, not Polean's stable proof ABI. The exact
 crate, the features, the resolved graph, and the provenance of the whole tuple
-are in [ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md). Adapter fixtures are
-the committed example sources and a reviewed snapshot of the baseline module's
-AST JSON. [R3, R12]
+are in [ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md). Adapter
+fixtures are the committed example sources and a reviewed snapshot of the
+baseline module's AST JSON. [R3, R12]
 
 The frontend must account for the complete module: package, imports, default,
 all rule heads and bodies, expressions, and any semantically relevant source
@@ -580,13 +580,13 @@ silently degraded security mode.
 
 Provision the trusted Lean package and dependencies before jobs. A submitted
 Lake file must never control a build. The tuple is pinned in
-[ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md): the Rust toolchain file and
-lockfile, Regorus `=0.13.0` with features `["ast", "std"]`, the Lean release
-and its committed `lake-manifest.json`, and the OPA binary digest recorded in
-`toolchain-pins.json`. `make tools` provisions the two downloadable artefacts
-behind a digest check, and `make toolchain-smoke` replays them. That tuple was
-tested on `x86_64-unknown-linux-gnu`; it is not tested on any other platform,
-and the Lean archive's provenance is trust on first use.
+[ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md): the Rust toolchain
+file and lockfile, Regorus `=0.13.0` with features `["ast", "std"]`, the Lean
+release and its committed `lake-manifest.json`, and the OPA binary digest
+recorded in `toolchain-pins.json`. `make tools` provisions the two downloadable
+artefacts behind a digest check, and `make toolchain-smoke` replays them. That
+tuple was tested on `x86_64-unknown-linux-gnu`; it is not tested on any other
+platform, and the Lean archive's provenance is trust on first use.
 
 Cache trusted build/toolchain artefacts. Defer proof-result caching until the
 binding and replay path has passed adversarial checks. Build CI should stay
