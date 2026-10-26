@@ -169,8 +169,10 @@ application crate or executable is introduced here.
   user guide, and developer guide.
 - [x] Defer runtime integration and its regression tests to the roadmap items,
   retaining the detailed future verification obligations below.
-- [ ] Run deterministic gates sequentially, request CodeRabbit review, clear
-  actionable concerns, commit, push, and create the draft PR.
+- [x] Run deterministic gates and CodeRabbit on design commit
+  `19d53b2f4f650137c03b9e1ecf501fb9e10e5d2a`; the review reported two minor
+  documentation findings, addressed in the follow-up.
+- [ ] Gate and commit the follow-up, review it, push, and create the draft PR.
 
 ## Surprises & discoveries
 

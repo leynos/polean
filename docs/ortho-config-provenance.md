@@ -21,10 +21,8 @@ surveyed object and commit; no alternate tag resolution was observed.
 
 The imported files remain unchanged, including their relative links. These
 links point to files in the source repository and do not resolve in this
-checkout: the
-[Ortho L10n README](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/ortho_l10n/README.md)
-and the
-[Hello World example](https://github.com/leynos/ortho-config/tree/38812c563e3953a490e3efc202609f37e21a0517/examples/hello_world/).
+checkout: the Ortho L10n README and the Hello World example. Their pinned
+upstream locations appear in References below.
 
 Other relative references assume the upstream `docs/` layout. The user's guide
 links to `v-0-10-0-migration-guide.md`, while the migration guide links to
@@ -32,18 +30,20 @@ links to `v-0-10-0-migration-guide.md`, while the migration guide links to
 use the required `ortho-config-` names, and `docs/users-guide.md` belongs to
 Polean. The source text is retained byte-for-byte; no compatibility aliases or
 second published copy are part of this import. Follow these cross-references in
-the pinned upstream
-[user's guide](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/docs/users-guide.md)
-and
-[migration guide](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/docs/v0-10-0-migration-guide.md).
-The upstream list formatting is likewise retained as part of the byte-exact
-import.
+the pinned upstream user's guide and migration guide listed below. The upstream
+list formatting is likewise retained as part of the byte-exact import.
 
 The `tested-example` markers in the user's guide are consumed by the upstream
 documentation-example tests. For example, `guide-first-cli` is registered in
-the upstream
-[documentation example tests](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/ortho_config/tests/documentation_examples_tests.rs)
-and
-[Rust-flow checks](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/ortho_config/tests/documentation_examples/rust_flows.rs).
+the upstream documentation example tests and Rust-flow checks listed below.
 Polean does not include or run that harness, so these markers record upstream
 coverage and are not claims that Polean tests execute the imported examples.
+
+## References
+
+- [Ortho L10n README](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/ortho_l10n/README.md)
+- [Hello World example](https://github.com/leynos/ortho-config/tree/38812c563e3953a490e3efc202609f37e21a0517/examples/hello_world/)
+- [OrthoConfig user's guide](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/docs/users-guide.md)
+- [OrthoConfig migration guide](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/docs/v0-10-0-migration-guide.md)
+- [Documentation example tests](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/ortho_config/tests/documentation_examples_tests.rs)
+- [Rust-flow checks](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/ortho_config/tests/documentation_examples/rust_flows.rs)
