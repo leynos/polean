@@ -44,7 +44,7 @@ introduces `check`.
   stop and ask the user to resolve the scope conflict.
 - If integration requires putting OrthoConfig in a reusable domain crate,
   stop and present the boundary change before implementing it.
-- If the configuration design would allow files or environment values to
+- If the configuration design allows files or environment values to
   influence `verify`, stop and revise the design before coding.
 - If implementation changes more than 20 files or 1,000 net lines, stop and
   explain the scope growth.
@@ -126,6 +126,15 @@ introduces `check`.
 - [x] (2026-10-26 12:25Z) The first docs gate found table reflow in the new
   authored documents, and the next found one MD013 line-length issue. Both were
   corrected without touching either imported guide.
+- [x] (2026-10-26 12:38Z) CodeRabbit reviewed the imported-document milestone
+  and reported seven minor documentation findings, with no high or medium
+  concerns. Corrected the authored-plan wording and worktree path; recorded
+  upstream-only guide links and the scope of upstream example tests in the
+  provenance note without editing imported text. The first follow-up format
+  check found table reflow; after formatting only the two changed authored
+  files, `make check-fmt` and `make markdownlint` passed sequentially (25
+  Markdown files, zero lint errors). Review log:
+  `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli.out`.
 - [ ] (pending) Resolve the scope question and approve this ExecPlan before
   production implementation, as required by the ExecPlans workflow.
 - [ ] Record the configuration decision in the technical design, ADR, roadmap,
@@ -136,7 +145,7 @@ introduces `check`.
 
 ## Surprises & discoveries
 
-- The supplied context summarises the current CLI statuses as 0 and 2–6, but
+- The supplied context describes the current CLI statuses as 0 and 2–6, but
   `contracts/cli.txt` also specifies invalid-evidence status 7 and
   conformance-mismatch status 8. Preserve the repository contract's full set.
 - There is no CLI target to adopt the dependency into yet. The first command
@@ -330,8 +339,9 @@ create a draft PR titled with `(#14)`, with `Closes #14` and a terminal
   provenance and release boundary. Acceptance: byte comparisons and hashes
   match, docs index links are valid, Markdown gates pass. Conformance: no
   imported byte changed; the decision is not yet presented as runtime code; no
-  dependency or public API changed. Recovery: revert only this docs commit.
-  Remaining gap: configuration design and code. Compatibility decision: none.
+  dependency or public API changed. Recovery: revert only this documentation
+  commit. Remaining gap: configuration design and code. Compatibility decision:
+  none.
 - **EP-M2 — approved design recorded.** Requirements: CLI contract and
   hermetic replay. Acceptance: technical design, ADR, roadmap, and guides state
   one decision with consistent trace links. Conformance: no source or status
@@ -353,8 +363,7 @@ create a draft PR titled with `(#14)`, with `Closes #14` and a terminal
 
 ## Concrete steps
 
-Run from the worktree at
-`/home/leynos/.lody/repos/github---leynos---polean/worktrees/d082da36-3396-4616-827a-d78143c79f56`.
+Run from the repository root in the candidate worktree.
 
 The source and baseline read-only checks are:
 
