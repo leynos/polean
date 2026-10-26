@@ -217,6 +217,25 @@ def _load_tool(name: str, raw: Any) -> ToolPin:
     expected = _TOOL_KEYS | ({"root", "identity"} if name == "lean" else set())
     _expect_exact_keys(raw, expected, name)
     version = _require_string(raw["version"], f"{name}.version")
+    url, sha256, size = _load_download_pin(name, raw)
+    kind = _require_string(raw["kind"], f"{name}.kind")
+    if kind != _KINDS[name]:
+        raise PinFileError(f"{name}.kind: expected {_KINDS[name]!r}, found {kind!r}")
+    root, identity = _load_lean_layout(raw, version) if name == "lean" else (None, None)
+    return ToolPin(
+        name=name,
+        version=version,
+        url=url,
+        sha256=sha256,
+        size=size,
+        kind=kind,
+        root=root,
+        identity=identity,
+    )
+
+
+def _load_download_pin(name: str, raw: dict[str, Any]) -> tuple[str, str, int]:
+    """Validate the fields that identify and bound the downloaded bytes."""
     url = _require_string(raw["url"], f"{name}.url")
     if not url.startswith("https://"):
         raise PinFileError(f"{name}.url: must be an https:// URL, found {url!r}")
@@ -228,35 +247,25 @@ def _load_tool(name: str, raw: Any) -> ToolPin:
     size = raw["size"]
     if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
         raise PinFileError(f"{name}.size: expected a positive integer, found {size!r}")
-    kind = _require_string(raw["kind"], f"{name}.kind")
-    if kind != _KINDS[name]:
-        raise PinFileError(f"{name}.kind: expected {_KINDS[name]!r}, found {kind!r}")
-    root = None
-    identity = None
-    if name == "lean":
-        root = _require_string(raw["root"], f"{name}.root")
-        if version not in root:
-            raise PinFileError(
-                f"{name}.root: {root!r} does not embed the pinned version "
-                f"{version!r}; the archive layout would change silently"
-            )
-        identity = _require_string(raw["identity"], f"{name}.identity")
-        if version not in identity:
-            raise PinFileError(
-                f"{name}.identity: {identity!r} does not embed the pinned "
-                f"version {version!r}; the reported identity would drift from "
-                "the version it is checked against"
-            )
-    return ToolPin(
-        name=name,
-        version=version,
-        url=url,
-        sha256=sha256,
-        size=size,
-        kind=kind,
-        root=root,
-        identity=identity,
-    )
+    return url, sha256, size
+
+
+def _load_lean_layout(raw: dict[str, Any], version: str) -> tuple[str, str]:
+    """Validate the archive root and reported identity against the Lean version."""
+    root = _require_string(raw["root"], "lean.root")
+    if version not in root:
+        raise PinFileError(
+            f"lean.root: {root!r} does not embed the pinned version "
+            f"{version!r}; the archive layout would change silently"
+        )
+    identity = _require_string(raw["identity"], "lean.identity")
+    if version not in identity:
+        raise PinFileError(
+            f"lean.identity: {identity!r} does not embed the pinned "
+            f"version {version!r}; the reported identity would drift from "
+            "the version it is checked against"
+        )
+    return root, identity
 
 
 def _expect_exact_keys(raw: dict[str, Any], expected: frozenset[str] | set[str], where: str) -> None:
@@ -693,6 +702,51 @@ def fetch_url(
     )
 
 
+@dataclass(frozen=True)
+class _Transfer:
+    """The size and deadline invariants for one download."""
+
+    url: str
+    limit: int
+    deadline_seconds: float
+    expire_at: float
+    clock: Clock
+    watchdog: _Deadline
+
+    def has_expired(self) -> bool:
+        """Check both the watchdog and the independently observed deadline."""
+        return self.watchdog.fired() or self.clock() >= self.expire_at
+
+    def timeout(self) -> DownloadTimeout:
+        """The refusal raised when the transfer outlives its deadline."""
+        return DownloadTimeout(
+            f"{self.url}: the transfer did not finish within "
+            f"{self.deadline_seconds:g} seconds; the pin file and the "
+            "upstream asset disagree, or the network is too slow."
+        )
+
+    def copy_response(self, response: Any, handle: Any) -> None:
+        """Copy the bounded response, treating watchdog EOF as a timeout."""
+        total = 0
+        while True:
+            if self.clock() >= self.expire_at:
+                raise self.timeout()
+            chunk = response.read1(CHUNK_SIZE)
+            if not chunk:
+                # Shutdown also yields EOF. Check the watchdog before accepting
+                # it, or a truncated body could be mistaken for a complete one.
+                if self.has_expired():
+                    raise self.timeout()
+                return
+            total += len(chunk)
+            if total > self.limit:
+                raise DownloadTooLarge(
+                    f"{self.url}: the stream exceeds the pinned {self.limit} bytes; "
+                    "the pin file and the upstream asset disagree."
+                )
+            handle.write(chunk)
+
+
 def download(
     url: str,
     destination: Path,
@@ -747,20 +801,13 @@ def download(
     request = urllib.request.Request(
         url, headers={"User-Agent": "polean-provisioner/1"}
     )
-    total = 0
     expire_at = clock() + deadline_seconds
     # A read that has already begun blocks for its socket timeout before it
     # can return, so the per-operation timeout must not outlive the deadline.
     socket_timeout = min(REQUEST_TIMEOUT_SECONDS, deadline_seconds)
     watchdog = deadline_factory(expire_at, clock)
 
-    def expired() -> DownloadTimeout:
-        """The refusal raised when the transfer outlives the deadline."""
-        return DownloadTimeout(
-            f"{url}: the transfer did not finish within "
-            f"{deadline_seconds:g} seconds; the pin file and the "
-            "upstream asset disagree, or the network is too slow."
-        )
+    transfer = _Transfer(url, limit, deadline_seconds, expire_at, clock, watchdog)
 
     timer = watchdog.start()
     try:
@@ -768,29 +815,7 @@ def download(
             opener(request, timeout=socket_timeout, watch=watchdog.watch) as response,
             destination.open("wb") as handle,
         ):
-            while True:
-                if clock() >= expire_at:
-                    raise expired()
-                chunk = response.read1(CHUNK_SIZE)
-                if not chunk:
-                    # An empty read means end of stream, not only a clean one.
-                    # The watchdog implements the deadline by shutting the
-                    # socket down, and a shutdown makes `read1` return `b""`
-                    # — measured — so a body cut short at the deadline, of a
-                    # promised `Content-Length` or of chunked framing, arrives
-                    # here looking exactly like a complete one. Reporting the
-                    # deadline first is what keeps a truncated download from
-                    # being accepted as whole.
-                    if watchdog.fired() or clock() >= expire_at:
-                        raise expired()
-                    return
-                total += len(chunk)
-                if total > limit:
-                    raise DownloadTooLarge(
-                        f"{url}: the stream exceeds the pinned {limit} bytes; "
-                        "the pin file and the upstream asset disagree."
-                    )
-                handle.write(chunk)
+            transfer.copy_response(response, handle)
     except ProvisionError:
         # A guard's own refusal is already the right answer; only a foreign
         # exception can be the deadline's doing and need relabelling.
@@ -805,8 +830,8 @@ def download(
         # framing, a plain timeout for a read the clipped socket timeout ended.
         # Once the deadline has passed it is the cause in all three cases, so
         # it is what gets reported.
-        if watchdog.fired() or clock() >= expire_at:
-            raise expired() from None
+        if transfer.has_expired():
+            raise transfer.timeout() from None
         raise
     finally:
         timer.cancel()

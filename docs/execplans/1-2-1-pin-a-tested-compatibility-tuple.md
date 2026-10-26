@@ -435,6 +435,14 @@ The documentation added here states each of these limits explicitly.
   the split follows test responsibility rather than that claimed limit.
   Sequential candidate gates and hosted review remain pending.
 
+- [ ] (2026-10-26) CodeScene delta on `b7920c8` reported provisioner
+  complexity and string-argument warnings in the Rust observation helpers. Pin
+  validation and bounded transfer responsibilities were separated without
+  changing the download interface or watchdog contract. The Rust strings are
+  JSON keys, wire data, process arguments, or diagnostic text; wrapping them
+  solely to change their ratio would add no invariant. Candidate gates, a new
+  delta, and hosted review are pending.
+
 ## Surprises & discoveries
 
 - Observation: the O3 failure point is `eval_rule`, not `add_policy`.
