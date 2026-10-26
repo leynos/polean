@@ -49,8 +49,8 @@ arguments.
 
 The planned TOML files use separate command namespaces. For example,
 `[cmds.check]` contains `format = "json"`, while `[cmds.prove]` can contain
-`format = "text"`. Includes, `extends` and named configuration profiles are not
-supported; unknown keys are rejected.
+`format = "text"`. Includes, `extends`, and named configuration profiles are
+not supported; unknown keys are rejected.
 
 Discovery will read the user file at `$XDG_CONFIG_HOME/polean/config.toml`, or
 `$HOME/.config/polean/config.toml` when `XDG_CONFIG_HOME` is unset, followed by

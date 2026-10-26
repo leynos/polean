@@ -381,8 +381,8 @@ Lody session. Do not merge.
   code. Remaining gap: configuration runtime. Compatibility decision: none.
 - **EP-M3 — runtime integration deferred.** Requirements: preserve the user
   selected documentation-only scope and make implementation obligations
-  actionable in roadmap 2.1.4, 4.2.2 and 4.2.3. Acceptance: no application
-  code, dependency, manifest or compiler pin changes are introduced here.
+  actionable in roadmap 2.1.4, 4.2.2, and 4.2.3. Acceptance: no application
+  code, dependency, manifest, or compiler pin changes are introduced here.
   Remaining gap: implementation and runtime verification in those milestones.
 - **EP-M4 — delivery candidate validated.** Requirements: relevant
   documentation gates, reviewed candidate, branch tracking, and draft PR.

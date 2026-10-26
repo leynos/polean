@@ -51,7 +51,7 @@ order. OrthoConfig's default discovery is first-wins, and automatic stacked
 scopes can contain more candidates than this contract permits; neither default
 discovery nor unrestricted scope stacking is sufficient here. Do not enable
 system or ancestor candidates, explicit path flags, or environment file
-selectors. Reject TOML includes, `extends`, named profiles and unknown keys
+selectors. Reject TOML includes, `extends`, named profiles, and unknown keys
 before any loader strips them. Use the published source-aware APIs to compose
 the selected sources, and test that no extra path participates.
 

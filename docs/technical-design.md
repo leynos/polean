@@ -475,8 +475,8 @@ tables are `[cmds.check]` and `[cmds.prove]`, each with a `format` key. The
 application selects exactly these two paths and composes their file sources in
 order. It must not use the default first-wins discovery or automatically add
 system, home, ancestor, CLI-path or environment-path candidates. TOML includes,
-`extends` and named configuration profiles are unsupported and must be rejected
-before any loader removes their keys. The application maps
+`extends`, and named configuration profiles are unsupported and must be
+rejected before any loader removes their keys. The application maps
 `POLEAN_CHECK_FORMAT` and `POLEAN_PROVE_FORMAT` to their respective fields.
 Precedence is default, user file, project file, environment, then explicitly
 provided CLI flag. Clap defaults must remain below file and environment values:

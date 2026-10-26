@@ -145,7 +145,7 @@ the check will reject the result.
 
 The CLI does not exist yet. Roadmap 2.1.4 introduces the application edge and
 its `ortho_config` v0.10.0 integration; roadmap 4.2.2 extends it to `prove`.
-The application owns Clap DTOs, configuration sources and exit mapping, and
+The application owns Clap DTOs, configuration sources, and exit mapping, and
 passes validated settings to domain libraries. Keep the dependency and its Rust
 1.89.0 floor in the application rather than raising reusable libraries'
 minimums. Keep default features enabled: v0.10.0 does not build with them all
@@ -154,10 +154,10 @@ disabled
 [ADR 0003](adrs/adr-0003-cli-configuration.md) and
 [technical design §8](technical-design.md#8-cli-outcomes-and-failure-semantics).
 
-Exercise source precedence with `MapEnv`, explicit file sources and
+Exercise source precedence with `MapEnv`, explicit file sources, and
 `_with_sources` entry points; do not mutate the process environment in tests.
-Use isolated child processes for CLI streams, statuses and help. Test optional
-missing files, unreadable or malformed files, unknown keys and invalid values.
+Use isolated child processes for CLI streams, statuses, and help. Test optional
+missing files, unreadable or malformed files, unknown keys, and invalid values.
 Verify that `verify` never discovers configuration and regenerates identical
 output under conflicting files and environment. Do not treat conformance tests
 as proof of source translation or runtime refinement.
