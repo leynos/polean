@@ -148,19 +148,36 @@ fn check_package(module_ast: &Json) -> Result<(), String> {
     Ok(())
 }
 
-/// The number of rules that are a `Default`.
+/// The number of `Default` rules, each referring to `allow`.
 ///
 /// # Errors
 ///
-/// Returns a diagnostic when a rule has no single tag.
+/// Returns a diagnostic when a rule has no single tag or a default names another rule.
 fn count_default_rules(rules: &[Json]) -> Result<u8, String> {
     let mut count = 0_u8;
     for rule in rules {
         if single_tag(rule, "rule", "rule")? == "Default" {
+            expect_equal(
+                &rule
+                    .pointer("/Default/refr/Var/value")
+                    .and_then(Json::as_str),
+                &Some("allow"),
+                "the default rule refers to `allow`",
+            )?;
             count += 1;
         }
     }
     Ok(count)
+}
+
+/// A default rule for another name cannot satisfy the structural check.
+#[test]
+fn default_rule_for_another_name_is_rejected() {
+    let rules = [serde_json::json!({"Default": {"refr": {"Var": {"value": "deny"}}}})];
+    assert!(
+        count_default_rules(&rules).is_err(),
+        "a default rule for `deny` must not satisfy the `allow` assertion"
+    );
 }
 
 /// The statement count of the single body of one `Spec` rule.

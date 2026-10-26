@@ -846,13 +846,13 @@ def main(
 
     A `ProvisionError` is the provisioner's own diagnosis. An `OSError` is the
     environment failing instead: an unreachable network, a full disk, or a
-    directory the contributor cannot write. Both are reported as one line with
-    exit status 1, because a traceback tells a contributor nothing about which
-    of the two happened or what to try next.
+    directory the contributor cannot write. An `HTTPException` reports a
+    malformed or truncated HTTP response. These are reported as one line with
+    exit status 1, because a traceback does not explain the failure or what to try next.
     """
     try:
         installed = install_tools(pins_path, tools_dir, fetcher)
-    except (ProvisionError, OSError) as error:
+    except (ProvisionError, OSError, http.client.HTTPException) as error:
         print(f"provisioning failed: {error}", file=sys.stderr)
         return 1
     print(f"opa:  {installed.opa}")

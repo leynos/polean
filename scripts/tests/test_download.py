@@ -711,3 +711,45 @@ def test_download_clips_the_socket_timeout_to_the_deadline(tmp_path: Path) -> No
     assert provision_tools.REQUEST_TIMEOUT_SECONDS > 5.0, (
         "this test is vacuous unless the deadline is the smaller bound"
     )
+
+
+def test_truncated_chunked_response_is_reported_and_partial_removed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    stalled_server: Callable[[Callable[[socket.socket, threading.Event], None]], int],
+) -> None:
+    """An early framing failure reaches the CLI without a traceback or install."""
+    from test_provision_tools import write_pins
+
+    def serve(conn: socket.socket, release: threading.Event) -> None:
+        """End a chunk before its advertised payload and terminator arrive."""
+        conn.recv(4096)
+        conn.sendall(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhi")
+
+    port = stalled_server(serve)
+
+    def opener(
+        request: object, *, timeout: float, watch: Callable[[socket.socket], None]
+    ) -> http.client.HTTPResponse:
+        """Use a real HTTP response connected to the truncated local stream."""
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+        connection.request("GET", "/opa")
+        assert connection.sock is not None
+        watch(connection.sock)
+        return connection.getresponse()
+
+    def fetch(url: str, destination: Path, limit: int) -> None:
+        """Route the normal download through the local malformed response."""
+        provision_tools.download(url, destination, limit, opener=opener)
+
+    tools_dir = tmp_path / "tools"
+    status = provision_tools.main(write_pins(tmp_path), tools_dir, fetch)
+    captured = capsys.readouterr()
+    assert status == 1
+    assert captured.out == ""
+    assert captured.err.startswith("provisioning failed: IncompleteRead(")
+    assert len(captured.err.splitlines()) == 1
+    assert "Traceback" not in captured.err
+    assert not list(tools_dir.rglob(".part-*"))
+    assert not (tools_dir / "opa").exists()
+    assert not (tools_dir / "lean").exists()

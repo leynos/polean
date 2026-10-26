@@ -428,20 +428,30 @@ The documentation added here states each of these limits explicitly.
     Python 3.14). The two split modules stay under the 400-line budget because
     their test children are separate files, not exemptions.
 
-- [ ] (2026-10-26) Review 5646161466 repairs in progress: correct Oxford
+- [x] (2026-10-26) Review 5646161466 repairs on `b7920c8`: correct Oxford
   spelling, isolate Rust test scratch directories per invocation with cleanup,
   and extract download tests and shared stalled-socket setup. The review's
   claimed 400-line Python limit does not appear in the repository instructions;
-  the split follows test responsibility rather than that claimed limit.
-  Sequential candidate gates and hosted review remain pending.
+  the split follows test responsibility rather than that claimed limit. All ten
+  candidate gates passed locally; hosted CI, design contracts, and toolchain
+  smoke passed on `b7920c8`. All three original review threads were confirmed
+  addressed.
 
-- [ ] (2026-10-26) CodeScene delta on `b7920c8` reported provisioner
+- [x] (2026-10-26) CodeScene delta on `b7920c8` reported provisioner
   complexity and string-argument warnings in the Rust observation helpers. Pin
   validation and bounded transfer responsibilities were separated without
   changing the download interface or watchdog contract. The Rust strings are
   JSON keys, wire data, process arguments, or diagnostic text; wrapping them
-  solely to change their ratio would add no invariant. Candidate gates, a new
-  delta, and hosted review are pending.
+  solely to change their ratio would add no invariant. All ten gates passed
+  locally on `c4c36a1`, as did hosted CI, design contracts, and toolchain
+  smoke. A fresh delta reported eleven advisories; CodeRabbit reconciled their
+  listed dispositions in issue comment 6427804830, without claiming the metrics
+  disappeared. Formal review remains paused.
+
+- [ ] (2026-10-26) The current-head completeness assessment identified a
+  premature chunked-response diagnostic defect, a missing independent default
+  rule name assertion, and stale plan records. Repairs and renewed validation
+  are in progress; review and merge remain pending.
 
 ## Surprises & discoveries
 
@@ -1656,12 +1666,13 @@ New committed files:
 - `scripts/provision_tools.py`
 - `scripts/tests/conftest.py`
 - `scripts/tests/test_provision_tools.py`
+- `scripts/tests/test_download.py`
 - `scripts/requirements-test.txt`
 - `lean/lean-toolchain`
 - `lean/lakefile.toml`
 - `lean/lake-manifest.json`
 - `lean/PoleanSmoke.lean`
-- `tests/toolchain/{main,engine,json,regorus,bdd}.rs`
+- `tests/toolchain/{main,engine,json,regorus,bdd,scratch}.rs`
 - `tests/toolchain/{support,smoke}/mod.rs`
 - `tests/toolchain/{support,smoke}/tests.rs`
 - `tests/features/regorus_baseline.feature`
