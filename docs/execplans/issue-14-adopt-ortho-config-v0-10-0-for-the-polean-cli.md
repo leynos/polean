@@ -172,7 +172,14 @@ application crate or executable is introduced here.
 - [x] Run deterministic gates and CodeRabbit on design commit
   `19d53b2f4f650137c03b9e1ecf501fb9e10e5d2a`; the review reported two minor
   documentation findings, addressed in the follow-up.
-- [ ] Gate and commit the follow-up, review it, push, and create the draft PR.
+- [x] (2026-10-26 22:58Z) Gated and committed the follow-up, pushed the
+  requested branch over SSH, and opened draft PR #15 on `f09c757`. The remote
+  head and named upstream matched; hosted `rust-and-docs` and `design-check`
+  passed on that head. The final local CodeRabbit review was rate-limited
+  twice; a fresh user-required 69-minute `vsleep` is in progress before
+  retrying.
+- [ ] Complete the local CodeRabbit review on the current PR head and resolve
+  any findings; reconcile the draft PR's review status.
 
 ## Surprises & discoveries
 
@@ -212,14 +219,14 @@ application crate or executable is introduced here.
 ## Outcomes & retrospective
 
 Preflight and immutable documentation import are complete, and the docs-only
-formatting and Markdown gates passed. CodeRabbit reviewed the corrected
-documentation candidate and its final exact-head review reported zero findings.
-The upstream-relative link assumptions and source formatting remain recorded in
-provenance because the import is required to stay byte-exact. The user selected
-documentation and design only. The configuration decision is recorded in the
-technical design and ADR; runtime adoption and its tests remain future roadmap
-work. No runtime code or dependency has been added, and no push or draft PR has
-run yet.
+formatting and Markdown gates passed. CodeRabbit's final import-milestone
+review on `51a3ef9` reported zero findings. The upstream-relative link
+assumptions and source formatting remain recorded in provenance because the
+import is required to stay byte-exact. The user selected documentation and
+design only. The configuration decision is recorded in the technical design and
+ADR; runtime adoption and its tests remain future roadmap work. No runtime code
+or dependency has been added. Draft PR #15 is open; its final local CodeRabbit
+review remains pending after rate limiting.
 
 ## Context and orientation
 
