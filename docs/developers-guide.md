@@ -149,7 +149,9 @@ The application owns Clap DTOs, configuration sources and exit mapping, and
 passes validated settings to domain libraries. Keep the dependency and its Rust
 1.89.0 floor in the application rather than raising reusable libraries'
 minimums. Keep default features enabled: v0.10.0 does not build with them all
-disabled. See [ADR 0003](adrs/adr-0003-cli-configuration.md) and
+disabled
+([upstream issue 627](https://github.com/leynos/ortho-config/issues/627)). See
+[ADR 0003](adrs/adr-0003-cli-configuration.md) and
 [technical design §8](technical-design.md#8-cli-outcomes-and-failure-semantics).
 
 Exercise source precedence with `MapEnv`, explicit file sources and

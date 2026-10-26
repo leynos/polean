@@ -158,6 +158,13 @@ application crate or executable is introduced here.
   `make markdownlint` and `make design-check` passed sequentially; the latter
   checked five schemas, replayed six witnesses and passed 19 negative controls.
   Both imported guides still byte-compare with the pinned upstream commit.
+- [x] (2026-10-26) CodeRabbit reviewed design commit
+  `670e76e36f7a9db682a4fb4204938d372f485721` and reported two minor findings.
+  Corrected Oxford spelling and specified explicit file-source composition:
+  unrestricted automatic stacking may include paths beyond the two designed
+  locations. Also reconciled the CLI contract with the planned text default and
+  Clap's parse-error status. Review log:
+  `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-5.out`.
 - [x] Record the configuration decision in the technical design, ADR, roadmap,
   user guide, and developer guide.
 - [x] Defer runtime integration and its regression tests to the roadmap items,

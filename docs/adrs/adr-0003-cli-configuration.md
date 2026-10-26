@@ -46,6 +46,15 @@ values are configuration errors. No legacy environment variables or
 configuration files exist in the baseline, so no compatibility aliases are
 needed.
 
+The application constructs the two file sources explicitly in user then project
+order. OrthoConfig's default discovery is first-wins, and automatic stacked
+scopes can contain more candidates than this contract permits; neither default
+discovery nor unrestricted scope stacking is sufficient here. Do not enable
+system or ancestor candidates, explicit path flags, or environment file
+selectors. Reject TOML includes, `extends`, named profiles and unknown keys
+before any loader strips them. Use the published source-aware APIs to compose
+the selected sources, and test that no extra path participates.
+
 Precedence is built-in defaults, user file, project file, environment, then
 explicit CLI values. The default `--format text` is marked as absent for the
 OrthoConfig merge, so the parser default cannot override file or environment

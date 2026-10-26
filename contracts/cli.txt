@@ -1,8 +1,8 @@
 Polean v0: proposed interface, not an implemented command.
 
-polean check POLICY --profile polean.tenant-write.v0 --format text|json
-polean prove POLICY --claims CLAIMS --evidence DIRECTORY --format text|json
-polean verify DIRECTORY --policy POLICY --claims CLAIMS --format text|json
+polean check POLICY --profile polean.tenant-write.v0 [--format text|json]
+polean prove POLICY --claims CLAIMS --evidence DIRECTORY [--format text|json]
+polean verify DIRECTORY --policy POLICY --claims CLAIMS [--format text|json]
 polean export-rego DIRECTORY --output POLICY
 
 check: syntax/profile admission only; success is not an invariant proof.
@@ -10,16 +10,22 @@ prove: all six fixed claims, fresh Lean checking, OPA and Regorus comparisons.
 verify: bind explicit source and claims; regenerate proofs from data in a clean
         pinned environment. Never execute supplied Lean or import supplied oleans.
 export-rego: render admitted IR; preserve the original source separately.
+The default format is text. Check and prove may take their format from the
+configuration sources specified in technical-design.md section 8; verify
+uses only its CLI flag and does not discover configuration.
 
 Exit status:
   0  all command-specific gates succeeded
-  2  a requested model claim has a checked counterexample
+  2  a requested model claim has a checked counterexample, or CLI parsing fails
   3  verification did not settle (including resource exhaustion)
   4  legal syntax is outside the admitted profile
   5  malformed source, invalid request, claims or configuration
   6  tool, process, protocol or required dependency failure
   7  evidence, digest, theorem, or axiom-policy rejection
   8  runtime/model disagreement or non-Boolean/undefined runtime result
+
+Help and version requests exit 0 on stdout. CLI parsing errors exit 2 on
+stderr; configuration errors exit 5.
 
 For prove and verify, 0 additionally requires exactly six proved claims,
 checked bindings, axiom approval, and tested runtime agreement. The displayed

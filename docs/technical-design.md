@@ -472,12 +472,16 @@ There is no ancestor search, explicit configuration-path flag, or environment
 file override. Missing optional files are ignored; unreadable or malformed
 files, unknown keys and invalid values are configuration errors. Supported
 tables are `[cmds.check]` and `[cmds.prove]`, each with a `format` key. The
-application maps `POLEAN_CHECK_FORMAT` and `POLEAN_PROVE_FORMAT` to their
-respective fields. Precedence is default, user file, project file, environment,
-then explicitly provided CLI flag. Clap defaults must remain below file and
-environment values: use `cli_default_as_absent` with the match-aware v0.10.0
-merge API and test it. Reject unknown keys in the complete file, including
-inactive command tables.
+application selects exactly these two paths and composes their file sources in
+order. It must not use the default first-wins discovery or automatically add
+system, home, ancestor, CLI-path or environment-path candidates. TOML includes,
+`extends` and named configuration profiles are unsupported and must be rejected
+before any loader removes their keys. The application maps
+`POLEAN_CHECK_FORMAT` and `POLEAN_PROVE_FORMAT` to their respective fields.
+Precedence is default, user file, project file, environment, then explicitly
+provided CLI flag. Clap defaults must remain below file and environment values:
+use `cli_default_as_absent` with the match-aware v0.10.0 merge API and test it.
+Reject unknown keys in the complete file, including inactive command tables.
 
 `verify` and `export-rego` do not discover files or read configuration
 variables; their arguments are CLI inputs. The planned `verify` format default
@@ -486,7 +490,7 @@ evidence and output paths, the policy `--profile`, budgets, requirements and
 proof semantics remain CLI-only or fixed by the contract. `--profile` names the
 policy profile; named OrthoConfig profiles are disabled. No legacy files or
 variables exist. The proposed executable is `polean`, not a Cargo subcommand.
-The CLI has no localisation requirement yet; help and parse errors use Clap's
+The CLI has no localization requirement yet; help and parse errors use Clap's
 normal language and streams. Help and version exit 0 on stdout; parse errors
 use Clap's exit 2 on stderr, configuration errors use exit 5, and tool failures
 use exit 6.

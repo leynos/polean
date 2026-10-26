@@ -49,7 +49,8 @@ arguments.
 
 The planned TOML files use separate command namespaces. For example,
 `[cmds.check]` contains `format = "json"`, while `[cmds.prove]` can contain
-`format = "text"`.
+`format = "text"`. Includes, `extends` and named configuration profiles are not
+supported; unknown keys are rejected.
 
 Discovery will read the user file at `$XDG_CONFIG_HOME/polean/config.toml`, or
 `$HOME/.config/polean/config.toml` when `XDG_CONFIG_HOME` is unset, followed by
@@ -83,7 +84,7 @@ conformance mismatch remain separate operational outcomes, and
 | Status | Meaning                                                      |
 | ------ | ------------------------------------------------------------ |
 | 0      | All command-specific gates succeeded.                        |
-| 2      | A requested model claim has a checked counterexample.        |
+| 2      | A claim has a checked counterexample, or CLI parsing fails.  |
 | 3      | Verification did not settle, including resource exhaustion.  |
 | 4      | Legal syntax is outside the admitted profile.                |
 | 5      | Malformed source, invalid request, claims, or configuration. |
