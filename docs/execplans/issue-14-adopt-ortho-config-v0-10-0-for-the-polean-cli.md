@@ -144,6 +144,12 @@ introduces `check`.
   this import scope. Corrected the two authored-plan review-status
   inconsistencies. Review log:
   `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-2.out`.
+- [x] (2026-10-26 14:30Z) After the requested rate-limit cooldown, the single
+  CodeRabbit retry reviewed exact HEAD
+  `51a3ef9bed1181d22c004bd485eeba50bd07703d` and completed with zero findings.
+  The provenance note's treatment of upstream-relative links and retained
+  source formatting was accepted. Review log:
+  `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-4.out`.
 - [ ] (pending) Resolve the scope question and approve this ExecPlan before
   production implementation, as required by the ExecPlans workflow.
 - [ ] Record the configuration decision in the technical design, ADR, roadmap,
@@ -193,13 +199,14 @@ introduces `check`.
 ## Outcomes & retrospective
 
 Preflight and immutable documentation import are complete, and the docs-only
-formatting and Markdown gates passed. CodeRabbit reviewed both committed
-documentation candidates; the follow-up findings on imported relative links and
-source Markdown are recorded in the provenance note because the import is
-required to remain byte-exact. The task is not complete: no integration
-decision has been approved, no runtime code or configuration dependency has
-been added, and no push or draft PR has run. This distinction prevents a
-documentation import from being reported as a working CLI adoption.
+formatting and Markdown gates passed. CodeRabbit reviewed the corrected
+documentation candidate and its final exact-head review reported zero findings.
+The upstream-relative link assumptions and source formatting remain recorded in
+provenance because the import is required to stay byte-exact. The task is not
+complete: no integration decision has been approved, no runtime code or
+configuration dependency has been added, and no push or draft PR has run. This
+distinction prevents a documentation import from being reported as a working
+CLI adoption.
 
 ## Context and orientation
 
@@ -309,7 +316,8 @@ an updated documentation index, and a recorded CLI baseline. This milestone
 passed its byte comparisons and docs-only gates. A preliminary CodeRabbit
 review and a follow-up on the corrected documentation candidate completed;
 findings against immutable upstream text are documented in the provenance note,
-while authored-plan status findings were corrected.
+while authored-plan status findings were corrected. The final review on
+`51a3ef9bed1181d22c004bd485eeba50bd07703d` completed with zero findings.
 
 ### EP-M2: Decide and document the configuration boundary
 
