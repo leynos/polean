@@ -387,7 +387,7 @@ The documentation added here states each of these limits explicitly.
     `scripts/tests/test_provision_tools.py`: a child process that holds the
     `flock` while the parent asserts `install_tools` has not fetched, a stale
     staging directory and partial download beside a file that must survive,
-    and eleven parametrised malformed pins asserting `PinFileError`. The lock
+    and eleven parametrized malformed pins asserting `PinFileError`. The lock
     test is mutation-tested: deleting `fcntl.flock` makes it fail on
     `assert not ready.wait(1.0)`. 47 pytest tests pass.
   - "Unit Architecture" asked for tests of `path_exists` and, through it, of
@@ -412,7 +412,7 @@ The documentation added here states each of these limits explicitly.
   - "Testing (Property / Proof)", "Testing (Compile-Time / Ui)", and
     "Observability" are disclosed in `## Outcomes & retrospective` and are not
     being implemented. The first would add Hypothesis to a two-file test
-    dependency for invariants already covered by exhaustive parametrisation.
+    dependency for invariants already covered by exhaustive parametrization.
     The second asks for the raw AST snapshot to be replaced by a projection,
     which the earlier rounds declined because O5 requires the raw adapter input
     and the snapshot is the reviewed artefact. The third asks for an event
@@ -427,6 +427,13 @@ The documentation added here states each of these limits explicitly.
     15 toolchain of which 7 ignored + 1 doctest), `test-scripts` (47 passed on
     Python 3.14). The two split modules stay under the 400-line budget because
     their test children are separate files, not exemptions.
+
+- [ ] (2026-10-26) Review 5646161466 repairs in progress: correct Oxford
+  spelling, isolate Rust test scratch directories per invocation with cleanup,
+  and extract download tests and shared stalled-socket setup. The review's
+  claimed 400-line Python limit does not appear in the repository instructions;
+  the split follows test responsibility rather than that claimed limit.
+  Sequential candidate gates and hosted review remain pending.
 
 ## Surprises & discoveries
 
@@ -936,7 +943,7 @@ Open pre-merge warnings, with the reason each is not being actioned:
   archive member names, link targets, and response chunk partitions. The
   invariants are already checked exhaustively over the shapes the grammar
   admits: `_check_archive` rejects each `..` component, each escape, and each
-  link target that resolves outside the pinned root, and the parametrised cases
+  link target that resolves outside the pinned root, and the parametrized cases
   name each form separately. Adding Hypothesis would put a generative
   dependency into a two-file pin (`pytest` only) for a search over the same
   small input space, and a failing example would still have to be written out

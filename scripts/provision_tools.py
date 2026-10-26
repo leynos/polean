@@ -603,6 +603,8 @@ def _watched_connection(base: type[http.client.HTTPConnection]) -> type:
     """
 
     class Watched(base):  # type: ignore[misc, valid-type]
+        """A connection class whose finished socket is registered on connect."""
+
         def __init__(
             self, *args: Any, watch: Callable[[Any], None], **kwargs: Any
         ) -> None:
@@ -633,11 +635,15 @@ def _watched_opener(watch: Callable[[Any], None]) -> Any:
     https_class = _watched_connection(http.client.HTTPSConnection)
 
     class HTTPHandler(urllib.request.HTTPHandler):
+        """Replace the default HTTP handler with watched connections."""
+
         def http_open(self, req: Any) -> Any:
             """Open an HTTP request on a watched connection."""
             return self.do_open(http_class, req, watch=watch)
 
     class HTTPSHandler(urllib.request.HTTPSHandler):
+        """Replace the default HTTPS handler with watched TLS connections."""
+
         def https_open(self, req: Any) -> Any:
             """Open an HTTPS request on a watched TLS connection."""
             return self.do_open(https_class, req, context=self._context, watch=watch)

@@ -7,24 +7,16 @@
 //! Linux host the pinned tuple targets: traversing a regular file yields
 //! `ENOTDIR`, which no process can override.
 
-use std::{
-    fs,
-    os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
-};
+use std::{fs, os::unix::fs::PermissionsExt};
 
 use super::path_exists;
-
-/// A scratch path for one test, under the directory Cargo provides for it.
-///
-/// Each caller passes a name unique to itself: the tests run in one
-/// process and share `CARGO_TARGET_TMPDIR`.
-fn scratch(name: &str) -> PathBuf { Path::new(env!("CARGO_TARGET_TMPDIR")).join(name) }
+use crate::scratch::Scratch;
 
 /// A path that does not exist is absence, not a failure to inspect.
 #[test]
 fn a_missing_path_reports_absence() {
-    let path = scratch("missing-path-probe");
+    let scratch = Scratch::new("missing-path-probe");
+    let path = scratch.path().join("missing");
     assert_eq!(
         path_exists(&path),
         Ok(false),
@@ -35,7 +27,8 @@ fn a_missing_path_reports_absence() {
 /// A path that exists and can be inspected reports presence.
 #[test]
 fn a_readable_path_reports_presence() {
-    let path = scratch("readable-path-probe");
+    let scratch = Scratch::new("readable-path-probe");
+    let path = scratch.path().join("readable");
     let created = fs::create_dir_all(&path);
     assert!(
         created.is_ok(),
@@ -56,11 +49,12 @@ fn a_readable_path_reports_presence() {
 /// reaches the error arm on every host, including one running as root.
 #[test]
 fn an_unreachable_path_reports_an_error() {
-    let parent = scratch("unreachable-path-probe");
+    let scratch = Scratch::new("unreachable-path-probe");
+    let parent = scratch.path();
     let blocker = parent.join("blocker");
     let unreachable = blocker.join("installed");
 
-    let created = fs::create_dir_all(&parent).and_then(|()| fs::write(&blocker, b""));
+    let created = fs::create_dir_all(parent).and_then(|()| fs::write(&blocker, b""));
     assert!(
         created.is_ok(),
         "could not lay out the scratch tree under {}: {created:?}",
@@ -89,28 +83,18 @@ fn an_unreachable_path_reports_an_error() {
 /// unconditionally, so neither test is skipped on any host.
 #[test]
 fn a_permission_denied_path_is_never_reported_as_absent() {
-    let directory = scratch("permission-denied-path-probe");
+    let scratch = Scratch::new("permission-denied-path-probe");
+    let directory = scratch.path();
     let installed = directory.join("installed");
 
-    // A previous failed run may have left the directory hidden; a test must
-    // not be unable to lay out its own fixture because it failed before.
-    if directory.exists() {
-        let reset = fs::set_permissions(&directory, fs::Permissions::from_mode(0o755));
-        assert!(
-            reset.is_ok(),
-            "could not reset permission on the leftover {}: {reset:?}",
-            directory.display()
-        );
-    }
-
-    let created = fs::create_dir_all(&directory).and_then(|()| fs::write(&installed, b""));
+    let created = fs::create_dir_all(directory).and_then(|()| fs::write(&installed, b""));
     assert!(
         created.is_ok(),
         "could not lay out the scratch tree under {}: {created:?}",
         directory.display()
     );
 
-    let hidden = fs::set_permissions(&directory, fs::Permissions::from_mode(0o000));
+    let hidden = fs::set_permissions(directory, fs::Permissions::from_mode(0o000));
     assert!(
         hidden.is_ok(),
         "could not withhold permission on {}: {hidden:?}",
@@ -123,7 +107,7 @@ fn a_permission_denied_path_is_never_reported_as_absent() {
     let inspected = path_exists(&installed);
     let bypasses_permissions = fs::metadata(&installed).is_ok();
 
-    let restored = fs::set_permissions(&directory, fs::Permissions::from_mode(0o755));
+    let restored = fs::set_permissions(directory, fs::Permissions::from_mode(0o755));
     assert!(
         restored.is_ok(),
         "could not restore permission on {}: {restored:?}",

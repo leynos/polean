@@ -12,5 +12,6 @@ mod bdd;
 mod engine;
 mod json;
 mod regorus;
+mod scratch;
 mod smoke;
 mod support;
