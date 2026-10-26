@@ -5,7 +5,7 @@ This ExecPlan is a living document. The sections `Constraints`,
 `Surprises & discoveries`, `Decision log`, `Outcomes & retrospective`,
 `Conformance basis`, and `Verification plan` must stay current.
 
-Status: DRAFT
+Status: IN PROGRESS — design recorded; delivery pending
 
 ## Purpose / big picture
 
@@ -15,8 +15,9 @@ release. A user will be able to configure the documented presentation defaults
 without changing policy semantics, while `verify` will regenerate evidence
 without discovering configuration. Configuration errors will map to status 5
 and tool failures to status 6. The repository currently has no executable CLI,
-so the exact implementation scope must respect roadmap item 2.1.4, which first
-introduces `check`.
+so runtime implementation remains in roadmap item 2.1.4, which first introduces
+`check`. The user selected documentation and design only for this change; no
+application crate or executable is introduced here.
 
 ## Constraints
 
@@ -40,8 +41,8 @@ introduces `check`.
 
 ## Tolerances (exception triggers)
 
-- If satisfying the issue requires starting the CLI before roadmap item 2.1.4,
-  stop and ask the user to resolve the scope conflict.
+- Do not start the CLI or configuration implementation in this documentation
+  change; record implementation and validation in the existing roadmap items.
 - If integration requires putting OrthoConfig in a reusable domain crate,
   stop and present the boundary change before implementing it.
 - If the configuration design allows files or environment values to
@@ -55,10 +56,9 @@ introduces `check`.
 
 ## Risks
 
-- Risk: the issue asks for implementation now while also forbidding an early
-  CLI, and the CLI milestone is still pending. Severity: high; likelihood:
-  high. Mitigation: obtain a scope decision before production implementation;
-  keep the current plan in DRAFT.
+- Risk: a documentation-only decision could be mistaken for an implemented
+  integration. Severity: high; likelihood: medium. Mitigation: state the user's
+  selected scope and keep runtime acceptance in the pending roadmap milestones.
 - Risk: `polean` is presently a library-only scaffold, so a dependency added to
   its package could leak into reusable code. Severity: high; likelihood:
   medium. Mitigation: keep configuration types in the future app boundary and
@@ -150,11 +150,18 @@ introduces `check`.
   The provenance note's treatment of upstream-relative links and retained
   source formatting was accepted. Review log:
   `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-4.out`.
-- [ ] (pending) Resolve the scope question and approve this ExecPlan before
-  production implementation, as required by the ExecPlans workflow.
-- [ ] Record the configuration decision in the technical design, ADR, roadmap,
+- [x] (2026-10-26) The user selected documentation and design only. Runtime
+  adoption remains assigned to roadmap 2.1.4 and 4.2.2; no executable or
+  configuration crate is introduced in this change.
+- [x] (2026-10-26 20:10Z) Recorded the configuration decision in the technical
+  design, ADR, roadmap and guides. The documentation gates `make check-fmt`,
+  `make markdownlint` and `make design-check` passed sequentially; the latter
+  checked five schemas, replayed six witnesses and passed 19 negative controls.
+  Both imported guides still byte-compare with the pinned upstream commit.
+- [x] Record the configuration decision in the technical design, ADR, roadmap,
   user guide, and developer guide.
-- [ ] Implement only the approved integration scope and its regression tests.
+- [x] Defer runtime integration and its regression tests to the roadmap items,
+  retaining the detailed future verification obligations below.
 - [ ] Run deterministic gates sequentially, request CodeRabbit review, clear
   actionable concerns, commit, push, and create the draft PR.
 
@@ -189,12 +196,9 @@ introduces `check`.
   release-specific source. Date: 2026-10-26.
 - Decision: do not add OrthoConfig to `Cargo.toml` during reconnaissance.
   Rationale: there is no application binary yet, and the issue forbids starting
-  the CLI early solely to adopt configuration. The appropriate code milestone
-  depends on the user's scope resolution and approved plan. Date: 2026-10-26.
-- Decision pending: whether to defer executable configuration code to roadmap
-  2.1.4, add a testable configuration module without a binary now, or promote
-  the CLI milestone. The user has been asked to resolve this because the
-  alternatives materially change the implementation and dependency boundary.
+  the CLI early solely to adopt configuration. The user selected documentation
+  and design only; roadmap 2.1.4 and 4.2.2 own the future runtime work. Date:
+  2026-10-26.
 
 ## Outcomes & retrospective
 
@@ -202,11 +206,11 @@ Preflight and immutable documentation import are complete, and the docs-only
 formatting and Markdown gates passed. CodeRabbit reviewed the corrected
 documentation candidate and its final exact-head review reported zero findings.
 The upstream-relative link assumptions and source formatting remain recorded in
-provenance because the import is required to stay byte-exact. The task is not
-complete: no integration decision has been approved, no runtime code or
-configuration dependency has been added, and no push or draft PR has run. This
-distinction prevents a documentation import from being reported as a working
-CLI adoption.
+provenance because the import is required to stay byte-exact. The user selected
+documentation and design only. The configuration decision is recorded in the
+technical design and ADR; runtime adoption and its tests remain future roadmap
+work. No runtime code or dependency has been added, and no push or draft PR has
+run yet.
 
 ## Context and orientation
 
@@ -230,8 +234,8 @@ no external executable caller.
 The imported OrthoConfig docs describe only v0.10.0. The release tag and its
 peeled commit are recorded in `docs/ortho-config-provenance.md`. OrthoConfig's
 public release manifest sets `rust-version = "1.89.0"`, with default TOML and
-`serde_json` features. No configuration library is currently named in the
-Polean roadmap.
+`serde_json` features. The baseline roadmap named no configuration library;
+this change assigns OrthoConfig to the first application milestones.
 
 ## Conformance basis
 
@@ -269,10 +273,10 @@ the actual OrthoConfig 0.10.0 interface:
 
 - `CFG-PRECEDENCE`: for each configuration-enabled command, defaults are
   overridden by TOML, then injected environment, then explicit CLI values. Use
-  finite table tests with distinct `text`/`json` values at each tier, `MapEnv`,
-  explicit file sources, and the `_with_sources` APIs. The test is non-vacuous
-  because each tier supplies a value different from all lower tiers; removing a
-  merge tier must fail the expected assertion.
+  finite table tests with `text` and `json`, `MapEnv`, explicit file sources,
+  and the `_with_sources` APIs. In separate cases, give each overriding tier a
+  value different from the effective lower tiers; removing that tier must fail
+  its assertion.
 - `CFG-PROFILE-SEPARATION`: configuration cannot change `--profile` from its
   policy-profile meaning. A test supplies a configuration key/profile table and
   proves it is rejected or has no effect, according to the approved unknown-key
@@ -282,10 +286,10 @@ the actual OrthoConfig 0.10.0 interface:
   verifier boundary in an isolated child process with two conflicting config
   sources and compare regenerated output digests. The negative control must
   demonstrate that a deliberately config-aware verifier would be detected.
-- `CFG-FAILURE-CLASS`: malformed, unreadable, invalid-value, and explicitly
-  missing config paths map to 5; a missing required external tool maps to 6;
-  absence of optional discovered files leaves defaults in force. Test each
-  boundary separately and assert status, stdout, and stderr.
+- `CFG-FAILURE-CLASS`: malformed, unreadable and invalid-value configuration
+  files map to 5; a missing required external tool maps to 6; absence of
+  optional discovered files leaves defaults in force. Test each boundary
+  separately and assert status, stdout, and stderr.
 - `CLI-DISPLAY-AND-PARSE`: help and version are successful display requests;
   invalid command-line syntax retains Clap's own status and stream; config
   failures are reported at the application boundary. Child-process tests
@@ -321,66 +325,61 @@ while authored-plan status findings were corrected. The final review on
 
 ### EP-M2: Decide and document the configuration boundary
 
-After the user resolves the scope question and approves the plan, record the
-decision in `docs/technical-design.md` §8 and a new sequential ADR. Update the
-first applicable roadmap command item (2.1.4) and the later public command
-items (4.2.2 and 4.2.3), as well as `docs/users-guide.md` and
+Under the user-selected documentation-only scope, record the decision in
+`docs/technical-design.md` §8 and a new sequential ADR. Update the first
+applicable roadmap command item (2.1.4) and the later public command items
+(4.2.2 and 4.2.3), as well as `docs/users-guide.md` and
 `docs/developers-guide.md`. The design must state configurable versus CLI-only
 settings, TOML discovery and file names, environment prefix and selectors,
 precedence, per-command namespaces, status mapping, localization, profile
 behavior, and whether Cargo's wrapper is needed. End-state evidence is
 consistent cross-links and no claim that a CLI exists before its code.
 
-### EP-M3: Implement the approved configuration spine
+### EP-M3: Defer the configuration spine to the roadmap
 
-If the approved scope keeps the CLI deferred, do not add a binary or runtime
-dependency; encode the implementation and tests as explicit acceptance criteria
-of the planned CLI milestone, and do not mark this issue's runtime adoption
-complete. If the user approves an isolated configuration module or promoted CLI
-work, add red tests first, implement only the selected boundary, and keep
-reusable domain types independent of OrthoConfig. Tests must cover every
-precedence tier, source injection, unhappy paths, error mapping, and the
-`verify` hermetic boundary.
+The user selected documentation and design only. Do not add a binary, runtime
+dependency or configuration module in this change. Roadmap 2.1.4 and 4.2.2 own
+the application integration; 4.2.3 owns end-to-end verification. Preserve the
+future obligations in the Verification plan and do not report runtime adoption
+as complete.
 
 ### EP-M4: Validate and deliver
 
-Run formatting, Markdown, type, lint, test, design, and boundary gates
-sequentially via `scrutineer`; do not ask CodeRabbit to diagnose deterministic
-failures. After each coherent implementation plateau, run
-`coderabbit review --agent` and resolve actionable concerns before continuing.
-Commit each coherent change with an imperative subject and a body explaining
-the reason and assurance impact. Verify SSH identity as `leynos`, push the
-requested branch, refresh its remote-tracking ref, set its upstream, then
-create a draft PR titled with `(#14)`, with `Closes #14` and a terminal
-`## References` section linking the Lody session. Do not merge.
+Run the relevant documentation formatting and Markdown gates sequentially via
+`scrutineer`; do not ask CodeRabbit to diagnose deterministic failures. After
+each coherent documentation plateau, run `coderabbit review --agent` and
+resolve actionable concerns before continuing. Commit each coherent change with
+an imperative subject and a body explaining the reason and assurance impact.
+Verify SSH identity as `leynos`, push the requested branch, refresh its
+remote-tracking ref, set its upstream, then create a draft PR titled with
+`(#14)`, with `Closes #14` and a terminal `## References` section linking the
+Lody session. Do not merge.
 
 ## Milestones and plateaus
 
 - **EP-M1 — immutable documentation imported.** Requirements: source
   provenance and release boundary. Acceptance: byte comparisons and hashes
   match, docs index links are valid, Markdown gates pass. Conformance: no
-  imported byte changed; the decision is not yet presented as runtime code; no
+  imported byte changed; the decision is not presented as runtime code; no
   dependency or public API changed. Recovery: revert only this documentation
   commit. Remaining gap: configuration design and code. Compatibility decision:
   none.
-- **EP-M2 — approved design recorded.** Requirements: CLI contract and
+- **EP-M2 — configuration design recorded.** Requirements: CLI contract and
   hermetic replay. Acceptance: technical design, ADR, roadmap, and guides state
   one decision with consistent trace links. Conformance: no source or status
-  contract drift outside issue scope; no unapproved API or dependency.
-  Recovery: revise the unimplemented design before code. Remaining gap:
-  configuration runtime. Compatibility decision: none.
-- **EP-M3 — approved configuration path implemented.** Requirements:
-  `CFG-PRECEDENCE`, `CFG-PROFILE-SEPARATION`, `CFG-VERIFY-HERMETIC`,
-  `CFG-FAILURE-CLASS`, and `CLI-BOUNDARY`. Acceptance: focused tests fail for
-  seeded defects and pass for the candidate. Conformance: config stays in the
-  application edge; verify is config-free; all result statuses remain as
-  contracted. Recovery: revert the implementation commit independently of
-  M1/M2. Remaining gap: hosted CI/review. Compatibility decision: none.
-- **EP-M4 — delivery candidate validated.** Requirements: all canonical gates,
-  reviewed current head, branch tracking, and draft PR. Acceptance: gate and
-  review evidence names the exact pushed commit; draft PR links issue 14 and
-  the Lody session. Recovery: no merge; amend/review a new candidate. Remaining
-  gap: maintainer merge. Compatibility decision: none.
+  contract drift outside issue scope; no unimplemented API or dependency
+  presented as available. Recovery: revise the unimplemented design before
+  code. Remaining gap: configuration runtime. Compatibility decision: none.
+- **EP-M3 — runtime integration deferred.** Requirements: preserve the user
+  selected documentation-only scope and make implementation obligations
+  actionable in roadmap 2.1.4, 4.2.2 and 4.2.3. Acceptance: no application
+  code, dependency, manifest or compiler pin changes are introduced here.
+  Remaining gap: implementation and runtime verification in those milestones.
+- **EP-M4 — delivery candidate validated.** Requirements: relevant
+  documentation gates, reviewed candidate, branch tracking, and draft PR.
+  Acceptance: gate and review evidence names the exact pushed commit; draft PR
+  links issue 14 and the Lody session. Recovery: no merge; amend/review a new
+  candidate. Remaining gap: maintainer merge. Compatibility decision: none.
 
 ## Concrete steps
 
@@ -420,13 +419,12 @@ CodeRabbit review starts only after deterministic gates pass.
 
 ## Validation and acceptance
 
-The imported-document milestone's byte comparisons and docs-only Markdown gates
-are green; its requested CodeRabbit review remains pending. The configuration
-design milestone is accepted only after the user approves the selected scope
-and the design artifacts agree. Runtime adoption is accepted only when the
-selected implementation exists and the tests in the Verification plan pass
-against `ortho_config` v0.10.0. A design-only deferral must be reported as
-deferred, never as a completed runtime adoption.
+The imported-document milestone passed byte comparisons, Markdown gates and a
+zero-finding CodeRabbit review. The user selected documentation and design
+only; accept this change when the design artifacts agree, documentation gates
+pass, and review findings are resolved. Runtime adoption remains incomplete
+until the future implementation and Verification plan tests pass against
+`ortho_config` v0.10.0.
 
 Pull-request acceptance requires the exact pushed head to have all local
 deterministic gates green, CodeRabbit concerns cleared or explicitly resolved,

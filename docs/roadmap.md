@@ -129,7 +129,12 @@ first source-bound demonstration. See technical-design.md §§4–6.
   - Requires 2.1.2.
   - See technical-design.md §8; ../contracts/cli.txt; users-guide.md.
   - Success: the baseline is admitted, unsupported and invalid source have
-    distinct exits, and neither output format claims an invariant proof.
+    distinct exits, and neither output format claims an invariant proof. Build
+    the application configuration edge on `ortho_config` v0.10.0 as specified
+    in technical-design.md §8 and ADR 0003. Test `check` defaults, both TOML
+    layers, injected environment, explicit CLI precedence, malformed and
+    unreadable files, invalid values and unknown keys; configuration errors
+    exit 5. Keep reusable libraries independent of OrthoConfig.
 
 ### 2.2. Produce checked tenant-isolation evidence from admitted data
 
@@ -304,7 +309,9 @@ technical-design.md §8 and §10, V8.
   - Success: exits 0 and 2–8 match the contract in text and JSON; stdout has
     one bounded result, stderr has escaped diagnostics, and witnesses require
     explicit export. Exit zero requires all six proved claims and every gate,
-    with `trusted_frontend` and `tested_agreement` still visible.
+    with `trusted_frontend` and `tested_agreement` still visible. Apply the
+    §8 OrthoConfig presentation settings to `prove`; `verify` and `export-rego`
+    do not discover configuration or read its environment variables.
 - [ ] 4.2.3. Deliver the hostile-evidence and CLI-interaction E2E suite.
   - Requires 4.2.2.
   - See technical-design.md §10.1, V7–V10; terms-of-reference.md §7, SC4–SC6.
@@ -314,7 +321,9 @@ technical-design.md §8 and §10, V8.
     requests), false oracle decisions on model-allowed requests, and timeout
     after partial proof all yield the specified non-success outcome across
     command/output combinations. A false decision matching a model denial
-    passes conformance.
+    passes conformance. Cover every configuration precedence tier per enabled
+    command with injected sources and isolated child processes; verify that
+    conflicting files and environment cannot change regenerated evidence.
 
 ### 4.3. Demonstrate replay within enforced local budgets
 
