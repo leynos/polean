@@ -126,15 +126,24 @@ introduces `check`.
 - [x] (2026-10-26 12:25Z) The first docs gate found table reflow in the new
   authored documents, and the next found one MD013 line-length issue. Both were
   corrected without touching either imported guide.
-- [x] (2026-10-26 12:38Z) CodeRabbit reviewed the imported-document milestone
-  and reported seven minor documentation findings, with no high or medium
-  concerns. Corrected the authored-plan wording and worktree path; recorded
-  upstream-only guide links and the scope of upstream example tests in the
-  provenance note without editing imported text. The first follow-up format
-  check found table reflow; after formatting only the two changed authored
-  files, `make check-fmt` and `make markdownlint` passed sequentially (25
-  Markdown files, zero lint errors). Review log:
+- [x] (2026-10-26 12:38Z) A preliminary CodeRabbit review of the immutable
+  import commit reported seven minor documentation findings, with no high or
+  medium concerns. Corrected the authored-plan wording and worktree path, and
+  recorded upstream-only guide links and example-test scope in the provenance
+  note without editing imported text. The first follow-up format check found
+  table reflow; after formatting only the two changed authored files,
+  `make check-fmt` and `make markdownlint` passed sequentially (25 Markdown
+  files, zero lint errors). Review log:
   `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli.out`.
+- [x] (2026-10-26 12:46Z) CodeRabbit's follow-up on
+      `8df3b4508a90f046d5d6a3f29e6c6bff09fe2124`
+  reported seven minor findings and no higher-severity concerns. Five concern
+  links or Markdown inside the byte-exact imports; the provenance note records
+  their upstream-relative assumptions. Source rewrites would violate the import
+  requirement; compatibility aliases or a second publication layout are outside
+  this import scope. Corrected the two authored-plan review-status
+  inconsistencies. Review log:
+  `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-2.out`.
 - [ ] (pending) Resolve the scope question and approve this ExecPlan before
   production implementation, as required by the ExecPlans workflow.
 - [ ] Record the configuration decision in the technical design, ADR, roadmap,
@@ -184,11 +193,13 @@ introduces `check`.
 ## Outcomes & retrospective
 
 Preflight and immutable documentation import are complete, and the docs-only
-formatting and Markdown gates passed. The task is not complete: no integration
+formatting and Markdown gates passed. CodeRabbit reviewed both committed
+documentation candidates; the follow-up findings on imported relative links and
+source Markdown are recorded in the provenance note because the import is
+required to remain byte-exact. The task is not complete: no integration
 decision has been approved, no runtime code or configuration dependency has
-been added, and no CodeRabbit review, push, or draft PR has run. This
-distinction prevents a documentation import from being reported as a working
-CLI adoption.
+been added, and no push or draft PR has run. This distinction prevents a
+documentation import from being reported as a working CLI adoption.
 
 ## Context and orientation
 
@@ -294,9 +305,11 @@ real v0.10.0 release. The full repository gates are run by the exclusive
 ### EP-M1: Import the immutable v0.10.0 guides and record the baseline
 
 The coherent end state is two byte-exact imported guides, separate provenance,
-an updated documentation index, and a recorded CLI baseline. This milestone has
-passed its byte comparisons and docs-only gates; its requested CodeRabbit
-review remains pending.
+an updated documentation index, and a recorded CLI baseline. This milestone
+passed its byte comparisons and docs-only gates. A preliminary CodeRabbit
+review and a follow-up on the corrected documentation candidate completed;
+findings against immutable upstream text are documented in the provenance note,
+while authored-plan status findings were corrected.
 
 ### EP-M2: Decide and document the configuration boundary
 

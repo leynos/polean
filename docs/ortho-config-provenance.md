@@ -26,6 +26,19 @@ checkout: the
 and the
 [Hello World example](https://github.com/leynos/ortho-config/tree/38812c563e3953a490e3efc202609f37e21a0517/examples/hello_world/).
 
+Other relative references assume the upstream `docs/` layout. The user's guide
+links to `v-0-10-0-migration-guide.md`, while the migration guide links to
+`users-guide.md` and its section anchors. In this checkout, the imported files
+use the required `ortho-config-` names, and `docs/users-guide.md` belongs to
+Polean. The source text is retained byte-for-byte; no compatibility aliases or
+second published copy are part of this import. Follow these cross-references in
+the pinned upstream
+[user's guide](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/docs/users-guide.md)
+and
+[migration guide](https://github.com/leynos/ortho-config/blob/38812c563e3953a490e3efc202609f37e21a0517/docs/v0-10-0-migration-guide.md).
+The upstream list formatting is likewise retained as part of the byte-exact
+import.
+
 The `tested-example` markers in the user's guide are consumed by the upstream
 documentation-example tests. For example, `guide-first-cli` is registered in
 the upstream
