@@ -39,6 +39,15 @@ already exist.
   decision-record, and assurance-language conventions, including the
   `adr-nnnn-title-slug.md` and `rfc-nnnn-title-slug.md` naming scheme.
 
+## Third-party tool documentation
+
+- [OrthoConfig user's guide](ortho-config-users-guide.md): the imported v0.10.0
+  configuration and CLI integration guide.
+- [OrthoConfig v0.10.0 migration guide](ortho-config-v0-10-0-migration-guide.md):
+  release-specific migration notes and capabilities.
+- [OrthoConfig documentation provenance](ortho-config-provenance.md): source
+  tag, immutable commit, paths, and checksums.
+
 ## Shared engineering guidance
 
 - [Reliable testing in Rust via dependency injection][di-testing]: isolate
