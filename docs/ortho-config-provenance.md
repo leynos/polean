@@ -39,13 +39,13 @@ migration guide's list formatting, obligation labels and section layout are
 likewise retained as part of the byte-exact import; it is an OrthoConfig
 release guide rather than a Polean migration guide.
 
-The imported user's guide says its examples are tested by "the project's test
-suite". In that upstream text, the project is OrthoConfig, not Polean. The
+Both imported guides say their examples are tested by "the project's test
+suite". In those upstream texts, the project is OrthoConfig, not Polean. The
 `tested-example` markers are consumed by OrthoConfig's documentation-example
 tests; for example, `guide-first-cli` is registered in the upstream tests and
 Rust-flow checks listed below. Polean does not include or run that harness, and
-this import did not independently run it or verify every example. The statement
-is an upstream claim, not a claim about Polean's test coverage.
+this import did not independently run it or verify every example. These
+statements are upstream claims, not claims about Polean's test coverage.
 
 ## References
 

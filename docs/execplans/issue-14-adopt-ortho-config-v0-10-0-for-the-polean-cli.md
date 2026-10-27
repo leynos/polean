@@ -185,6 +185,13 @@ application crate or executable is introduced here.
   OrthoConfig and states that Polean did not run that harness, while retaining
   the migration guide's original labels and section layout. Review log:
   `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-10.out`.
+- [x] (2026-10-27) CodeRabbit reviewed
+      `402f48be40a55c95e9c7493bec0d44bd80fe24a0`
+  and reported one minor finding: the migration guide has the same upstream
+  example-testing claim as the user's guide. The provenance note now attributes
+  both statements to OrthoConfig and records that Polean did not run its test
+  harness. Review log:
+  `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-12.out`.
 - [ ] Complete the local CodeRabbit review on the current PR head and resolve
   any findings; reconcile the draft PR's review status.
 
