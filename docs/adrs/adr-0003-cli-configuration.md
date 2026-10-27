@@ -4,7 +4,7 @@
 - **Date:** 2026-10-26.
 - **Decision owners:** repository sponsor and maintainers.
 
-## Context and Problem Statement
+## Context
 
 Polean currently provides a Rust library scaffold and a proposed command
 contract; it has no command-line binary. Roadmap item 2.1.4 is the first
@@ -52,8 +52,12 @@ scopes can contain more candidates than this contract permits; neither default
 discovery nor unrestricted scope stacking is sufficient here. Do not enable
 system or ancestor candidates, explicit path flags, or environment file
 selectors. Reject TOML includes, `extends`, named profiles, and unknown keys
-before any loader strips them. Use the published source-aware APIs to compose
-the selected sources, and test that no extra path participates.
+before any loader strips them. Before implementation, confirm that a published
+v0.10.0 source-aware API can compose both selected paths in this order.
+`ConfigFilePolicy` selects the first resolving explicit selector and cannot
+compose these two paths. If no suitable API exists, revise this decision rather
+than enabling automatic discovery or unrestricted scope stacking. Test that no
+extra path participates.
 
 Precedence is built-in defaults, user file, project file, environment, then
 explicit CLI values. The default `--format text` is marked as absent for the
