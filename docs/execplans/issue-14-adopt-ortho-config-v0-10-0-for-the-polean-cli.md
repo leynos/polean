@@ -5,7 +5,7 @@ This ExecPlan is a living document. The sections `Constraints`,
 `Surprises & discoveries`, `Decision log`, `Outcomes & retrospective`,
 `Conformance basis`, and `Verification plan` must stay current.
 
-Status: IN PROGRESS — design recorded; delivery pending
+Status: Documentation and design recorded; draft PR open
 
 ## Purpose / big picture
 
@@ -182,18 +182,21 @@ application crate or executable is introduced here.
   and reported one major and five minor findings. Corrected the authored ADR
   metadata and provenance table captions. The other findings concern immutable
   upstream guides: the provenance note attributes the example-testing claim to
-  OrthoConfig and states that Polean did not run that harness, while retaining
-  the migration guide's original labels and section layout. Review log:
+  OrthoConfig and states that Polean did not run its upstream documentation
+  harness, while retaining the migration guide's original labels and section
+  layout. Review log:
   `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-10.out`.
 - [x] (2026-10-27) CodeRabbit reviewed
       `402f48be40a55c95e9c7493bec0d44bd80fe24a0`
   and reported one minor finding: the migration guide has the same upstream
   example-testing claim as the user's guide. The provenance note now attributes
-  both statements to OrthoConfig and records that Polean did not run its test
-  harness. Review log:
+  both statements to OrthoConfig and records that Polean did not run the
+  OrthoConfig upstream documentation-example harness. See the review log at
   `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-12.out`.
-- [ ] Complete the local CodeRabbit review on the current PR head and resolve
-  any findings; reconcile the draft PR's review status.
+- [x] (2026-10-27) A focused CodeRabbit review of `ce9aab3`, relative to
+  `402f48b`, reported two minor wording findings in this plan. The final
+  plan-only correction names the upstream harness and preserves the actual log
+  path. The focused review log ends in `-cli-14.out` under `/tmp`.
 
 ## Surprises & discoveries
 
@@ -239,9 +242,10 @@ assumptions and source formatting remain recorded in provenance because the
 import is required to stay byte-exact. The user selected documentation and
 design only. The configuration decision is recorded in the technical design and
 ADR; runtime adoption and its tests remain future roadmap work. No runtime code
-or dependency has been added. Draft PR #15 is open; the latest local CodeRabbit
-findings have been addressed or dispositioned, and a follow-up review remains
-pending.
+or dependency has been added. Draft PR #15 is open. The full design review and
+focused follow-up completed; their findings have been addressed or
+dispositioned. The final plan-only wording correction follows the focused
+review.
 
 ## Context and orientation
 
