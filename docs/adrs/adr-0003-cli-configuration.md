@@ -1,10 +1,10 @@
 # ADR 0003: use OrthoConfig at the planned CLI boundary
 
-- **Status:** proposed.
+- **Status:** Proposed.
 - **Date:** 2026-10-26.
 - **Decision owners:** repository sponsor and maintainers.
 
-## Context
+## Context and Problem Statement
 
 Polean currently provides a Rust library scaffold and a proposed command
 contract; it has no command-line binary. Roadmap item 2.1.4 is the first

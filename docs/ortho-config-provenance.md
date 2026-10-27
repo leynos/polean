@@ -12,10 +12,14 @@ surveyed object and commit; no alternate tag resolution was observed.
 | Peeled commit     | `38812c563e3953a490e3efc202609f37e21a0517`                        |
 | Import method     | `git show 38812c563e3953a490e3efc202609f37e21a0517:<source-path>` |
 
+_Table 1: Source repository and immutable release identity._
+
 | Upstream path                     | Imported path                                  | SHA-256                                                            |
 | --------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ |
 | `docs/users-guide.md`             | `docs/ortho-config-users-guide.md`             | `84d1c97b77024224dc9220a12d4b749205d9bb2db54849185da21c969dda5575` |
 | `docs/v0-10-0-migration-guide.md` | `docs/ortho-config-v0-10-0-migration-guide.md` | `b5331aa6cfcc07b3dcd188c620db98d0a1a1f13b0c8ef96d88913d701bca25bf` |
+
+_Table 2: Imported paths and SHA-256 checksums._
 
 ## Upstream documentation notes
 
@@ -31,13 +35,17 @@ use the required `ortho-config-` names, and `docs/users-guide.md` belongs to
 Polean. The source text is retained byte-for-byte; no compatibility aliases or
 second published copy are part of this import. Follow these cross-references in
 the pinned upstream user's guide and migration guide listed below. The upstream
-list formatting is likewise retained as part of the byte-exact import.
+migration guide's list formatting, obligation labels and section layout are
+likewise retained as part of the byte-exact import; it is an OrthoConfig
+release guide rather than a Polean migration guide.
 
-The `tested-example` markers in the user's guide are consumed by the upstream
-documentation-example tests. For example, `guide-first-cli` is registered in
-the upstream documentation example tests and Rust-flow checks listed below.
-Polean does not include or run that harness, so these markers record upstream
-coverage and are not claims that Polean tests execute the imported examples.
+The imported user's guide says its examples are tested by "the project's test
+suite". In that upstream text, the project is OrthoConfig, not Polean. The
+`tested-example` markers are consumed by OrthoConfig's documentation-example
+tests; for example, `guide-first-cli` is registered in the upstream tests and
+Rust-flow checks listed below. Polean does not include or run that harness, and
+this import did not independently run it or verify every example. The statement
+is an upstream claim, not a claim about Polean's test coverage.
 
 ## References
 

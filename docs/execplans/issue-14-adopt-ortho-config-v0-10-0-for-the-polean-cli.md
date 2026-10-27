@@ -175,9 +175,16 @@ application crate or executable is introduced here.
 - [x] (2026-10-26 22:58Z) Gated and committed the follow-up, pushed the
   requested branch over SSH, and opened draft PR #15 on `f09c757`. The remote
   head and named upstream matched; hosted `rust-and-docs` and `design-check`
-  passed on that head. The final local CodeRabbit review was rate-limited
-  twice; a fresh user-required 69-minute `vsleep` is in progress before
-  retrying.
+  passed on that head. The local CodeRabbit review was rate-limited, and the
+  requested random cooldowns preceded the later retry.
+- [x] (2026-10-27) CodeRabbit reviewed
+      `f58eb114be341b9792f7dc6cf50267481eb353ae`
+  and reported one major and five minor findings. Corrected the authored ADR
+  metadata and provenance table captions. The other findings concern immutable
+  upstream guides: the provenance note attributes the example-testing claim to
+  OrthoConfig and states that Polean did not run that harness, while retaining
+  the migration guide's original labels and section layout. Review log:
+  `/tmp/coderabbit-d082da36-3396-4616-827a-d78143c79f56-issue-14-adopt-ortho-config-v0-10-0-for-the-polean-cli-10.out`.
 - [ ] Complete the local CodeRabbit review on the current PR head and resolve
   any findings; reconcile the draft PR's review status.
 
@@ -225,8 +232,9 @@ assumptions and source formatting remain recorded in provenance because the
 import is required to stay byte-exact. The user selected documentation and
 design only. The configuration decision is recorded in the technical design and
 ADR; runtime adoption and its tests remain future roadmap work. No runtime code
-or dependency has been added. Draft PR #15 is open; its final local CodeRabbit
-review remains pending after rate limiting.
+or dependency has been added. Draft PR #15 is open; the latest local CodeRabbit
+findings have been addressed or dispositioned, and a follow-up review remains
+pending.
 
 ## Context and orientation
 
