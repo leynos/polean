@@ -132,9 +132,9 @@ first source-bound demonstration. See technical-design.md §§4–6.
     distinct exits, and neither output format claims an invariant proof. Build
     the application configuration edge on `ortho_config` v0.10.0 as specified
     in technical-design.md §8 and ADR 0004. Test `check` defaults, both TOML
-    layers, injected environment, explicit CLI precedence, malformed and
-    unreadable files, invalid values and unknown keys; configuration errors
-    exit 5. Keep reusable libraries independent of OrthoConfig.
+    layers, injected environment, explicit CLI precedence, missing optional files,
+    malformed and unreadable files, invalid values and unknown keys;
+    configuration errors exit 5. Keep reusable libraries independent of OrthoConfig.
 
 ### 2.2. Produce checked tenant-isolation evidence from admitted data
 

@@ -51,18 +51,20 @@ order. OrthoConfig's default discovery is first-wins, and automatic stacked
 scopes can contain more candidates than this contract permits; neither default
 discovery nor unrestricted scope stacking is sufficient here. Do not enable
 system or ancestor candidates, explicit path flags, or environment file
-selectors. Reject TOML includes, `extends`, named profiles, and unknown keys
-before any loader strips them. Before implementation, confirm that a published
-v0.10.0 source-aware API can compose both selected paths in this order.
-`ConfigFilePolicy` selects the first resolving explicit selector and cannot
-compose these two paths. If no suitable API exists, revise this decision rather
-than enabling automatic discovery or unrestricted scope stacking. Test that no
-extra path participates.
+selectors. Reject TOML `include` directives, `extends`, named profiles, and
+unknown keys before any loader strips them. Before implementation, confirm that
+a published v0.10.0 source-aware API can compose both selected paths in this
+order. `ConfigFilePolicy` selects the first resolving explicit selector and
+cannot compose these two paths. If no suitable API exists, revise this decision
+rather than enabling automatic discovery or unrestricted scope stacking. Test
+that no extra path participates.
 
 Precedence is built-in defaults, user file, project file, environment, then
 explicit CLI values. The default `--format text` is marked as absent for the
 OrthoConfig merge, so the parser default cannot override file or environment
-values. Environment names are mapped explicitly because the public flat names
+values. The `check` and `prove` configuration types must default `format` to
+`text`; test the path without a file, environment value, or CLI flag.
+Environment names are mapped explicitly because the public flat names
 `POLEAN_CHECK_FORMAT` and `POLEAN_PROVE_FORMAT` do not mirror the `cmds`
 namespace used in TOML.
 

@@ -474,14 +474,16 @@ files, unknown keys and invalid values are configuration errors. Supported
 tables are `[cmds.check]` and `[cmds.prove]`, each with a `format` key. The
 application selects exactly these two paths and composes their file sources in
 order. It must not use the default first-wins discovery or automatically add
-system, home, ancestor, CLI-path or environment-path candidates. TOML includes,
-`extends`, and named configuration profiles are unsupported and must be
-rejected before any loader removes their keys. The application maps
+system, home, ancestor, CLI-path or environment-path candidates. TOML `include`
+directives, `extends`, and named configuration profiles are unsupported and
+must be rejected before any loader removes their keys. The application maps
 `POLEAN_CHECK_FORMAT` and `POLEAN_PROVE_FORMAT` to their respective fields.
 Precedence is default, user file, project file, environment, then explicitly
 provided CLI flag. Clap defaults must remain below file and environment values:
-use `cli_default_as_absent` with the match-aware v0.10.0 merge API and test it.
-Reject unknown keys in the complete file, including inactive command tables.
+use `cli_default_as_absent` with the match-aware v0.10.0 merge API. Each
+`check` and `prove` configuration type must default `format` to `text`; test
+the path with no file, environment value, or CLI flag. Reject unknown keys in
+the complete file, including inactive command tables.
 
 `verify` and `export-rego` do not discover files or read configuration
 variables; their arguments are CLI inputs. The planned `verify` format default
