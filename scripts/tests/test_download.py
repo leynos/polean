@@ -734,7 +734,7 @@ def test_truncated_chunked_response_is_reported_and_partial_removed(
         """Use a real HTTP response connected to the truncated local stream."""
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
         connection.request("GET", "/opa")
-        assert connection.sock is not None
+        assert connection.sock is not None, "the request opens a socket"
         watch(connection.sock)
         return connection.getresponse()
 
@@ -745,11 +745,13 @@ def test_truncated_chunked_response_is_reported_and_partial_removed(
     tools_dir = tmp_path / "tools"
     status = provision_tools.main(write_pins(tmp_path), tools_dir, fetch)
     captured = capsys.readouterr()
-    assert status == 1
-    assert captured.out == ""
-    assert captured.err.startswith("provisioning failed: IncompleteRead(")
-    assert len(captured.err.splitlines()) == 1
-    assert "Traceback" not in captured.err
-    assert not list(tools_dir.rglob(".part-*"))
-    assert not (tools_dir / "opa").exists()
-    assert not (tools_dir / "lean").exists()
+    assert status == 1, "a truncated response reports failure"
+    assert captured.out == "", "failure prints no installation paths"
+    assert captured.err.startswith("provisioning failed: IncompleteRead("), (
+        "the diagnostic identifies the framing failure"
+    )
+    assert len(captured.err.splitlines()) == 1, "the diagnostic occupies one line"
+    assert "Traceback" not in captured.err, "failure prints no traceback"
+    assert not list(tools_dir.rglob(".part-*")), "partial downloads are removed"
+    assert not (tools_dir / "opa").exists(), "OPA is not installed"
+    assert not (tools_dir / "lean").exists(), "Lean is not installed"

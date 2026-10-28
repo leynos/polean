@@ -448,10 +448,15 @@ The documentation added here states each of these limits explicitly.
   listed dispositions in issue comment 6427804830, without claiming the metrics
   disappeared. Formal review remains paused.
 
-- [ ] (2026-10-26) The current-head completeness assessment identified a
-  premature chunked-response diagnostic defect, a missing independent default
-  rule name assertion, and stale plan records. Repairs and renewed validation
-  are in progress; review and merge remain pending.
+- [x] (2026-10-26) Commit `eeb4575` repaired the premature chunked-response
+  diagnostic defect, added an independent default-rule name assertion, and
+  updated stale plan records. Sequential `check-fmt`, `typecheck`, `lint`,
+  `test`, `test-scripts`, `toolchain-smoke`, `design-check`,
+  `design-properties`, `design-boundary`, and `markdownlint` gates passed;
+  `test-scripts` ran 48 tests and the provisioned smoke suite ran seven. Hosted
+  CI, design contracts, and toolchain smoke passed on the same head. CodeRabbit
+  confirmed the three assessment findings resolved in issue comment 6428047910.
+- [ ] Formal review reconciliation and merge remain pending.
 
 ## Surprises & discoveries
 
