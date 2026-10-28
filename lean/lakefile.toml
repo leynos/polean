@@ -1,0 +1,8 @@
+name = "polean"
+defaultTargets = ["PoleanSmoke"]
+
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "PoleanSmoke"

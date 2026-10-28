@@ -19,13 +19,19 @@ design pack. It does **not** yet contain:
 - a Polean command-line implementation;
 - a Regorus frontend;
 - an OPA conformance runner;
-- a Lean package or checked proof;
+- a Lean development of Polean's semantics, or any checked proof about a
+  policy;
 - verified Rego-to-model translation; or
 - evidence that a production authorization path refines the model.
 
 The crate exports only a disposable scaffold identity. Commands and theorem
 interfaces shown in the design documents are proposals rather than functioning
 APIs.
+
+What does exist is a pinned Rust, Regorus, Lean, and OPA tuple, provisioned
+behind digest checks and observed by `make toolchain-smoke`. It shows that the
+tools run together; it establishes nothing about a policy. See
+[ADR 0003](docs/adrs/adr-0003-pin-the-e0-toolchain-tuple.md).
 
 The distinction matters. The intended first assurance statement is that Lean
 checked the admitted policy *model* against six requirements. The source
@@ -104,6 +110,11 @@ Neither check parses Rego with OPA or Regorus, and neither invokes Lean. The
 model obligations `abstraction_preserves`, `check_sound`, and `witness_sound`
 remain unproved design targets; a passing property run is sampling, and it does
 not upgrade the explicitly trusted source frontend to a checked translation.
+
+The toolchain observations are smoke checks and runtime observations, not
+proofs: Regorus agreeing with OPA on four requests is not conformance evidence.
+The [developer guide](docs/developers-guide.md) describes what each target
+observes and what a contributor needs to run it.
 
 The Rust scaffold gates are:
 

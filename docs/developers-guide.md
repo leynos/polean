@@ -8,11 +8,21 @@ technical design rather than racing ahead to a broad Rego interpreter.
 
 - Git;
 - the Rust toolchain pinned by `rust-toolchain.toml`;
-- Python 3.11 or later;
+- Python 3.11 or later for the design harness;
 - `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
-  checks; and
+  checks;
 - `cargo-audit` for `make audit`, which is a periodic check rather than a
-  commit gate.
+  commit gate; and
+- for the toolchain targets only: Python 3.14 built with `zstd` support (so
+  that `compression.zstd` imports), `pytest` from
+  `scripts/requirements-test.txt`, network access for the first provisioning
+  run, and about 3.7 GiB of disk under `.polean/tools`.
+
+`make tools`, `make test-scripts`, and `make toolchain-smoke` are the only
+targets that need the 3.14 interpreter, because the tests import the script and
+it imports `compression.zstd` at load time. Point them at one with
+`make toolchain-smoke PYTHON=...`. `cargo-insta` is needed only to review a
+changed Regorus AST snapshot.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
 `mdtablefix` 0.6.0 or later and `markdownlint-cli2` to reproduce every
@@ -32,6 +42,9 @@ targets are:
 | `make lint`              | Build documentation and run Clippy with warnings denied.           |
 | `make markdownlint`      | Lint Markdown with the repository configuration.                   |
 | `make test`              | Run Rust unit, integration, and documentation tests.               |
+| `make test-scripts`      | Test the provisioning script with pytest.                          |
+| `make tools`             | Provision the digest-checked OPA and Lean artefacts.               |
+| `make toolchain-smoke`   | Provision, then run the ignored OPA and Lean observations.         |
 | `make design-check`      | Validate schemas, policy fixtures, abstractions, and witnesses.    |
 | `make design-properties` | Search the admitted input domain for model-side counterexamples.   |
 | `make design-boundary`   | Test the harness's orchestration and storage boundaries.           |
@@ -40,11 +53,31 @@ targets are:
 | `make all`               | Run every local commit gate in sequence.                           |
 
 The usual loop is `make check-fmt`, `make typecheck`, `make lint`, `make test`,
-`make design-check`, `make design-properties`, and `make design-boundary`.
-`make all` runs the same set, but run them individually while iterating, so a
-failure is attributable to one gate. Do not run these concurrently: the build
-cache serializes better sequentially, and concurrent gate runs interleave their
-output.
+`make test-scripts`, `make design-check`, `make design-properties`, and
+`make design-boundary`, plus `make toolchain-smoke` when the toolchain tuple is
+in scope. `make all` runs the commit gates, but run them individually while
+iterating, so a failure is attributable to one gate. Do not run these
+concurrently: the build cache serializes better sequentially, and concurrent
+gate runs interleave their output.
+
+`make toolchain-smoke` depends on `make tools`, so one command covers
+provisioning. The first run downloads 628 MiB; later runs verify whatever is
+already installed and use no network. `.polean/tools/` is untracked, and
+`rm -rf .polean/tools` is always safe.
+
+`make test` also observes the pinned Regorus, because that needs no
+provisioning: it parses the baseline source, snapshots the AST JSON, and
+evaluates four requests. `make toolchain-smoke` adds the provisioned OPA and
+Lean observations. OPA agreeing with Regorus on four requests is not
+conformance evidence; see the assurance boundary in
+[the technical design](technical-design.md).
+
+`make test-scripts` and `make toolchain-smoke` need the Python 3.14 interpreter
+described above. The `toolchain` workflow runs both on every pull request that
+touches a pin, the script, the Lean package, the smoke tests, the example
+policy they evaluate, the manifests, the `Makefile`, or the workflow itself, so
+an unavailable local interpreter does not leave the provisioning path
+unobserved.
 
 `make design-check` may rewrite the committed validation summary and witness
 files after verifying them. Review those changes rather than assuming any
@@ -59,6 +92,35 @@ has it: `make design-properties PYTHON=/path/to/python`.
 `make audit` requires `cargo-audit` and reaches the network to fetch the
 advisory database, so it is a periodic dependency check rather than part of
 every commit. It is not in `make all` for that reason.
+
+## Changing a toolchain pin
+
+`toolchain-pins.json` is the authoritative identity of the provisioned
+artefacts, and [ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md) is the
+record of why the tuple is what it is. A pin change is a tuple change:
+
+1. Edit `toolchain-pins.json` — the upstream URL, the SHA-256, and the byte
+   size — or, for Regorus or Rust, `Cargo.toml` and `rust-toolchain.toml`. A
+   Lean pin also carries `root`, the archive's extraction directory, and
+   `identity`, the complete line `lean --version` must print; the smoke test
+   compares that line character for character rather than checking a version
+   prefix.
+2. For a Lean pin, update `lean/lean-toolchain` so it still selects
+   `leanprover/lean4:v<version>`. The smoke test requires that selection to
+   match the pin exactly, so leaving it behind fails the run.
+3. Run `make tools`, which must reject any artefact that does not match the new
+   pin, then `make toolchain-smoke`.
+4. If `lean` or `lake` changed, the pinned Lake regenerates
+   `lean/lake-manifest.json`. Review the diff and commit it when the content
+   changed; a rebuild that produces no content change needs no commit.
+5. If a Regorus change alters the AST snapshot, review it with
+   `cargo insta review` and accept only a difference with a documented cause.
+6. Update ADR-003 with the new tuple, its provenance, and the reason, and
+   refresh any prose that repeats the version.
+
+Never edit an installed file under `.polean/tools/` to make an observation
+pass: the directory is digest-named and disposable, and the next run replaces
+it.
 
 ## The Rust scaffold
 
@@ -209,6 +271,36 @@ repository rather than to a comment:
 
 Treat execution as a separate obligation, and do not describe an example as
 tested until something runs it.
+
+### Toolchain observations
+
+These observations follow the conventions below.
+
+- One integration binary, `tests/toolchain/main.rs`, holds every module. A
+  separate binary per module would link Regorus more than once, and a module
+  used by only one target would be reported as dead code under the denied
+  `allow` lint.
+- `engine.rs` holds the runtime configuration and the entry point that both the
+  structural observations and the BDD decisions use, so neither can observe a
+  differently configured Regorus. `json.rs` holds the AST accessors.
+- Observations return `Result<(), String>`, and helpers do too, so a failure
+  names what was expected, what was found, and which source produced it. Avoid
+  panics except where a test's own assertion is the observation.
+- The Regorus AST snapshot is committed and reviewed. A diff is a change in
+  what the frontend exposes, so review it rather than accepting it.
+- Provisioned observations carry `#[ignore]` with the reason, and fail with a
+  remediation message when the tool is absent. A silently skipped provisioned
+  test would read as a pass.
+- A missing tool is not a skip. `make toolchain-smoke` runs the ignored module
+  by name, so an absent binary is a failure.
+- The presence check itself is covered without provisioning, in
+  `support/tests.rs` and `smoke/tests.rs`. They drive `path_exists` and
+  `require_executable` through an explicit `Path`, so `make test` exercises the
+  "install is unreadable" branch on any Linux host. `smoke` and `support` stay
+  under the module line budget because their test children are separate files.
+  Both are `mod.rs` directories, because the denied
+  `clippy::self_named_module_files` lint forbids the `smoke.rs` plus `smoke/`
+  sibling idiom.
 
 ## Documentation
 

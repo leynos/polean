@@ -21,6 +21,11 @@ already exist.
   trusts, tests, and leaves outside the theorem.
 - [Bootstrap decision][adr-0001]: repository provenance, selected Combobulate
   scaffold elements, and deliberate deferrals.
+- [Toolchain tuple decision][adr-0003]: the pinned Rust, Regorus, Lean, and OPA
+  tuple, its provenance, and the remaining gaps.
+- [Toolchain tuple ExecPlan](execplans/1-2-1-pin-a-tested-compatibility-tuple.md):
+  the work that pins the tuple, proves the provisioning path, and records its
+  acceptance evidence.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
   and explicit omissions.
 
@@ -54,6 +59,7 @@ already exist.
 [scripting-standards]: scripting-standards.md
 [adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md
 [adr-0002]: adrs/adr-0002-first-profile-assurance-boundary.md
+[adr-0003]: adrs/adr-0003-pin-the-e0-toolchain-tuple.md
 
 ## Machine-readable design
 
