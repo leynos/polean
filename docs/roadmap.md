@@ -131,7 +131,7 @@ first source-bound demonstration. See technical-design.md §§4–6.
   - Success: the baseline is admitted, unsupported and invalid source have
     distinct exits, and neither output format claims an invariant proof. Build
     the application configuration edge on `ortho_config` v0.10.0 as specified
-    in technical-design.md §8 and ADR 0003. Test `check` defaults, both TOML
+    in technical-design.md §8 and ADR 0004. Test `check` defaults, both TOML
     layers, injected environment, explicit CLI precedence, malformed and
     unreadable files, invalid values and unknown keys; configuration errors
     exit 5. Keep reusable libraries independent of OrthoConfig.

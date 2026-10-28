@@ -1,4 +1,4 @@
-# ADR 0003: use OrthoConfig at the planned CLI boundary
+# ADR 0004: use OrthoConfig at the planned CLI boundary
 
 - **Status:** Proposed.
 - **Date:** 2026-10-26.

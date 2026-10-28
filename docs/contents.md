@@ -17,7 +17,7 @@ already exist.
   vertical experiments.
 - [Implementation roadmap](roadmap.md): GIST delivery phases, dependencies,
   acceptance gates, and conditional extensions.
-- [CLI configuration decision](adrs/adr-0003-cli-configuration.md): planned
+- [CLI configuration decision](adrs/adr-0004-cli-configuration.md): planned
   OrthoConfig boundary and hermetic verification.
 - [Assurance boundary decision][adr-0002]: what a passing run proves,
   trusts, tests, and leaves outside the theorem.

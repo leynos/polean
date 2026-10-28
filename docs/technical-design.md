@@ -460,7 +460,7 @@ receive validated Polean values and do not depend on OrthoConfig, print, or
 exit. Derive `OrthoConfig` on application configuration types and keep parse
 DTOs separate from domain types. The application must meet the release's Rust
 1.89.0 minimum; reusable libraries retain their own minimum. No dependency or
-executable exists yet. [ADR 0003](adrs/adr-0003-cli-configuration.md) records
+executable exists yet. [ADR 0004](adrs/adr-0004-cli-configuration.md) records
 this decision.
 
 Only the presentation format of `check` and `prove` is configurable. The

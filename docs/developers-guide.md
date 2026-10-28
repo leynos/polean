@@ -151,7 +151,7 @@ passes validated settings to domain libraries. Keep the dependency and its Rust
 minimums. Keep default features enabled: v0.10.0 does not build with them all
 disabled
 ([upstream issue 627](https://github.com/leynos/ortho-config/issues/627)). See
-[ADR 0003](adrs/adr-0003-cli-configuration.md) and
+[ADR 0004](adrs/adr-0004-cli-configuration.md) and
 [technical design §8](technical-design.md#8-cli-outcomes-and-failure-semantics).
 
 Exercise source precedence with `MapEnv`, explicit file sources, and
