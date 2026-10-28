@@ -10,36 +10,44 @@
 use std::{fs, os::unix::fs::PermissionsExt};
 
 use super::path_exists;
-use crate::scratch::Scratch;
+use crate::scratch::{Scratch, check, check_eq};
 
 /// A path that does not exist is absence, not a failure to inspect.
 #[test]
-fn a_missing_path_reports_absence() {
-    let scratch = Scratch::new("missing-path-probe");
+fn a_missing_path_reports_absence() -> Result<(), String> {
+    let mut scratch = Scratch::try_new("missing-path-probe")
+        .map_err(|error| format!("cannot create scratch directory: {error}"))?;
     let path = scratch.path().join("missing");
-    assert_eq!(
+    check_eq!(
         path_exists(&path),
         Ok(false),
         "a missing path must report absence, not a failure to inspect"
     );
+    scratch
+        .cleanup()
+        .map_err(|error| format!("cannot clean scratch directory: {error}"))
 }
 
 /// A path that exists and can be inspected reports presence.
 #[test]
-fn a_readable_path_reports_presence() {
-    let scratch = Scratch::new("readable-path-probe");
+fn a_readable_path_reports_presence() -> Result<(), String> {
+    let mut scratch = Scratch::try_new("readable-path-probe")
+        .map_err(|error| format!("cannot create scratch directory: {error}"))?;
     let path = scratch.path().join("readable");
     let created = fs::create_dir_all(&path);
-    assert!(
+    check!(
         created.is_ok(),
         "could not create the scratch directory {}: {created:?}",
         path.display()
     );
-    assert_eq!(
+    check_eq!(
         path_exists(&path),
         Ok(true),
         "an existing readable path must report presence, not absence"
     );
+    scratch
+        .cleanup()
+        .map_err(|error| format!("cannot clean scratch directory: {error}"))
 }
 
 /// A path beneath a regular file cannot be reached, so the helper fails
@@ -48,31 +56,34 @@ fn a_readable_path_reports_presence() {
 /// The kernel answers `ENOTDIR` here, which is not `NotFound`, so this
 /// reaches the error arm on every host, including one running as root.
 #[test]
-fn an_unreachable_path_reports_an_error() {
-    let scratch = Scratch::new("unreachable-path-probe");
+fn an_unreachable_path_reports_an_error() -> Result<(), String> {
+    let mut scratch = Scratch::try_new("unreachable-path-probe")
+        .map_err(|error| format!("cannot create scratch directory: {error}"))?;
     let parent = scratch.path();
     let blocker = parent.join("blocker");
     let unreachable = blocker.join("installed");
 
     let created = fs::create_dir_all(parent).and_then(|()| fs::write(&blocker, b""));
-    assert!(
+    check!(
         created.is_ok(),
         "could not lay out the scratch tree under {}: {created:?}",
         parent.display()
     );
 
-    let Err(message) = path_exists(&unreachable) else {
-        panic!(
-            "{} cannot be reached through a regular file, so the helper must fail rather than \
-             report absence",
+    let message = path_exists(&unreachable).err().ok_or_else(|| {
+        format!(
+            "{} unexpectedly reported absence or presence",
             unreachable.display()
-        );
-    };
-    assert!(
+        )
+    })?;
+    check!(
         message.contains(&unreachable.display().to_string()),
         "the diagnostic {message:?} must name {}",
         unreachable.display()
     );
+    scratch
+        .cleanup()
+        .map_err(|error| format!("cannot clean scratch directory: {error}"))
 }
 
 /// Withheld permission bits never turn an existing path into absence.
@@ -82,20 +93,21 @@ fn an_unreachable_path_reports_an_error() {
 /// answer; `an_unreachable_path_reports_an_error` pins the error arm
 /// unconditionally, so neither test is skipped on any host.
 #[test]
-fn a_permission_denied_path_is_never_reported_as_absent() {
-    let scratch = Scratch::new("permission-denied-path-probe");
+fn a_permission_denied_path_is_never_reported_as_absent() -> Result<(), String> {
+    let mut scratch = Scratch::try_new("permission-denied-path-probe")
+        .map_err(|error| format!("cannot create scratch directory: {error}"))?;
     let directory = scratch.path();
     let installed = directory.join("installed");
 
     let created = fs::create_dir_all(directory).and_then(|()| fs::write(&installed, b""));
-    assert!(
+    check!(
         created.is_ok(),
         "could not lay out the scratch tree under {}: {created:?}",
         directory.display()
     );
 
     let hidden = fs::set_permissions(directory, fs::Permissions::from_mode(0o000));
-    assert!(
+    check!(
         hidden.is_ok(),
         "could not withhold permission on {}: {hidden:?}",
         directory.display()
@@ -108,31 +120,36 @@ fn a_permission_denied_path_is_never_reported_as_absent() {
     let bypasses_permissions = fs::metadata(&installed).is_ok();
 
     let restored = fs::set_permissions(directory, fs::Permissions::from_mode(0o755));
-    assert!(
+    check!(
         restored.is_ok(),
         "could not restore permission on {}: {restored:?}",
         directory.display()
     );
 
     if bypasses_permissions {
-        assert_eq!(
+        check_eq!(
             inspected,
             Ok(true),
             "this process reads through the withheld mode, so an existing path must report \
              presence"
         );
-        return;
+        return scratch
+            .cleanup()
+            .map_err(|error| format!("cannot clean scratch directory: {error}"));
     }
 
-    let Err(message) = inspected else {
-        panic!(
-            "{} exists but cannot be inspected, so the helper must fail rather than report absence",
+    let message = inspected.err().ok_or_else(|| {
+        format!(
+            "{} unexpectedly reported absence or presence",
             installed.display()
-        );
-    };
-    assert!(
+        )
+    })?;
+    check!(
         message.contains(&installed.display().to_string()),
         "the diagnostic {message:?} must name {}",
         installed.display()
     );
+    scratch
+        .cleanup()
+        .map_err(|error| format!("cannot clean scratch directory: {error}"))
 }

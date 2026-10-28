@@ -458,6 +458,11 @@ The documentation added here states each of these limits explicitly.
   confirmed the three assessment findings resolved in issue comment 6428047910.
 - [ ] Formal review reconciliation and merge remain pending.
 
+- [ ] (2026-10-28) The resumed review identified fallible scratch-directory
+  creation and cleanup hidden behind panics. The test helper now returns
+  filesystem errors at explicit test boundaries, with a non-panicking cleanup
+  fallback during unwinding. Validation and review of this repair are pending.
+
 ## Surprises & discoveries
 
 - Observation: the O3 failure point is `eval_rule`, not `add_policy`.
