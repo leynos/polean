@@ -38,6 +38,42 @@ not expected to reproduce the submitted file byte for byte; the original source
 is preserved separately and remains the artefact the profile admission was
 performed against.
 
+## Planned configuration
+
+The future command-line application is planned to use `ortho_config` 0.10.0 for
+presentation format only. Configuration is not implemented yet. When the
+commands are delivered, `check` and `prove` will accept `--format text|json`,
+with `text` as the default. The policy input, policy profile, claims, evidence
+directory, output paths, and proof choices remain explicit command-line
+arguments.
+
+The planned TOML files use separate command namespaces. For example,
+`[cmds.check]` contains `format = "json"`, while `[cmds.prove]` can contain
+`format = "text"`. Includes, `extends`, and named configuration profiles are
+not supported; unknown keys are rejected.
+
+Discovery will read the user file at `$XDG_CONFIG_HOME/polean/config.toml`, or
+`$HOME/.config/polean/config.toml` when `XDG_CONFIG_HOME` is unset, followed by
+the project file `.polean.toml` in the working directory. A missing optional
+file will be ignored. Files with invalid TOML, unreadable selected paths,
+unknown keys, or unsupported values will be reported as configuration errors.
+
+Environment overrides use `POLEAN_CHECK_FORMAT` and `POLEAN_PROVE_FORMAT`. The
+application boundary will map these names to the matching command namespace.
+Precedence will be built-in defaults, user file, project file, environment,
+then explicit command-line values. The parser's `text` default will count as
+absent for merging, so it does not hide a file or environment value.
+
+Configuration profiles are not planned. `--profile` remains the policy profile
+selector, including `polean.tenant-write.v0`. `verify` will not discover files
+or read configuration environment variables: it will regenerate evidence from
+its explicit inputs and pinned environment. Its format defaults to `text` and
+can be changed only with `--format`. `export-rego` will also use explicit
+arguments only. Configuration failures will use status 5; tool failures will
+remain status 6. Help and version requests will exit 0 on stdout; command-line
+parse failures will exit 2 on stderr. The CLI is not localized, so its proposed
+help and diagnostics use English text.
+
 ## Intended outcomes
 
 The logical outcome of a proof request is proved, refuted, or unknown.
@@ -48,7 +84,7 @@ conformance mismatch remain separate operational outcomes, and
 | Status | Meaning                                                      |
 | ------ | ------------------------------------------------------------ |
 | 0      | All command-specific gates succeeded.                        |
-| 2      | A requested model claim has a checked counterexample.        |
+| 2      | A claim has a checked counterexample, or CLI parsing fails.  |
 | 3      | Verification did not settle, including resource exhaustion.  |
 | 4      | Legal syntax is outside the admitted profile.                |
 | 5      | Malformed source, invalid request, claims, or configuration. |

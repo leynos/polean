@@ -451,6 +451,52 @@ These are proposed commands, not a runnable interface in this draft pack.
 claims, fresh evidence checking, and required oracle observations. They cannot
 succeed with the oracles silently disabled.
 
+### Planned configuration boundary
+
+Roadmap 2.1.4 will introduce the application edge and use published
+`ortho_config` v0.10.0 with its default features. The application crate owns
+Clap parsing and OrthoConfig data types; reusable policy and evidence libraries
+receive validated Polean values and do not depend on OrthoConfig, print, or
+exit. Derive `OrthoConfig` on application configuration types and keep parse
+DTOs separate from domain types. The application must meet the release's Rust
+1.89.0 minimum; reusable libraries retain their own minimum. No dependency or
+executable exists yet. [ADR 0004](adrs/adr-0004-cli-configuration.md) records
+this decision.
+
+Only the presentation format of `check` and `prove` is configurable. The
+planned default is `text`, and explicit `--format text|json` has the highest
+precedence. The application reads optional TOML files in this order:
+`$XDG_CONFIG_HOME/polean/config.toml` (or `$HOME/.config/polean/config.toml`
+when `XDG_CONFIG_HOME` is unset), then `.polean.toml` in the working directory.
+There is no ancestor search, explicit configuration-path flag, or environment
+file override. Missing optional files are ignored; unreadable or malformed
+files, unknown keys and invalid values are configuration errors. Supported
+tables are `[cmds.check]` and `[cmds.prove]`, each with a `format` key. The
+application selects exactly these two paths and composes their file sources in
+order. It must not use the default first-wins discovery or automatically add
+system, home, ancestor, CLI-path or environment-path candidates. TOML `include`
+directives, `extends`, and named configuration profiles are unsupported and
+must be rejected before any loader removes their keys. The application maps
+`POLEAN_CHECK_FORMAT` and `POLEAN_PROVE_FORMAT` to their respective fields.
+Precedence is default, user file, project file, environment, then explicitly
+provided CLI flag. Clap defaults must remain below file and environment values:
+use `cli_default_as_absent` with the match-aware v0.10.0 merge API. Each
+`check` and `prove` configuration type must default `format` to `text`; test
+the path with no file, environment value, or CLI flag. Reject unknown keys in
+the complete file, including inactive command tables.
+
+`verify` and `export-rego` do not discover files or read configuration
+variables; their arguments are CLI inputs. The planned `verify` format default
+is `text`, overridden only by its explicit `--format` flag. Policy, claims,
+evidence and output paths, the policy `--profile`, budgets, requirements and
+proof semantics remain CLI-only or fixed by the contract. `--profile` names the
+policy profile; named OrthoConfig profiles are disabled. No legacy files or
+variables exist. The proposed executable is `polean`, not a Cargo subcommand.
+The CLI has no localization requirement yet; help and parse errors use Clap's
+normal language and streams. Help and version exit 0 on stdout; parse errors
+use Clap's exit 2 on stderr, configuration errors use exit 5, and tool failures
+use exit 6.
+
 | Outcome                | Exit | Meaning                                                                                                                                                 |
 | ---------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `model_proved`         | 0    | All model claims checked; bindings and conformance gates passed. Translation still reads `trusted_frontend`, runtime correspondence `tested_agreement`. |
