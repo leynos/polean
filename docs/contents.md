@@ -28,9 +28,9 @@ already exist.
 - [Toolchain tuple ExecPlan](execplans/1-2-1-pin-a-tested-compatibility-tuple.md):
   the work that pins the tuple, proves the provisioning path, and records its
   acceptance evidence.
-- [Admission feasibility ExecPlan][admission-plan]: the planned spike and
-  record that test whether the pinned frontend can enforce complete,
-  fail-closed admission (draft, awaiting approval).
+- [Admission feasibility ExecPlan][admission-plan]: the approved plan for the
+  spike and record that test whether the pinned frontend can enforce complete,
+  fail-closed admission.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
   and explicit omissions.
 

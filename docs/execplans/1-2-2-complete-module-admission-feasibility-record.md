@@ -5,8 +5,8 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 3). The user accepted Q1 and Q2 on 2026-10-29.
-Implementation must not begin until the user explicitly approves the plan.
+Status: APPROVED (revision 4). The user accepted Q1 and Q2 and approved the
+plan to begin implementation on 2026-10-29.
 
 Roadmap item: [1.2.2](../roadmap.md). Branch:
 `1-2-2-complete-module-admission-feasibility-record`.
@@ -179,7 +179,7 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   `Revision notes`.
 - [x] (2026-10-29) The user accepted Q1 (reject escaped spellings) and Q2
   (prove the recognizer in Verus now); recorded as D13 and D14.
-- [ ] User approval of the plan to begin implementation.
+- [x] (2026-10-29) User approval of the plan to begin implementation.
 - [ ] EP-M1: corpus, manifest, and observation snapshot.
 - [ ] EP-M2: closed AST decoding, profile walk, and inventory guard.
 - [ ] EP-M3: canonical-token recognizer, witness checker, and properties.
@@ -692,8 +692,8 @@ the exercise.
 
 ### Stage A: confirm and propose (no code)
 
-The expert review is complete. Obtain user approval and answers to Q1 and Q2.
-Stop here until approval.
+The expert review is complete. The user accepted Q1 and Q2 and approved the
+plan on 2026-10-29, so proceed to Stage B.
 
 ### Stage B: corpus and observations (EP-M1)
 
@@ -1138,3 +1138,5 @@ Documentation changes in EP-M5:
   scope. It also restores the literal `\u0069` escape in the Q1 example, which
   had been decoded when the file was written. The plan still awaits explicit
   approval to begin EP-M1.
+- Revision 4 (2026-10-29): records the user's approval to begin
+  implementation and marks the plan `APPROVED`. No plan content changed.
