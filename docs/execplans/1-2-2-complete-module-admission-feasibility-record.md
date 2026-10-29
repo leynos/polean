@@ -5,8 +5,8 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 2). Implementation must not begin until the user
-explicitly approves this plan and answers Q1 and Q2.
+Status: DRAFT (revision 3). The user accepted Q1 and Q2 on 2026-10-29.
+Implementation must not begin until the user explicitly approves the plan.
 
 Roadmap item: [1.2.2](../roadmap.md). Branch:
 `1-2-2-complete-module-admission-feasibility-record`.
@@ -45,8 +45,8 @@ enough. Regorus discards comments, so `# METADATA` annotations leave no trace.
 It drops parentheses. Its lexer treats an embedded NUL byte as end of input. It
 records neither the `if` keyword nor whether a rule body was braced. The plan
 therefore pairs the AST walk with a small canonical-token recognizer that
-accounts for every source byte and returns a checkable witness. Subject to Q2,
-a Verus proof establishes the recognizer's soundness for inputs of any length.
+accounts for every source byte and returns a checkable witness. A Verus proof
+establishes the recognizer's soundness for inputs of any length.
 
 None of this implements production admission. Ingestion and IR types belong to
 2.1.1, and production admission with diagnostic source maps belongs to 2.1.2.
@@ -69,8 +69,8 @@ no model theorem, no translation proof, and no runtime correspondence.
   its proof are intended for promotion.
 - Do not widen the grammar. A form is admitted only if technical design §4.1
   admits it. Where the design is ambiguous, take the narrower reading and
-  record it in `Decision log` (D7–D12). The only open widening-or-narrowing
-  question for the user is Q1.
+  record it in `Decision log` (D7–D13). D13 is the user's decision on Q1;
+  D7–D12 are the planning agent's narrowings, reviewed with the plan.
 - Unsupported syntax fails closed, including syntax in a rule that can never
   fire. Unknown serialized AST variants and unknown fields are errors, never
   ignorable additions.
@@ -85,8 +85,9 @@ no model theorem, no translation proof, and no runtime correspondence.
   never under `examples/tenant-write/`, so that no oracle that loads a
   directory can merge them into one policy (TDD §6.3).
 - Pin by exact identity. Regorus stays at `=0.13.0` with features
-  `["ast", "std"]`. If Q2 is accepted, `vstd` is pinned at the exact version
-  already in `Cargo.lock`, and the Verus release is pinned in `tools/verus/`.
+  `["ast", "std"]`. `vstd` is pinned at the exact version already in
+  `Cargo.lock`, and the matching Verus release is pinned in `tools/verus/`
+  (D14).
 - Do not bypass compile admission (`RUSTC_WRAPPER`). Use the shared Cargo
   cache. Never use `/tmp` as a build target.
 - Follow the lint policy: no `unsafe`, no `allow` attributes (a scoped
@@ -106,10 +107,10 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
 
 - Scope: stop and escalate above 40 non-fixture files or about 4,000 net lines
   of code and documentation. Fixture files must stay under 90.
-- Dependencies: the authorized new dev-dependency is `proptest`, pinned with
-  `=`. `vstd`, at the exact version already locked, is authorized only if the
-  user accepts Q2. Any other dependency, including `serde` with `derive`,
-  requires escalation.
+- Dependencies: the authorized new dev-dependencies are `proptest`, pinned
+  with `=`, and `vstd` at exactly the locked `0.0.0-2026-09-06-0133` (D14). If
+  the matching Verus release requires a different `vstd`, stop and escalate.
+  Any other dependency, including `serde` with `derive`, requires escalation.
 - Interface: no item may be added to `src/`. If the spike needs library code,
   stop and escalate.
 - Design: stop and set `BLOCKED` if a construct can be distinguished neither
@@ -176,11 +177,13 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   contracts, formal methods and alternatives, and proportionality. Verdict:
   proceed with conditions. Revision 2 adopts the conditions; see
   `Revision notes`.
-- [ ] User approval, including answers to Q1 and Q2.
+- [x] (2026-10-29) The user accepted Q1 (reject escaped spellings) and Q2
+  (prove the recognizer in Verus now); recorded as D13 and D14.
+- [ ] User approval of the plan to begin implementation.
 - [ ] EP-M1: corpus, manifest, and observation snapshot.
 - [ ] EP-M2: closed AST decoding, profile walk, and inventory guard.
 - [ ] EP-M3: canonical-token recognizer, witness checker, and properties.
-- [ ] EP-M4: Verus soundness proof of the recognizer kernel (subject to Q2).
+- [ ] EP-M4: Verus soundness proof of the recognizer kernel (D14).
 - [ ] EP-M5: feasibility record, ADR 0005, and documentation updates.
 
 ## Surprises & discoveries
@@ -318,15 +321,23 @@ each one empirically; until then they are hypotheses.
   reading.
 - D12: classify a number literal that makes `get_ast_as_json` fail as a
   frontend failure (stage `serialize`), not as malformed source.
-- Q1 (needs the user's decision): TDD §4.1 says to compare "decoded literal
-  identity", which would admit `"write"` as `"write"`. The recognizer as
+- D13 (Q1, accepted by the user on 2026-10-29): reject escaped spellings.
+  EP-M5 amends TDD §4.1 to read "parsed token kind and exact canonical
+  spelling", and a fixture under `atom/` covers an escaped `"write"`. The
+  question as put to the user follows.
+- Q1: TDD §4.1 says to compare "decoded literal
+  identity", which would admit `"wr\u0069te"` as `"write"`. The recognizer as
   planned compares exact canonical spellings and so rejects escaped spellings.
   Recommendation: reject escapes in v0, and amend §4.1 to say "parsed token
   kind and exact canonical spelling". The `atoms` strings in
   `contracts/profile.json` are unchanged and keep their exact-spelling meaning.
   Alternative: decode JSON escapes inside the recognizer, which enlarges the
   kernel and its proof.
-- Q2 (needs the user's decision): prove the recognizer in this task by writing
+- D14 (Q2, accepted by the user on 2026-10-29): prove the recognizer in this
+  task. EP-M4 is in scope, `vstd` is authorized at the locked version, and the
+  fallback below applies only if the Verification tolerance is breached and the
+  user then agrees to it. The question as put to the user follows.
+- Q2: prove the recognizer in this task by writing
   its kernel once in the Verus attribute style, with `vstd` added as a direct
   dev-dependency at the already-locked version `0.0.0-2026-09-06-0133`, and the
   matching Verus release pinned through `prover-tools`.
@@ -459,13 +470,13 @@ The spike introduces three things worth stating precisely:
 
 ### Where Verus is warranted, and where it is not
 
-Verus is warranted for the recognizer kernel (O6), subject to Q2. The kernel is
-a small pure function over byte sequences of unbounded length. Its property is
-the soundness of the bounded check the record relies on, and a counterexample
-would be a silent admission. No finite test set establishes it for all inputs.
-The kernel does not depend on Regorus or the IR. Its interface (bytes and token
-slices in, offsets out) survives promotion to 2.1.2, so the proof is not thrown
-away.
+Verus is warranted for the recognizer kernel (O6), as accepted in D14. The
+kernel is a small pure function over byte sequences of unbounded length. Its
+property is the soundness of the bounded check the record relies on, and a
+counterexample would be a silent admission. No finite test set establishes it
+for all inputs. The kernel does not depend on Regorus or the IR. Its interface
+(bytes and token slices in, offsets out) survives promotion to 2.1.2, so the
+proof is not thrown away.
 
 Verus is not warranted for the AST walk, which is a finite case analysis over a
 closed set of node kinds. Compiler exhaustiveness, a fixture for every kind,
@@ -634,8 +645,8 @@ about how Rego interprets the tokens; that is axiom X3.
   - Non-vacuity: a seeded fault that swaps the renderer's `locked` and
     `unlocked` strings fails both this property and O3. A test asserts that
     each rendered atom string equals `profile.atoms[name]`.
-- O6, recognizer soundness, `theorem_recognize_sound` with lemmas T1 and T2,
-  subject to Q2.
+- O6, recognizer soundness, `theorem_recognize_sound` with lemmas T1 and T2
+  (D14).
   - Method: Verus over the single-source kernel.
   - Artefact: `tests/admission/recognizer/kernel.rs`, verified through the
     crate root `verus/admission_recognizer.rs`, which contains only a
@@ -667,7 +678,7 @@ about how Rego interprets the tokens; that is axiom X3.
 - X3: a Rego lexer, given a source that `decomposes_at` the canonical tokens
   with D10's separation, produces exactly those tokens. O7 checks this for
   Regorus on every accepted source; OPA's agreement is left to 2.3.2.
-- X4: if Q2 is accepted, the Verus release and `vstd` are sound, and ghost
+- X4: the Verus release and `vstd` are sound, and ghost
   erasure leaves the executable kernel unchanged.
 - X5: `serde_json` parses Regorus's AST JSON faithfully, and duplicate keys,
   which `Value` cannot represent, do not occur in Regorus's output.
@@ -738,7 +749,7 @@ walker then recognizer, and adds the witness checker, the seeded faults, the
 properties, the lexer cross-check, and three BDD scenarios. After it, the whole
 corpus passes.
 
-EP-M4, if Q2 is accepted, does four things:
+EP-M4 does four things:
 
 1. Adds `vstd` and the Verus pins, and the `install-verus` and `verus` Makefile
    targets.
@@ -786,7 +797,7 @@ roadmap, and run every gate.
   - Recovery: revert; EP-M2 remains coherent.
   - Remaining gaps: the unbounded soundness proof.
   - Compatibility: none.
-- EP-M4, Verus soundness proof (only if Q2 is accepted).
+- EP-M4, Verus soundness proof (D14).
   - End state: `make verus` proves O6 with no `assume`, `admit`, or
     `external_body`; the kernel is unchanged in behaviour; every Cargo gate
     passes. `make verus` is an on-demand target, outside `make all` and CI.
@@ -866,7 +877,7 @@ The behaviour to observe:
   trivia/metadata-block.rego  regorus=parsed  walk=admitted  recognizer=rejected trivia.metadata [0, 10)  outcome=rejected
   ```
 
-- `make verus` reports zero errors, if Q2 is accepted.
+- `make verus` reports zero errors.
 - `docs/admission-feasibility-record.md` lists every construct class with its
   verdict and the fixture or test that demonstrates it.
 
@@ -913,8 +924,7 @@ or network boundary.
 Quality criteria:
 
 - Tests: `make test` passes, and so do O1–O5 and O7.
-- Verification: `make verus` discharges O6 with no trusted shortcuts, if Q2 is
-  accepted.
+- Verification: `make verus` discharges O6 with no trusted shortcuts.
 - Lint and format: `make check-fmt`, `make lint`, `make typecheck`, and
   `make markdownlint` pass.
 - Documentation: `make design-check` passes, and `sha256sum -c SHA256SUMS`
@@ -1038,7 +1048,7 @@ Dependencies:
 - Existing: Regorus `=0.13.0`, `serde_json`, `rstest`, `rstest-bdd`,
   `rstest-bdd-macros`, `insta`, `googletest`, and `pretty_assertions`.
 - New: `proptest` (`=`-pinned, dev-only).
-- If Q2 is accepted:
+- Added by D14:
   - `vstd = "=0.0.0-2026-09-06-0133"` (dev-only, already in `Cargo.lock`);
   - Verus through `prover-tools`, pinned by `tools/verus/VERSION`,
     `tools/verus/SHA256SUMS`, and `tools/rust-prover-tools/REF`;
@@ -1123,3 +1133,8 @@ Documentation changes in EP-M5:
     - committed a green EP-M1 rather than an ignored test;
     - moved the feature file out of the provisioned workflow's path filter.
   Remaining work is unchanged in shape: approval, then EP-M1 to EP-M5.
+- Revision 3 (2026-10-29): records the user's acceptance of Q1 and Q2 as D13
+  and D14. It authorizes `vstd` at the locked version, and puts EP-M4 firmly in
+  scope. It also restores the literal `\u0069` escape in the Q1 example, which
+  had been decoded when the file was written. The plan still awaits explicit
+  approval to begin EP-M1.
