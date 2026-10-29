@@ -28,6 +28,9 @@ already exist.
 - [Toolchain tuple ExecPlan](execplans/1-2-1-pin-a-tested-compatibility-tuple.md):
   the work that pins the tuple, proves the provisioning path, and records its
   acceptance evidence.
+- [Admission feasibility ExecPlan][admission-plan]: the planned spike and
+  record that test whether the pinned frontend can enforce complete,
+  fail-closed admission (draft, awaiting approval).
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
   and explicit omissions.
 
@@ -71,6 +74,7 @@ already exist.
 [adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md
 [adr-0002]: adrs/adr-0002-first-profile-assurance-boundary.md
 [adr-0003]: adrs/adr-0003-pin-the-e0-toolchain-tuple.md
+[admission-plan]: execplans/1-2-2-complete-module-admission-feasibility-record.md
 
 ## Machine-readable design
 
