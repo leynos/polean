@@ -1,0 +1,23 @@
+{
+  "profile": "polean.tenant-write.v0",
+  "rules": [
+    [
+      "same_tenant",
+      "write_action",
+      "admin_role",
+      "owns_resource",
+      "locked",
+      "unlocked",
+      "same_tenant",
+      "write_action",
+      "admin_role",
+      "owns_resource",
+      "locked",
+      "unlocked",
+      "same_tenant",
+      "write_action",
+      "admin_role",
+      "owns_resource"
+    ]
+  ]
+}

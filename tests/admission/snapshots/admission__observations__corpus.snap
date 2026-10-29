@@ -1,0 +1,109 @@
+---
+source: tests/admission/observations/mod.rs
+expression: rendered
+---
+examples/admission/admitted/locked-owner-rule.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=3 ExprString=1 ExprBool=2 ExprVar=8 ExprRefDot=9 ExprCompare=3 BoolOpEq=3 AssignOpColEq=1
+examples/admission/atom/admin-role.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprString=1 ExprBool=1 ExprVar=5 ExprRefDot=3 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/atom/bracket-reference.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=2 ExprBool=1 ExprVar=7 ExprRefDot=5 ExprRefBrack=1 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/atom/escaped-spelling.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/atom/locked.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=2 ExprVar=5 ExprRefDot=3 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/atom/other-literal.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/atom/owns-resource.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=6 ExprRefDot=5 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/atom/reversed-operands.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=6 ExprRefDot=5 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/atom/same-tenant.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=6 ExprRefDot=5 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/atom/swapped-locked.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprString=1 ExprBool=1 ExprVar=5 ExprRefDot=3 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/atom/unknown-attribute.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=7 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/atom/unlocked.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=2 ExprVar=5 ExprRefDot=3 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/atom/write-action.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprString=1 ExprBool=1 ExprVar=5 ExprRefDot=2 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/body/else.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=2 ExprVar=6 ExprRefDot=5 ExprCompare=1 BoolOpEq=1 AssignOpColEq=2
+examples/admission/body/empty.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=4 ExprObject=1 ExprRefDot=1 AssignOpColEq=1
+examples/admission/body/semicolon.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/body/single-line.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=6 ExprRefDot=5 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/body/two-bodies.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/body/unbraced.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=6 ExprRefDot=5 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/body/with.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=8 ExprObject=1 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/default/assigned.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpEq=1
+examples/admission/default/missing.rego  regorus=parsed  kinds=RuleSpec=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprVar=6 ExprRefDot=6 ExprCompare=2 BoolOpEq=2
+examples/admission/default/other-name.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/default/true.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/default/two-defaults.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=2 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=2 ExprVar=8 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=2
+examples/admission/expr/array-compr.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprNumber=1 ExprBool=1 ExprVar=6 ExprArray=1 ExprArrayCompr=1 ExprRefDot=1 ExprCompare=1 ExprAssign=1 BoolOpEq=1 AssignOpColEq=2
+examples/admission/expr/array.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=4 ExprArray=2 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/assign.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=1 ExprBool=1 ExprVar=5 ExprRefDot=1 ExprAssign=1 AssignOpColEq=2
+examples/admission/expr/bool.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=3 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/call.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=1 ExprBool=1 ExprVar=5 ExprArray=1 ExprCall=1 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/membership.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=1 ExprBool=1 ExprVar=5 ExprArray=1 ExprRefDot=1 ExprMembership=1 AssignOpColEq=1
+examples/admission/expr/null.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprNull=2 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/number.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/object-compr.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=3 ExprString=1 ExprNumber=1 ExprBool=1 ExprVar=8 ExprObject=1 ExprObjectCompr=1 ExprRefDot=1 ExprCompare=1 ExprAssign=2 BoolOpEq=1 AssignOpColEq=3
+examples/admission/expr/object.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=4 ExprObject=2 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/raw-string.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprRawString=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/ref-brack.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprString=2 ExprBool=1 ExprVar=5 ExprRefDot=1 ExprRefBrack=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/set-compr.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprNumber=2 ExprBool=1 ExprVar=6 ExprSet=1 ExprSetCompr=1 ExprRefDot=1 ExprCompare=1 ExprAssign=1 BoolOpEq=1 AssignOpColEq=2
+examples/admission/expr/set.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprSet=2 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/string.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprString=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/unary.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=1 ExprBool=1 ExprVar=5 ExprUnary=1 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/expr/var.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprBool=1 ExprVar=6 ExprRefDot=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1
+examples/admission/generated/bare_carriage_return  regorus=rejected  \r must be followed by \n
+examples/admission/generated/crlf  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/generated/leading_bom  regorus=rejected  invalid character
+examples/admission/generated/nul_in_comment  regorus=rejected  expecting `package` Missing package declaration.
+examples/admission/generated/over_long_line  regorus=rejected  line exceeds maximum column width of 1024
+examples/admission/head/dotted-name.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=7 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/head/function.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadFunc=1 ExprBool=1 ExprVar=6 ExprRefDot=1 AssignOpColEq=2
+examples/admission/head/other-name.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/head/partial-set.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralSomeVars=1 ExprBool=1 ExprVar=5 ExprRefDot=1 ExprRefBrack=1 AssignOpColEq=1
+examples/admission/head/set.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadSet=1 LiteralSomeVars=1 ExprBool=1 ExprVar=5 ExprRefDot=1 AssignOpColEq=1
+examples/admission/head/value.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 ExprBool=2 ExprVar=4 ExprRefDot=1 AssignOpColEq=2
+examples/admission/import/after-rule.rego  regorus=rejected  unexpected keyword `import`
+examples/admission/import/as.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/import/future-keywords.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/import/missing.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=6 ExprRefDot=5 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/import/other.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/import/two-imports.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=8 ExprRefDot=7 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/limits/body-max.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=16 ExprString=6 ExprBool=5 ExprVar=26 ExprRefDot=42 ExprCompare=16 BoolOpEq=16 AssignOpColEq=1
+examples/admission/limits/body-over.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=17 ExprString=6 ExprBool=6 ExprVar=27 ExprRefDot=44 ExprCompare=17 BoolOpEq=17 AssignOpColEq=1
+examples/admission/limits/number-overflow.rego  regorus=rejected  invalid number. serde_json cannot parse number: out of range
+examples/admission/limits/rules-max.rego  regorus=parsed  kinds=RuleSpec=16 RuleDefault=1 HeadCompr=16 LiteralExpr=16 ExprBool=1 ExprVar=51 ExprRefDot=65 ExprCompare=16 BoolOpEq=16 AssignOpColEq=1
+examples/admission/limits/rules-over.rego  regorus=parsed  kinds=RuleSpec=17 RuleDefault=1 HeadCompr=17 LiteralExpr=17 ExprBool=1 ExprVar=54 ExprRefDot=69 ExprCompare=17 BoolOpEq=17 AssignOpColEq=1
+examples/admission/literal/every.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 LiteralEvery=1 ExprNumber=2 ExprBool=1 ExprVar=7 ExprArray=1 ExprRefDot=5 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/literal/not-expr.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 LiteralNotExpr=1 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/literal/some-in.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralSomeIn=1 LiteralExpr=2 ExprString=1 ExprNumber=1 ExprBool=1 ExprVar=8 ExprArray=1 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/literal/some-vars.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralSomeVars=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/module/empty.rego  regorus=rejected  expecting `package` Missing package declaration.
+examples/admission/module/target-after-rules.rego  regorus=rejected  __target__ must be defined before any rules
+examples/admission/module/target.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/module/two-packages.rego  regorus=rejected  unexpected keyword `package`
+examples/admission/operator/arith-add.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=3 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 ExprArith=1 BoolOpEq=1 AssignOpColEq=1 ArithOpAdd=1
+examples/admission/operator/arith-div.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=3 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 ExprArith=1 BoolOpEq=1 AssignOpColEq=1 ArithOpDiv=1
+examples/admission/operator/arith-mod.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=3 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 ExprArith=1 BoolOpEq=1 AssignOpColEq=1 ArithOpMod=1
+examples/admission/operator/arith-mul.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=3 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 ExprArith=1 BoolOpEq=1 AssignOpColEq=1 ArithOpMul=1
+examples/admission/operator/arith-sub.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=3 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 ExprArith=1 BoolOpEq=1 AssignOpColEq=1 ArithOpSub=1
+examples/admission/operator/assign-eq.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=1 ExprBool=1 ExprVar=5 ExprRefDot=1 ExprAssign=1 AssignOpEq=1 AssignOpColEq=1
+examples/admission/operator/bin-intersection.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprSet=3 ExprRefDot=1 ExprBin=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1 BinOpIntersection=1
+examples/admission/operator/bin-union.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprSet=3 ExprRefDot=1 ExprBin=1 ExprCompare=1 BoolOpEq=1 AssignOpColEq=1 BinOpUnion=1
+examples/admission/operator/bool-ge.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpGe=1 AssignOpColEq=1
+examples/admission/operator/bool-gt.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpGt=1 AssignOpColEq=1
+examples/admission/operator/bool-le.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpLe=1 AssignOpColEq=1
+examples/admission/operator/bool-lt.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpLt=1 AssignOpColEq=1
+examples/admission/operator/bool-ne.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=1 ExprNumber=2 ExprBool=1 ExprVar=4 ExprRefDot=1 ExprCompare=1 BoolOpNe=1 AssignOpColEq=1
+examples/admission/order/default-after-rule.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/package/dotted.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=7 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/package/missing.rego  regorus=rejected  expecting `package` Missing package declaration.
+examples/admission/package/other.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/trivia/blank-lines.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/trivia/comment-spoof.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/trivia/metadata-block.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/trivia/metadata-inline.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/trivia/parentheses.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/trivia/tabs.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/trivia/unicode-comment.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=2 ExprString=1 ExprBool=1 ExprVar=7 ExprRefDot=6 ExprCompare=2 BoolOpEq=2 AssignOpColEq=1
+examples/admission/unreachable/v0-body.rego  regorus=rejected  `if` keyword is required before rule body
+examples/admission/unreachable/v0-partial-set.rego  regorus=rejected  `if` keyword is required before rule body
+examples/tenant-write/mutations/admin-only/policy.rego  regorus=parsed  kinds=RuleSpec=1 RuleDefault=1 HeadCompr=1 LiteralExpr=3 ExprString=2 ExprBool=1 ExprVar=8 ExprRefDot=8 ExprCompare=3 BoolOpEq=3 AssignOpColEq=1
+examples/tenant-write/mutations/cross-tenant-admin/policy.rego  regorus=parsed  kinds=RuleSpec=2 RuleDefault=1 HeadCompr=2 LiteralExpr=6 ExprString=3 ExprBool=2 ExprVar=13 ExprRefDot=15 ExprCompare=6 BoolOpEq=6 AssignOpColEq=1
+examples/tenant-write/mutations/deny-all/policy.rego  regorus=parsed  kinds=RuleDefault=1 ExprBool=1 ExprVar=3 ExprRefDot=1 AssignOpColEq=1
+examples/tenant-write/mutations/locked-owner/policy.rego  regorus=parsed  kinds=RuleSpec=2 RuleDefault=1 HeadCompr=2 LiteralExpr=6 ExprString=3 ExprBool=1 ExprVar=14 ExprRefDot=17 ExprCompare=6 BoolOpEq=6 AssignOpColEq=1
+examples/tenant-write/mutations/non-write-admin/policy.rego  regorus=parsed  kinds=RuleSpec=2 RuleDefault=1 HeadCompr=2 LiteralExpr=6 ExprString=2 ExprBool=2 ExprVar=14 ExprRefDot=18 ExprCompare=6 BoolOpEq=6 AssignOpColEq=1
+examples/tenant-write/mutations/unowned-unlocked/policy.rego  regorus=parsed  kinds=RuleSpec=2 RuleDefault=1 HeadCompr=2 LiteralExpr=6 ExprString=3 ExprBool=2 ExprVar=13 ExprRefDot=15 ExprCompare=6 BoolOpEq=6 AssignOpColEq=1
+examples/tenant-write/policy.rego  regorus=parsed  kinds=RuleSpec=2 RuleDefault=1 HeadCompr=2 LiteralExpr=7 ExprString=3 ExprBool=2 ExprVar=15 ExprRefDot=19 ExprCompare=7 BoolOpEq=7 AssignOpColEq=1
