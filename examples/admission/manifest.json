@@ -1,0 +1,105 @@
+{"path": "examples/admission/admitted/locked-owner-rule.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/admitted/locked-owner-rule.json"}}
+{"path": "examples/admission/atom/admin-role.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/atom/admin-role.json"}}
+{"path": "examples/admission/atom/bracket-reference.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/atom/escaped-spelling.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "token.mismatch"}}
+{"path": "examples/admission/atom/locked.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/atom/locked.json"}}
+{"path": "examples/admission/atom/other-literal.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/atom/owns-resource.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/atom/owns-resource.json"}}
+{"path": "examples/admission/atom/reversed-operands.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/atom/same-tenant.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/atom/same-tenant.json"}}
+{"path": "examples/admission/atom/swapped-locked.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/atom/unknown-attribute.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/atom/unlocked.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/atom/unlocked.json"}}
+{"path": "examples/admission/atom/write-action.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/atom/write-action.json"}}
+{"path": "examples/admission/body/else.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.body"}}
+{"path": "examples/admission/body/empty.rego", "covers": ["ExprObject"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/body/semicolon.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "token.mismatch"}}
+{"path": "examples/admission/body/single-line.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/body/single-line.json"}}
+{"path": "examples/admission/body/two-bodies.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.body"}}
+{"path": "examples/admission/body/unbraced.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "token.mismatch"}}
+{"path": "examples/admission/body/with.rego", "covers": ["ExprObject"], "expected": {"outcome": "rejected", "stage": "profile", "code": "with.modifier"}}
+{"path": "examples/admission/default/assigned.rego", "covers": ["AssignOpEq"], "expected": {"outcome": "rejected", "stage": "profile", "code": "default.shape"}}
+{"path": "examples/admission/default/missing.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "default.shape"}}
+{"path": "examples/admission/default/other-name.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "default.shape"}}
+{"path": "examples/admission/default/true.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "default.shape"}}
+{"path": "examples/admission/default/two-defaults.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "default.shape"}}
+{"path": "examples/admission/expr/array-compr.rego", "covers": ["ExprArrayCompr"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/array.rego", "covers": ["ExprArray"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/assign.rego", "covers": ["ExprAssign"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/expr/bool.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/call.rego", "covers": ["ExprCall"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/expr/membership.rego", "covers": ["ExprMembership"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/expr/null.rego", "covers": ["ExprNull"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/number.rego", "covers": ["ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/object-compr.rego", "covers": ["ExprObjectCompr"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/object.rego", "covers": ["ExprObject"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/raw-string.rego", "covers": ["ExprRawString"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/ref-brack.rego", "covers": ["ExprRefBrack"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/set-compr.rego", "covers": ["ExprSetCompr"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/set.rego", "covers": ["ExprSet"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/string.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"path": "examples/admission/expr/unary.rego", "covers": ["ExprUnary"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/expr/var.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
+{"generated": "bare_carriage_return", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"generated": "crlf", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/trivia/crlf.json"}}
+{"generated": "leading_bom", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"generated": "nul_in_comment", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"generated": "over_long_line", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/admission/head/dotted-name.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}
+{"path": "examples/admission/head/function.rego", "covers": ["HeadFunc"], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}
+{"path": "examples/admission/head/other-name.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}
+{"path": "examples/admission/head/partial-set.rego", "covers": ["ExprRefBrack"], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}
+{"path": "examples/admission/head/set.rego", "covers": ["HeadSet"], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}
+{"path": "examples/admission/head/value.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}
+{"path": "examples/admission/import/after-rule.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/admission/import/as.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "import.shape"}}
+{"path": "examples/admission/import/future-keywords.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "import.shape"}}
+{"path": "examples/admission/import/missing.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "import.shape"}}
+{"path": "examples/admission/import/other.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "import.shape"}}
+{"path": "examples/admission/import/two-imports.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "import.shape"}}
+{"path": "examples/admission/limits/body-max.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/limits/body-max.json"}}
+{"path": "examples/admission/limits/body-over.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "body.limit"}}
+{"path": "examples/admission/limits/number-overflow.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.number"}}
+{"path": "examples/admission/limits/rules-max.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/limits/rules-max.json"}}
+{"path": "examples/admission/limits/rules-over.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.limit"}}
+{"path": "examples/admission/literal/every.rego", "covers": ["LiteralEvery", "ExprArray", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "literal.kind"}}
+{"path": "examples/admission/literal/not-expr.rego", "covers": ["LiteralNotExpr"], "expected": {"outcome": "rejected", "stage": "profile", "code": "literal.kind"}}
+{"path": "examples/admission/literal/some-in.rego", "covers": ["LiteralSomeIn", "ExprArray", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "literal.kind"}}
+{"path": "examples/admission/literal/some-vars.rego", "covers": ["LiteralSomeVars"], "expected": {"outcome": "rejected", "stage": "profile", "code": "literal.kind"}}
+{"path": "examples/admission/module/empty.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/admission/module/target-after-rules.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/admission/module/target.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "module.target"}}
+{"path": "examples/admission/module/two-packages.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/admission/operator/arith-add.rego", "covers": ["ExprArith", "ArithOpAdd", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/arith-div.rego", "covers": ["ExprArith", "ArithOpDiv", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/arith-mod.rego", "covers": ["ExprArith", "ArithOpMod", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/arith-mul.rego", "covers": ["ExprArith", "ArithOpMul", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/arith-sub.rego", "covers": ["ExprArith", "ArithOpSub", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/assign-eq.rego", "covers": ["AssignOpEq", "ExprAssign"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/bin-intersection.rego", "covers": ["ExprBin", "BinOpIntersection", "ExprSet"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/bin-union.rego", "covers": ["ExprBin", "BinOpUnion", "ExprSet"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/operator/bool-ge.rego", "covers": ["BoolOpGe", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "operator.kind"}}
+{"path": "examples/admission/operator/bool-gt.rego", "covers": ["BoolOpGt", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "operator.kind"}}
+{"path": "examples/admission/operator/bool-le.rego", "covers": ["BoolOpLe", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "operator.kind"}}
+{"path": "examples/admission/operator/bool-lt.rego", "covers": ["BoolOpLt", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "operator.kind"}}
+{"path": "examples/admission/operator/bool-ne.rego", "covers": ["BoolOpNe", "ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "operator.kind"}}
+{"path": "examples/admission/order/default-after-rule.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "order.shape"}}
+{"path": "examples/admission/package/dotted.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "package.shape"}}
+{"path": "examples/admission/package/missing.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/admission/package/other.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "package.shape"}}
+{"path": "examples/admission/trivia/blank-lines.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/trivia/blank-lines.json"}}
+{"path": "examples/admission/trivia/comment-spoof.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/trivia/comment-spoof.json"}}
+{"path": "examples/admission/trivia/metadata-block.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "trivia.metadata"}}
+{"path": "examples/admission/trivia/metadata-inline.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "trivia.metadata"}}
+{"path": "examples/admission/trivia/parentheses.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "token.mismatch"}}
+{"path": "examples/admission/trivia/tabs.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/trivia/tabs.json"}}
+{"path": "examples/admission/trivia/unicode-comment.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "trivia.byte"}}
+{"path": "examples/admission/unreachable/v0-body.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/admission/unreachable/v0-partial-set.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"path": "examples/tenant-write/mutations/admin-only/policy.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/tenant-write/mutations/admin-only/policy.json"}}
+{"path": "examples/tenant-write/mutations/cross-tenant-admin/policy.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/tenant-write/mutations/cross-tenant-admin/policy.json"}}
+{"path": "examples/tenant-write/mutations/deny-all/policy.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/tenant-write/mutations/deny-all/policy.json"}}
+{"path": "examples/tenant-write/mutations/locked-owner/policy.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/tenant-write/mutations/locked-owner/policy.json"}}
+{"path": "examples/tenant-write/mutations/non-write-admin/policy.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/tenant-write/mutations/non-write-admin/policy.json"}}
+{"path": "examples/tenant-write/mutations/unowned-unlocked/policy.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/tenant-write/mutations/unowned-unlocked/policy.json"}}
+{"path": "examples/tenant-write/policy.rego", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/tenant-write/policy.json"}}

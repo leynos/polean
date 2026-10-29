@@ -154,10 +154,11 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   ASCII and tab (D8), with a fixture for each case.
 - Risk: Regorus rejects some sources that OPA accepts: a leading BOM, a bare
   carriage return, a line longer than 1,024 columns, more than 20,000 lines,
-  and a number literal beyond `f64` range, which makes `get_ast_as_json` itself
-  fail. Severity: low, because the effect is fail-closed. Likelihood: high.
-  Mitigation: fixtures make each divergence visible, and the record lists them
-  for 2.1.1 and 2.3.2.
+  and a number literal beyond `f64` range. EP-M1 observed the number case
+  failing inside `add_policy` at parse rather than in `get_ast_as_json`; see
+  D15, which refutes D12's prediction. Severity: low, because the effect is
+  fail-closed. Likelihood: high. Mitigation: fixtures make each divergence
+  visible, and the record lists them for 2.1.1 and 2.3.2.
 - Risk: the Verus attribute style, `vstd`, or the matching Verus release is
   unavailable or conflicts with the strict Clippy policy. Severity: medium.
   Likelihood: medium. Mitigation: EP-M3 already delivers a witness-checked
@@ -180,7 +181,13 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
 - [x] (2026-10-29) The user accepted Q1 (reject escaped spellings) and Q2
   (prove the recognizer in Verus now); recorded as D13 and D14.
 - [x] (2026-10-29) User approval of the plan to begin implementation.
-- [ ] EP-M1: corpus, manifest, and observation snapshot.
+- [x] (2026-10-30) EP-M1: corpus, manifest, and observation snapshot.
+  `examples/admission/` holds 93 fixtures and 14 IR files described by 105 JSON
+  Lines manifest entries; `tests/admission/` holds the inventory, the strict
+  manifest parser, twelve bijection and contract tests, one observed-coverage
+  test, and the observation snapshot. All 18 tests pass. The Red O3 stub run is
+  recorded under `Artefacts and notes`. No `src/` change,
+  `examples/tenant-write/` untouched, no new dependency.
 - [ ] EP-M2: closed AST decoding, profile walk, and inventory guard.
 - [ ] EP-M3: canonical-token recognizer, witness checker, and properties.
 - [ ] EP-M4: Verus soundness proof of the recognizer kernel (D14).
@@ -188,8 +195,11 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
 
 ## Surprises & discoveries
 
-These come from reading the pinned sources during planning. EP-M1 must confirm
-each one empirically; until then they are hypotheses.
+These came from reading the pinned sources during planning. EP-M1 confirmed
+each one empirically on 2026-10-30 using the observation snapshot and a
+temporary probe harness over the pinned 0.13.0 frontend; the one exception is
+the OPA metadata rule, which remains a source reading because D6 excludes OPA
+execution here. The probe harness was not committed.
 
 - Observation: Regorus discards comments in its lexer and has no annotation
   type, so a `# METADATA` block parses cleanly and leaves no trace in the AST.
@@ -218,7 +228,11 @@ each one empirically; until then they are hypotheses.
 - Observation: `__target__ := "..."` is stored in `Module.target`, outside the
   rule list, as a bare string with no span. Evidence: `parser.rs:2338-2365`,
   `ast.rs:689`. Impact: a rule-only walk would miss it, and some rejections
-  have no source span.
+  have no source span. Confirmed, with an addition: the JSON route exposes it as
+  `ast.target` (`"target": "rego"`), so the profile walk can see it without a
+  source scan. Placement is constrained: it must follow the imports and precede
+  the first rule, including `default`; before an import the parser reports
+  ``unexpected keyword `import` ``.
 - Observation: AST types are not `#[non_exhaustive]`, so an exhaustive `match`
   compiles outside the crate. Fields are public, `NodeRef` dereferences to the
   node, and `Expr`'s `Drop` implementation only forbids moving out, so matching
@@ -248,6 +262,44 @@ each one empirically; until then they are hypotheses.
   Evidence: the check run on this branch before any covered file was edited.
   Impact: EP-M5 reviews the drift and refreshes those entries alongside its own
   edits. This plan does not certify content it has not reviewed.
+- Observation: every one of the 46 `NodeKind` variants is reachable from the
+  v1 parser, so O1 has no unreachable set to document. `ExprUnary` needs a
+  statement-initial unary or a parenthesised one, and `HeadSet` needs a
+  `contains` head. Evidence: `examples/admission/expr/unary.rego` observes
+  `ExprUnary=1` and `examples/admission/head/set.rego` observes `HeadSet=1`;
+  `observations::tests::the_corpus_observes_the_whole_inventory` asserts the
+  union is the whole inventory. Impact: the declared-coverage test can be the
+  whole inventory, and the observed-coverage test makes a regression visible.
+- Observation: `-x` is unary only at the start of a statement or inside
+  parentheses; after a variable it is parsed as binary subtraction continuing
+  the previous statement. Evidence: the probe's `unary-var` and `unary-parens`
+  cases; `examples/admission/expr/unary.rego` is the committed form. Impact:
+  the recognizer's canonical rendering must keep `-` adjacent to its operand,
+  and the fixture set must not assume `a -b` is two statements.
+- Observation: line width is checked on tokens, not on physical lines. A
+  1,100-column comment line parses; a 1,100-character string token fails with
+  `line exceeds maximum column width of 1024`. Evidence: a temporary probe case
+  with a 1,100-column comment line, and `generated/over_long_line` for the
+  token limit; the committed `trivia/` fixtures stay well inside it. Impact:
+  the record states the narrower limit.
+- Observation: two `import rego.v1` lines are rejected at parse with
+  `this import shadows previous import of …`, so they cannot be a profile-stage
+  fixture. Two distinct `data.*` imports parse and reach the profile walk.
+  Evidence: `examples/admission/import/two-imports.rego`. Impact: the
+  import-shape fixture uses distinct imports; the duplicate-import rejection
+  belongs to the frontend, not the profile.
+- Observation: at the frontend level, a literal U+0000 inside a comment
+  truncates the module (the package declaration is reported missing), a leading
+  BOM is an invalid character, a bare carriage return is rejected unless
+  followed by line feed, and CRLF line endings parse. Evidence: the five
+  `generated/` fixtures in the snapshot. Impact: each is a fail-closed
+  divergence from OPA, and the recognizer's trivia rule already excludes them.
+- Observation: `with`, metadata comments, and parentheses leave no node-kind
+  trace; `allow if {}` parses as a single `ExprObject` literal; v0 rule bodies
+  are parse errors while `set_rego_v0(false)` is in force. Evidence: the probe's
+  `with`, `metadata-*`, `parens`, `empty-body` and `v0-*` cases, and the
+  matching corpus fixtures. Impact: these are precisely the classes the
+  recognizer must decide.
 
 ## Decision log
 
@@ -349,6 +401,38 @@ each one empirically; until then they are hypotheses.
     and record the specification and lemma statements in the record as a
     2.1.2 obligation. Under the fallback EP-M4 is dropped, and the record says
     the recognizer is "tested, not proved".
+- D15 (2026-10-30, EP-M1): D12 is refuted. A number literal beyond `f64`
+  range fails inside `Engine::add_policy` with
+  `invalid number. serde_json cannot parse number: out of range`, so it is a
+  parse failure, not a serialization failure. `limits/number-overflow.rego`
+  expects `parse` / `parse.number`. `Stage::Serialize` and `ast.serialize` stay
+  in the closed sets because a frontend or feature change could still fail
+  there, and the EP-M2 mutation sweep is their fixture; the corpus explicitly
+  never expects an adapter stage (enforced by a test).
+- D16 (2026-10-30, EP-M1): the reason-code mapping is fixed by the manifest
+  and is implemented in EP-M2 in this precedence order: package shape, import
+  shape, `ast.target`, default shape, order shape, rule limit, rule head, rule
+  body, body limit, literal kind, `with` modifier, expression kind, operator
+  kind, then an unmatched comparison is `atom.unknown`. A non-`Compare`
+  statement is `expr.kind`; a comparison with an operator other than `==` is
+  `operator.kind`; a `==` whose sides include a call, unary, binary,
+  arithmetic, assignment, or membership expression is also `expr.kind`; only a
+  comparison over variables, references, and literal values can reach
+  `atom.unknown`. Rationale: a single precedence makes each fixture's expected
+  code unambiguous and keeps the more specific diagnosis from being masked by a
+  generic one. The manifest is the executable statement of this decision; EP-M2
+  changes it only with a recorded reason.
+- D17 (2026-10-30, EP-M1): the `ast.*` codes are fixtures of the EP-M2
+  mutation sweep, not of the source corpus, because no source can make
+  `serde_json` produce a malformed AST. `ReasonCode::AST_CODES` names the nine
+  codes, and a corpus test asserts the source corpus uses exactly `ALL` minus
+  `AST_CODES`. This keeps the coverage test honest without inventing a source
+  fixture that cannot exist.
+- D18 (2026-10-30, EP-M1): `module.target` is decided at the profile stage
+  from the decoded `ast.target`, not from a source scan. The JSON route exposes
+  the value (`"target": "rego"`), so no additional input is needed. Placement
+  errors (before an import, after a rule) are frontend parse failures and are
+  reported as `parse.syntax`.
 
 ## Outcomes & retrospective
 
@@ -943,10 +1027,45 @@ that can be reverted independently.
 
 ## Artefacts and notes
 
-To be filled in during implementation:
+### EP-M1 Red transcript (2026-10-30)
 
-- the EP-M1 Red transcript;
-- the observation snapshot summary;
+An uncommitted `tests/admission/stub_o3.rs` classified every source as
+`rejected at profile with atom.unknown` and ran the O3 shape: walk the
+manifest, compare each fixture's outcome with its expectation, and report every
+disagreement in one failure. `cargo test --test admission stub_o3::` reported:
+
+```text
+running 1 test
+test stub_o3::corpus_outcomes ... FAILED
+...
+87 fixture(s) disagree with the manifest:
+...
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out
+```
+
+All 21 admitted fixtures disagreed, together with 66 of the 84 rejected
+fixtures. The other 18 are the fixtures whose expected outcome is `profile` /
+`atom.unknown`, which a constant reject-everything classifier matches by
+accident; that is why the manifest uses distinct codes and why a test requires
+a fixture for every code. The log is
+`/tmp/red-o3-polean-1-2-2-complete-module-admission-feasibility-record.out`.
+The stub and its `mod` declaration were deleted before the commit.
+
+### EP-M1 observation snapshot summary (2026-10-30)
+
+`tests/admission/snapshots/admission__observations__corpus.snap` has one line
+for each of the 105 manifest entries. The frontend parsed 93 and rejected 12.
+The manifest expects 21 admissions, 65 profile rejections, 7 recognizer
+rejections, and 12 parse rejections, so every fixture that a later stage must
+decide currently parses. The union of observed node kinds is all 46 inventory
+variants. The rejections are the five generated fixtures (leading BOM, bare
+carriage return, NUL in a comment, over-long token; CRLF parses),
+`module/empty.rego`, the two v0 bodies, `limits/number-overflow.rego`, the two
+`__target__` placement errors, `package/missing.rego`, and
+`import/after-rule.rego`.
+
+Still to be filled in during implementation:
+
 - the mutant counts;
 - the trivia-class counts;
 - the seeded-fault transcripts;

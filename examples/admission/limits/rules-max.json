@@ -1,0 +1,53 @@
+{
+  "profile": "polean.tenant-write.v0",
+  "rules": [
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ],
+    [
+      "same_tenant"
+    ]
+  ]
+}
