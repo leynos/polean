@@ -10,10 +10,11 @@
 //! working directory, so the provisioned smoke tests work from any directory.
 
 use std::{
-    fs,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
+
+use crate::ambient;
 
 /// The repository root, as recorded by Cargo at compile time.
 const REPOSITORY_ROOT: &str = env!("CARGO_MANIFEST_DIR");
@@ -32,7 +33,7 @@ const REPOSITORY_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 /// Returns a diagnostic naming `path` and the underlying error for any
 /// failure other than `NotFound`.
 pub fn path_exists(path: &Path) -> Result<bool, String> {
-    match fs::metadata(path) {
+    match ambient::metadata(path) {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
         Err(error) => Err(format!("cannot inspect {}: {error}", path.display())),

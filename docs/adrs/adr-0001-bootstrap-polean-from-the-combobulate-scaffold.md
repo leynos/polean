@@ -70,3 +70,19 @@ more unrelated tests, generators, and policy. Starting with documents alone
 would leave no maintained implementation or CI shape. Creating the full
 multi-crate Rust and Lean architecture now would turn proposed seams into
 premature commitments.
+
+## Addendum, 2026-10-30: Whitaker adopted
+
+The deferral of Whitaker above, and the statement that the first CI does not
+exercise it, no longer hold. Polean now runs the Whitaker Dylint suite:
+
+- `make lint` depends on `make lint-whitaker`, which runs
+  `whitaker --all -- --all-targets --all-features` with warnings denied.
+- CI installs Whitaker with `leynos/shared-actions` `install-whitaker` at the
+  revision `5a99aed78ce68dcebd3052b75c31e6f173162b1e` (installer 0.2.11, with
+  its verified Clippy snapshot bootstrap) and then runs `make lint`.
+- The tests reach the filesystem through `cap-std`, because Whitaker's
+  `no_std_fs_operations` lint rejects `std::fs`. The one ambient-authority shim
+  is `tests/toolchain/ambient.rs`; no lint is suppressed.
+
+Coverage, mutation testing, sandboxing and proof replay remain deferred.

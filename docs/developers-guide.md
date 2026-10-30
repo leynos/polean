@@ -33,24 +33,39 @@ formatting and prose gate.
 `make help` lists every target with its one-line description. The contributor
 targets are:
 
-| Target                   | Effect                                                             |
-| ------------------------ | ------------------------------------------------------------------ |
-| `make build`             | Build every Rust target and feature.                               |
-| `make check-fmt`         | Verify Rust formatting and Markdown table layout; changes nothing. |
-| `make fmt`               | Rewrite Rust formatting and Markdown tables in place.              |
-| `make typecheck`         | Type-check every Rust target with warnings denied.                 |
-| `make lint`              | Build documentation and run Clippy with warnings denied.           |
-| `make markdownlint`      | Lint Markdown with the repository configuration.                   |
-| `make test`              | Run Rust unit, integration, and documentation tests.               |
-| `make test-scripts`      | Test the provisioning script with pytest.                          |
-| `make tools`             | Provision the digest-checked OPA and Lean artefacts.               |
-| `make toolchain-smoke`   | Provision, then run the ignored OPA and Lean observations.         |
-| `make design-check`      | Validate schemas, policy fixtures, abstractions, and witnesses.    |
-| `make design-properties` | Search the admitted input domain for model-side counterexamples.   |
-| `make design-boundary`   | Test the harness's orchestration and storage boundaries.           |
-| `make audit`             | Audit Rust dependencies for known vulnerabilities.                 |
-| `make clean`             | Remove Rust and Python build artefacts.                            |
-| `make all`               | Run every local commit gate in sequence.                           |
+| Target                   | Effect                                                              |
+| ------------------------ | ------------------------------------------------------------------- |
+| `make build`             | Build every Rust target and feature.                                |
+| `make check-fmt`         | Verify Rust formatting and Markdown table layout; changes nothing.  |
+| `make fmt`               | Rewrite Rust formatting and Markdown tables in place.               |
+| `make typecheck`         | Type-check every Rust target with warnings denied.                  |
+| `make lint`              | Build documentation, then run Clippy and the Whitaker suite.        |
+| `make lint-whitaker`     | Run the Whitaker Dylint suite through its wrapper, warnings denied. |
+| `make markdownlint`      | Lint Markdown with the repository configuration.                    |
+| `make test`              | Run Rust unit, integration, and documentation tests.                |
+| `make test-scripts`      | Test the provisioning script with pytest.                           |
+| `make tools`             | Provision the digest-checked OPA and Lean artefacts.                |
+| `make toolchain-smoke`   | Provision, then run the ignored OPA and Lean observations.          |
+| `make design-check`      | Validate schemas, policy fixtures, abstractions, and witnesses.     |
+| `make design-properties` | Search the admitted input domain for model-side counterexamples.    |
+| `make design-boundary`   | Test the harness's orchestration and storage boundaries.            |
+| `make audit`             | Audit Rust dependencies for known vulnerabilities.                  |
+| `make clean`             | Remove Rust and Python build artefacts.                             |
+| `make all`               | Run every local commit gate in sequence.                            |
+
+`make lint-whitaker` runs `whitaker --all` over every target and feature. To
+set it up locally, install `whitaker-installer` 0.2.11 or later (for example
+with `cargo binstall whitaker-installer`) and run `whitaker-installer` once. It
+installs the lint libraries and writes the `whitaker` and `whitaker-ls`
+wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`); add that directory to `PATH`.
+Run lints through the `whitaker` wrapper, which points Dylint at Whitaker's
+verified Clippy snapshot; bare `cargo dylint` is unsupported. The first run
+builds the Dylint driver once. Whitaker's driver uses its own pinned toolchain,
+so it coexists with the repository's.
+
+Test code reaches the filesystem through `cap-std`: the toolchain tests share
+the ambient-authority helpers in `tests/toolchain/ambient.rs`, because
+Whitaker's `no_std_fs_operations` lint rejects `std::fs`.
 
 The usual loop is `make check-fmt`, `make typecheck`, `make lint`, `make test`,
 `make test-scripts`, `make design-check`, `make design-properties`, and
