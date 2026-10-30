@@ -51,12 +51,17 @@ Run the relevant subset of:
 make check-fmt
 make typecheck
 make lint
+make lint-whitaker
 make test
 make test-scripts
 make toolchain-smoke
 make design-check
 make markdownlint
 ```
+
+`make lint` already runs `make lint-whitaker`, the Whitaker Dylint suite. Run
+it through the `whitaker` wrapper, never bare `cargo dylint`. Its first run on
+a machine builds the Dylint driver and needs the network.
 
 `make toolchain-smoke` needs Python 3.14 with `compression.zstd`, and the first
 run needs network access; see the [developer guide](docs/developers-guide.md).

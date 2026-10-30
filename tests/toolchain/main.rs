@@ -8,6 +8,7 @@
 //! OPA and Lean observations live in [`smoke`] behind `#[ignore]`, because they
 //! require `make tools`.
 
+mod ambient;
 mod bdd;
 mod engine;
 mod json;

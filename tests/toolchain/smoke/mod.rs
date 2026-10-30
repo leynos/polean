@@ -21,6 +21,7 @@ use std::{
 use rstest::rstest;
 
 use crate::{
+    ambient,
     engine::ENTRYPOINT,
     json::parse_json,
     support::{
@@ -55,7 +56,7 @@ struct Pin {
 /// the expected shape.
 fn read_pin(tool: &str) -> Result<Pin, String> {
     let path = pins_path();
-    let text = std::fs::read_to_string(&path)
+    let text = ambient::read_to_string(&path)
         .map_err(|error| format!("cannot read {}: {error}; run `make tools`", path.display()))?;
     let document = parse_json(&text, "toolchain-pins.json")?;
     let entry = document
@@ -118,28 +119,38 @@ fn run(
 ) -> Result<String, String> {
     let mut command = Command::new(program);
     command.args(args).current_dir(cwd).env_clear();
-    let output = if stdin_text.is_some() {
-        let mut child = command
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|error| format!("cannot start {}: {error}", program.display()))?;
-        if let (Some(mut handle), Some(text)) = (child.stdin.take(), stdin_text) {
-            use std::io::Write as _;
-            handle
-                .write_all(text.as_bytes())
-                .map_err(|error| format!("cannot write to {}: {error}", program.display()))?;
-        }
-        child
-            .wait_with_output()
-            .map_err(|error| format!("cannot wait for {}: {error}", program.display()))?
-    } else {
-        command
+    let output = match stdin_text {
+        Some(text) => run_with_stdin(&mut command, program, text)?,
+        None => command
             .output()
-            .map_err(|error| format!("cannot run {}: {error}", program.display()))?
+            .map_err(|error| format!("cannot run {}: {error}", program.display()))?,
     };
     describe(program, args, &output)
+}
+
+/// Run `command` with `text` piped to its standard input.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the process cannot start, accept the text, or be
+/// waited for.
+fn run_with_stdin(command: &mut Command, program: &Path, text: &str) -> Result<Output, String> {
+    use std::io::Write as _;
+
+    let mut child = command
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("cannot start {}: {error}", program.display()))?;
+    if let Some(mut handle) = child.stdin.take() {
+        handle
+            .write_all(text.as_bytes())
+            .map_err(|error| format!("cannot write to {}: {error}", program.display()))?;
+    }
+    child
+        .wait_with_output()
+        .map_err(|error| format!("cannot wait for {}: {error}", program.display()))
 }
 
 /// Turn a process outcome into stdout, or a diagnostic naming both streams.
@@ -321,7 +332,7 @@ fn lean_reports_pinned_version() -> Result<(), String> {
         ));
     }
     let selection_path = repository_path("lean/lean-toolchain");
-    let selection_text = std::fs::read_to_string(&selection_path)
+    let selection_text = ambient::read_to_string(&selection_path)
         .map_err(|error| format!("cannot read {}: {error}", selection_path.display()))?;
     let selected = selection_text.trim();
     let expected = format!("leanprover/lean4:v{}", pin.version);

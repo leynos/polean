@@ -6,10 +6,11 @@
 //! follow when an installed tree is merely unreadable. These cases take an
 //! explicit [`std::path::Path`], so they run under `make test` without provisioning.
 
-use std::fs;
-
 use super::require_executable;
-use crate::scratch::{Scratch, check, check_eq};
+use crate::{
+    ambient,
+    scratch::{Scratch, check, check_eq},
+};
 
 /// An installed tool, once found, is accepted without being run.
 #[test]
@@ -17,7 +18,7 @@ fn an_installed_tool_is_accepted() -> Result<(), String> {
     let mut scratch = Scratch::try_new("installed-tool-probe")
         .map_err(|error| format!("cannot create scratch directory: {error}"))?;
     let path = scratch.path().join("installed");
-    let created = fs::write(&path, b"");
+    let created = ambient::write(&path, b"");
     check!(
         created.is_ok(),
         "could not create the scratch file {}: {created:?}",
@@ -70,7 +71,7 @@ fn an_unreachable_tool_reports_the_underlying_diagnostic() -> Result<(), String>
     let blocker = parent.join("blocker");
     let unreachable = blocker.join("opa");
 
-    let created = fs::create_dir_all(parent).and_then(|()| fs::write(&blocker, b""));
+    let created = ambient::create_dir_all(parent).and_then(|()| ambient::write(&blocker, b""));
     check!(
         created.is_ok(),
         "could not lay out the scratch tree under {}: {created:?}",

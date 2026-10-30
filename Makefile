@@ -3,9 +3,10 @@ MDTABLEFIX_SELECT = --git --include-untracked
 MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 MDLINT ?= markdownlint-cli2
 CARGO ?= cargo
+WHITAKER ?= whitaker
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke
+.PHONY: help all build clean test typecheck lint lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke
 
 SHELL := bash
 
@@ -18,9 +19,12 @@ clean: ## Remove Rust and Python build artefacts
 	$(CARGO) clean
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 
-lint: ## Build documentation and run Clippy with warnings denied
+lint: lint-whitaker ## Build documentation, run Clippy and the Whitaker suite with warnings denied
 	RUSTDOCFLAGS="-D warnings" $(CARGO) doc --no-deps --all-features
 	$(CARGO) clippy --all-targets --all-features -- -D warnings
+
+lint-whitaker: ## Run the Whitaker Dylint suite through its wrapper with warnings denied
+	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
 test: ## Run Rust unit, integration, and documentation tests
 	$(CARGO) test --all-targets --all-features

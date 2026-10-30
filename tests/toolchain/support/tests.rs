@@ -7,10 +7,11 @@
 //! Linux host the pinned tuple targets: traversing a regular file yields
 //! `ENOTDIR`, which no process can override.
 
-use std::{fs, os::unix::fs::PermissionsExt};
-
 use super::path_exists;
-use crate::scratch::{Scratch, check, check_eq};
+use crate::{
+    ambient,
+    scratch::{Scratch, check, check_eq},
+};
 
 /// A path that does not exist is absence, not a failure to inspect.
 #[test]
@@ -34,7 +35,7 @@ fn a_readable_path_reports_presence() -> Result<(), String> {
     let mut scratch = Scratch::try_new("readable-path-probe")
         .map_err(|error| format!("cannot create scratch directory: {error}"))?;
     let path = scratch.path().join("readable");
-    let created = fs::create_dir_all(&path);
+    let created = ambient::create_dir_all(&path);
     check!(
         created.is_ok(),
         "could not create the scratch directory {}: {created:?}",
@@ -63,7 +64,7 @@ fn an_unreachable_path_reports_an_error() -> Result<(), String> {
     let blocker = parent.join("blocker");
     let unreachable = blocker.join("installed");
 
-    let created = fs::create_dir_all(parent).and_then(|()| fs::write(&blocker, b""));
+    let created = ambient::create_dir_all(parent).and_then(|()| ambient::write(&blocker, b""));
     check!(
         created.is_ok(),
         "could not lay out the scratch tree under {}: {created:?}",
@@ -99,14 +100,14 @@ fn a_permission_denied_path_is_never_reported_as_absent() -> Result<(), String> 
     let directory = scratch.path();
     let installed = directory.join("installed");
 
-    let created = fs::create_dir_all(directory).and_then(|()| fs::write(&installed, b""));
+    let created = ambient::create_dir_all(directory).and_then(|()| ambient::write(&installed, b""));
     check!(
         created.is_ok(),
         "could not lay out the scratch tree under {}: {created:?}",
         directory.display()
     );
 
-    let hidden = fs::set_permissions(directory, fs::Permissions::from_mode(0o000));
+    let hidden = ambient::set_mode(directory, 0o000);
     check!(
         hidden.is_ok(),
         "could not withhold permission on {}: {hidden:?}",
@@ -117,9 +118,9 @@ fn a_permission_denied_path_is_never_reported_as_absent() -> Result<(), String> 
     // helper under test, and once through `fs::metadata` as an environment
     // probe. Reaching `installed` needs search permission on `directory`.
     let inspected = path_exists(&installed);
-    let bypasses_permissions = fs::metadata(&installed).is_ok();
+    let bypasses_permissions = ambient::metadata(&installed).is_ok();
 
-    let restored = fs::set_permissions(directory, fs::Permissions::from_mode(0o755));
+    let restored = ambient::set_mode(directory, 0o755);
     check!(
         restored.is_ok(),
         "could not restore permission on {}: {restored:?}",

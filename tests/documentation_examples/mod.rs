@@ -61,8 +61,9 @@ pub mod scope;
 
 pub mod sweep;
 
-use std::{collections::HashSet, fmt, fs, iter::Enumerate, path::Path, str::Lines};
+use std::{collections::HashSet, fmt, iter::Enumerate, str::Lines};
 
+use cap_std::{ambient_authority, fs::Dir};
 use fence::{Fence, is_closing_fence, opening_fence, strip_indent, strip_indent_of};
 
 /// User-facing documents covered by the tested-example contract.
@@ -166,9 +167,9 @@ pub fn load_documented_examples() -> Result<Vec<TestedExample>, TestedExampleErr
 ///
 /// Returns an error naming `path` when it cannot be read.
 pub fn read_repository_file(path: &str) -> Result<String, TestedExampleError> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    fs::read_to_string(root.join(path))
-        .map_err(|error| TestedExampleError::at(path, &format!("cannot read file: {error}")))
+    let read = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .and_then(|root| root.read_to_string(path));
+    read.map_err(|error| TestedExampleError::at(path, &format!("cannot read file: {error}")))
 }
 
 /// Load every marked example from one document.

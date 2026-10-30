@@ -14,16 +14,17 @@
 //! macro-driven mutable world on the pinned nightly, so every step borrows the
 //! state immutably and fills one slot.
 
-/// The per-scenario state fixture.
-///
-/// `rstest`'s fixture expansion wraps a single-expression body in braces, which
-/// `unused_braces` rejects. Upstream attach the matching expectation from a
-/// helper macro that is not published for downstream users, and an expectation
-/// written on the fixture item itself is reported as unfulfilled because the
-/// lint arises in a separate generated item. The expectation is scoped to this
-/// module so it covers only the generation it is about, and still warns if a
-/// future release stops emitting the braces.
 mod fixture {
+    //! The per-scenario state fixture.
+    //!
+    //! `rstest`'s fixture expansion wraps a single-expression body in braces, which
+    //! `unused_braces` rejects. Upstream attach the matching expectation from a
+    //! helper macro that is not published for downstream users, and an expectation
+    //! written on the fixture item itself is reported as unfulfilled because the
+    //! lint arises in a separate generated item. The expectation is scoped to this
+    //! module so it covers only the generation it is about, and still warns if a
+    //! future release stops emitting the braces.
+
     #![expect(
         unused_braces,
         reason = "rstest fixture expansion wraps a single-expression body in braces"

@@ -97,9 +97,9 @@ dependencies = [
 
 [[package]]
 name = "cap-std"
-version = "4.0.3"
+version = "4.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1ec78e242cfa2cfe276807ac2ecc00315a6c97786977414bcd1c3963b6c91b8"
+checksum = "7281235d6e96d3544ca18bba9049be92f4190f8d923e3caef1b5f66cfa752608"
 dependencies = [
  "camino",
  "cap-primitives",
@@ -934,6 +934,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 name = "polean"
 version = "0.1.0"
 dependencies = [
+ "cap-std",
  "googletest",
  "insta",
  "pretty_assertions",
