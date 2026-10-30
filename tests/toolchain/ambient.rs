@@ -21,7 +21,25 @@ use cap_std::{
 fn root() -> io::Result<Dir> { Dir::open_ambient_dir("/", ambient_authority()) }
 
 /// The path relative to the filesystem root, as `Dir` requires.
-fn beneath_root(path: &Path) -> PathBuf { path.strip_prefix("/").unwrap_or(path).to_path_buf() }
+///
+/// A capability refuses to follow a symbolic link whose target is absolute, yet
+/// `.polean` may legitimately be such a link to another disk. The parent
+/// directory is therefore resolved ambiently first, so the capability only ever
+/// sees a link-free parent. When the parent cannot be resolved (it is missing,
+/// or is a file), the path is used as given and the capability reports the
+/// honest error for it.
+fn beneath_root(path: &Path) -> PathBuf {
+    let resolved = match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => parent
+            .canonicalize()
+            .map_or_else(|_| path.to_path_buf(), |real| real.join(name)),
+        _ => path.to_path_buf(),
+    };
+    resolved
+        .strip_prefix("/")
+        .unwrap_or(&resolved)
+        .to_path_buf()
+}
 
 /// Inspect `path`, following symlinks.
 ///
@@ -84,3 +102,14 @@ pub fn remove_dir(path: &Path) -> io::Result<()> { root()?.remove_dir(beneath_ro
 ///
 /// Returns the underlying error.
 pub fn remove_dir_all(path: &Path) -> io::Result<()> { root()?.remove_dir_all(beneath_root(path)) }
+
+/// Create the symbolic link `link` pointing at `target`.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn symlink(target: &Path, link: &Path) -> io::Result<()> {
+    // A capability cannot create a link to an absolute target, which is the
+    // case under test.
+    std::os::unix::fs::symlink(target, link)
+}

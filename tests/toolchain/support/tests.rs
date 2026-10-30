@@ -154,3 +154,29 @@ fn a_permission_denied_path_is_never_reported_as_absent() -> Result<(), String> 
         .cleanup()
         .map_err(|error| format!("cannot clean scratch directory: {error}"))
 }
+
+/// A path reached through an absolute symlink is found, as `.polean` may be a
+/// link to another disk.
+#[test]
+fn a_path_behind_an_absolute_symlink_is_found() -> Result<(), String> {
+    let mut scratch = Scratch::try_new("symlink-path-probe")
+        .map_err(|error| format!("cannot create scratch directory: {error}"))?;
+    let real = scratch.path().join("real");
+    let link = scratch.path().join("link");
+    let created = ambient::create_dir_all(&real)
+        .and_then(|()| ambient::write(&real.join("tool"), b""))
+        .and_then(|()| ambient::symlink(&real, &link));
+    check!(
+        created.is_ok(),
+        "could not lay out the symlinked tree under {}: {created:?}",
+        scratch.path().display()
+    );
+    check_eq!(
+        path_exists(&link.join("tool")),
+        Ok(true),
+        "a path behind an absolute symlink must report presence"
+    );
+    scratch
+        .cleanup()
+        .map_err(|error| format!("cannot clean scratch directory: {error}"))
+}

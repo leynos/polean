@@ -53,13 +53,15 @@ targets are:
 | `make clean`             | Remove Rust and Python build artefacts.                             |
 | `make all`               | Run every local commit gate in sequence.                            |
 
-`make lint-whitaker` runs `whitaker --all` over every target and feature.
-Install the installer with the pinned `install-whitaker` action's version
-(0.2.11 or later) and run lints through the `whitaker` wrapper, which points
-Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
-unsupported. The first run on a machine builds the Dylint driver once.
-Whitaker's driver uses its own pinned toolchain, so it coexists with the
-repository's.
+`make lint-whitaker` runs `whitaker --all` over every target and feature. To
+set it up locally, install `whitaker-installer` 0.2.11 or later (for example
+with `cargo binstall whitaker-installer`) and run `whitaker-installer` once. It
+installs the lint libraries and writes the `whitaker` and `whitaker-ls`
+wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`); add that directory to `PATH`.
+Run lints through the `whitaker` wrapper, which points Dylint at Whitaker's
+verified Clippy snapshot; bare `cargo dylint` is unsupported. The first run
+builds the Dylint driver once. Whitaker's driver uses its own pinned toolchain,
+so it coexists with the repository's.
 
 Test code reaches the filesystem through `cap-std`: the toolchain tests share
 the ambient-authority helpers in `tests/toolchain/ambient.rs`, because
