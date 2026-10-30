@@ -2,7 +2,8 @@
 //!
 //! These check the spike's own contract, not Regorus: every committed fixture
 //! is described, every description resolves, the declared coverage is the whole
-//! inventory, and the hand-written IR uses only registered atoms.
+//! inventory, and the hand-written IR uses only registered atoms. The outcome
+//! test that spends these entries lives in [`crate::corpus::outcomes`].
 
 use std::{
     collections::{BTreeMap, BTreeSet},

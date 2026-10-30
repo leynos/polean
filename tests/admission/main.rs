@@ -8,9 +8,13 @@
 //! promotes it.
 //!
 //! EP-M1 commits the fixture corpus, its manifest, and the observation of what
-//! Regorus itself does with every fixture. Classification arrives in EP-M2 and
-//! EP-M3.
+//! Regorus itself does with every fixture. EP-M2 adds the closed decoder and the
+//! profile walk; EP-M3 adds the canonical-token recognizer.
 
+mod admission;
+mod ast;
+mod ast_mutations;
 mod corpus;
+mod frontend;
 mod inventory;
 mod observations;

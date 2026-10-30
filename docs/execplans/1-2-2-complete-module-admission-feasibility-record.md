@@ -188,7 +188,18 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   test, and the observation snapshot. All 18 tests pass. The Red O3 stub run is
   recorded under `Artefacts and notes`. No `src/` change,
   `examples/tenant-write/` untouched, no new dependency.
-- [ ] EP-M2: closed AST decoding, profile walk, and inventory guard.
+- [x] (2026-10-30) EP-M2: closed AST decoding, profile walk, and inventory
+  guard. `tests/admission/ast/` decodes the frontend's AST JSON through fixed
+  key and variant tables; `tests/admission/admission/` walks the decoded module
+  in D16's precedence; `tests/admission/ast_mutations/` mutates every parsed
+  fixture's AST in ten classes. All 37 tests pass: O1 compares 46 kind counts
+  per fixture, O2 rejects all 77,884 mutants at stage `decode` (counts per
+  class in the new snapshot), and O3 reports zero manifest mismatches, leaving
+  exactly the seven recognizer-stage fixtures as `outcome=gap`. The sweep found
+  and closed one decoder gap: a literal's own `span` was never read. Because
+  the sweep re-serializes valid JSON, `ast.serialize` gains its fixture from a
+  decoder test that feeds malformed text (D17). No `src/` change,
+  `examples/tenant-write/` untouched, no new dependency.
 - [ ] EP-M3: canonical-token recognizer, witness checker, and properties.
 - [ ] EP-M4: Verus soundness proof of the recognizer kernel (D14).
 - [ ] EP-M5: feasibility record, ADR 0005, and documentation updates.
@@ -300,6 +311,41 @@ execution here. The probe harness was not committed.
   `with`, `metadata-*`, `parens`, `empty-body` and `v0-*` cases, and the
   matching corpus fixtures. Impact: these are precisely the classes the
   recognizer must decide.
+- Observation (EP-M2, 2026-10-30): the mutation sweep found a real closure gap
+  in the first decoder draft. Every `Literal` variant declares a `span`, but
+  the decoder read only the arm-specific fields, so a mutated or missing span
+  on the literal wrapper was invisible while the same span on an expression was
+  rejected. Evidence: 2,466 of 77,884 mutants were admitted before
+  `decode_body::literal` began validating the wrapper span; every mutant is
+  rejected afterwards. Impact: a closed table is not a closed walk. The sweep,
+  not a review of the table, is what showed the unread field, and a later table
+  edit that declares a field the decoder never reads will be caught the same
+  way.
+- Observation (EP-M2, 2026-10-30): the D16 precedence holds for every corpus
+  fixture. Array, set, and object literals and the three comprehension forms
+  render no canonical text, so they reach `atom.unknown` rather than
+  `expr.kind`, exactly as D16's closing clause says; calls, unary, binary,
+  arithmetic, assignment, and membership expressions reach `expr.kind`. The
+  manifest fixtures `expr/` state both outcomes. Impact: no code or manifest
+  change was needed, and D16 is confirmed rather than amended.
+- Observation (EP-M2, 2026-10-30): the repository denies `allow_attributes` and
+  `allow_attributes_without_reason` while `clippy.toml` lowers the argument and
+  complexity thresholds, so a generator built from free functions with long
+  parameter lists cannot pass `make lint` without suppression. Evidence: the
+  first lint run reported 37 diagnostics, all in the new test modules, and the
+  fix was structural: `Collector` records mutations through one `Expect` value
+  carrying the class, reason code, and description. Impact: new test
+  scaffolding is shaped by the lint configuration from the start; a helper that
+  needs five arguments is a signal to bundle its data.
+- Observation (EP-M2, 2026-10-30): the mutation sweep cannot reach
+  `ast.serialize`, because it applies changes to a parsed value and
+  re-serializes that value. Every mutant is therefore well-formed JSON, and
+  only text the decoder receives from outside can fail to parse. Evidence: no
+  mutant carries `ast.serialize`, and `ast/tests.rs` needs a direct call to
+  reach that branch. Impact: D17 is amended so the ninth `ast.*` code has a
+  named fixture (a malformed-JSON decoder test) instead of an unproven claim
+  that the sweep covers it. The general lesson: an oracle built from parsed
+  values cannot exercise the parse step; that step needs its own input.
 
 ## Decision log
 
@@ -407,8 +453,8 @@ execution here. The probe harness was not committed.
   parse failure, not a serialization failure. `limits/number-overflow.rego`
   expects `parse` / `parse.number`. `Stage::Serialize` and `ast.serialize` stay
   in the closed sets because a frontend or feature change could still fail
-  there, and the EP-M2 mutation sweep is their fixture; the corpus explicitly
-  never expects an adapter stage (enforced by a test).
+  there; a decoder unit test feeds malformed text for that branch (see D17).
+  The corpus explicitly never expects an adapter stage (enforced by a test).
 - D16 (2026-10-30, EP-M1): the reason-code mapping is fixed by the manifest
   and is implemented in EP-M2 in this precedence order: package shape, import
   shape, `ast.target`, default shape, order shape, rule limit, rule head, rule
@@ -422,17 +468,34 @@ execution here. The probe harness was not committed.
   code unambiguous and keeps the more specific diagnosis from being masked by a
   generic one. The manifest is the executable statement of this decision; EP-M2
   changes it only with a recorded reason.
-- D17 (2026-10-30, EP-M1): the `ast.*` codes are fixtures of the EP-M2
-  mutation sweep, not of the source corpus, because no source can make
+- D17 (2026-10-30, EP-M1; amended EP-M2): the `ast.*` codes are fixtures of
+  the EP-M2 mutation sweep, not of the source corpus, because no source can make
   `serde_json` produce a malformed AST. `ReasonCode::AST_CODES` names the nine
   codes, and a corpus test asserts the source corpus uses exactly `ALL` minus
   `AST_CODES`. This keeps the coverage test honest without inventing a source
-  fixture that cannot exist.
+  fixture that cannot exist. Amendment: eight of the nine are emitted by the
+  sweep; `ast.serialize` is not, because every mutant is re-serialized as valid
+  JSON. `ast/tests.rs` therefore feeds malformed text (`{`, `not json`, the
+  empty string) directly to the decoder and asserts `ast.serialize`, so the
+  ninth code has a fixture rather than only a reachable branch.
 - D18 (2026-10-30, EP-M1): `module.target` is decided at the profile stage
   from the decoded `ast.target`, not from a source scan. The JSON route exposes
   the value (`"target": "rego"`), so no additional input is needed. Placement
   errors (before an import, after a rule) are frontend parse failures and are
   reported as `parse.syntax`.
+- D19 (2026-10-30, EP-M2): the decoder lives in `tests/admission/ast/` and the
+  profile walk in `tests/admission/admission/`, not in the `decode/` and
+  `profile/` directories sketched under `Interfaces and dependencies`.
+  Rationale: `admission::classify` and `admission::admit` are the entry points,
+  so the walk belongs beside them, and `ast::decode` names the decoder more
+  precisely than a bare `decode`. The layout rule is unchanged: a directory
+  with tests holds `mod.rs` plus `tests.rs`, and every file stays under 400
+  lines. Four files crossed that limit during implementation and were split:
+  `ast/schema/` separates the closed-object readers, the scalar readers, and
+  the span readers; `ast/expr_variants.rs` holds the expression variant table
+  apart from its dispatch; `admission/walk/` separates the module checks from
+  the statement checks; and `ast_mutations/generate/` separates the classes and
+  their application from the shape discovery.
 
 ## Outcomes & retrospective
 
@@ -1064,9 +1127,47 @@ carriage return, NUL in a comment, over-long token; CRLF parses),
 `__target__` placement errors, `package/missing.rego`, and
 `import/after-rule.rego`.
 
+### EP-M2 observation snapshot summary (2026-10-30)
+
+`tests/admission/snapshots/admission__observations__corpus.snap` now records
+`walk=` and `outcome=` on each of its 105 lines. Admission admits 28 fixtures,
+rejects 65 at the profile stage, and records no decision for the 12 that the
+frontend rejects at parse. Every outcome is `match` except the seven
+`outcome=gap` lines, which are exactly the fixtures the manifest marks
+`stage: recognizer`: `atom/escaped-spelling`, `body/semicolon`, `body/unbraced`,
+`trivia/metadata-block`, `trivia/metadata-inline`, `trivia/parentheses`, and
+`trivia/unicode-comment`. Those seven are admitted by the walk: the
+demonstrated EP-M2 gap, and the set O3 requires until EP-M3. The profile
+rejections split as 18 `atom.unknown`, 13 `expr.kind`, 6 `rule.head`, 5
+`import.shape`, 5 `operator.kind`, 5 `default.shape`, 4 `literal.kind`, 2
+`package.shape`, 2 `rule.body`, and one each of `with.modifier`, `rule.limit`,
+`order.shape`, `module.target`, and `body.limit`.
+
+### EP-M2 mutation sweep (2026-10-30)
+
+`tests/admission/snapshots/admission__ast_mutations__counts.snap` records the
+sweep over the 93 fixtures the frontend parses: 77,884 mutants, every one
+rejected at stage `decode` with the code its class names.
+
+```plaintext
+unknown-tag        mutants=4774
+unknown-operator   mutants=320
+unknown-key        mutants=9406
+missing-key        mutants=25995
+wrong-type         mutants=28385
+wrong-arity        mutants=612
+span               mutants=7392
+optional-present   mutants=814
+module-count       mutants=93
+source-mismatch    mutants=93
+total     mutants=77884
+```
+
+The sweep also requires the unmutated AST of every admitted fixture to be
+admitted, so a decoder that rejected everything would not pass.
+
 Still to be filled in during implementation:
 
-- the mutant counts;
 - the trivia-class counts;
 - the seeded-fault transcripts;
 - the Verus Red and Green transcripts.

@@ -20,6 +20,8 @@ use std::collections::BTreeMap;
 
 use regorus::Engine;
 
+use crate::frontend;
+
 mod kinds;
 mod walk;
 
@@ -41,24 +43,31 @@ pub enum Observation {
 
 /// Observe one source with the pinned frontend.
 ///
-/// The engine is configured as the profile requires: Rego v1, not v0. The
-/// observation parses, serializes, and then walks the typed AST. Parsing is
+/// The observation parses, serializes, and then walks the typed AST. Parsing is
 /// attempted before serialization because a source that does not parse has no
 /// serializable AST to report on.
 pub fn observe(source: &str) -> Observation {
-    let mut engine = Engine::new();
-    engine.set_rego_v0(false);
-    if let Err(error) = engine.add_policy("fixture.rego".to_owned(), source.to_owned()) {
-        return Observation::Rejected(error.to_string());
-    }
+    let mut engine = match frontend::parse(source) {
+        Ok(engine) => engine,
+        Err(message) => return Observation::Rejected(message),
+    };
     if let Err(error) = engine.get_ast_as_json() {
         return Observation::SerializeFailed(error.to_string());
     }
+    Observation::Parsed(count(&mut engine))
+}
+
+/// Count the node kinds in every module the engine holds.
+///
+/// This is the reference side of O1: the typed walk's multiset of kinds, which
+/// the JSON decoder's multiset must equal for every fixture.
+#[must_use]
+pub fn count(engine: &mut Engine) -> KindCounts {
     let mut counts = KindCounts::new();
     for module in engine.get_modules() {
         walk::visit_module(module, &mut counts);
     }
-    Observation::Parsed(counts)
+    counts
 }
 
 #[cfg(test)]

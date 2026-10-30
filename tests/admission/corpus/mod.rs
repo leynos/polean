@@ -19,8 +19,10 @@ use serde_json::Value as Json;
 
 mod generated;
 mod manifest;
+mod profile;
 
 pub use manifest::{Entry, Expected, Origin, ReasonCode, Stage};
+pub use profile::Profile;
 
 /// The corpus manifest, as committed.
 pub const MANIFEST: &str = include_str!("../../../examples/admission/manifest.json");
@@ -78,16 +80,21 @@ pub fn ir_rules(relative: &str) -> Result<Vec<Vec<String>>, String> {
         .collect()
 }
 
-/// The atom names registered by `contracts/profile.json`.
-pub fn profile_atoms() -> Result<BTreeSet<String>, String> {
-    let value: Json = serde_json::from_str(PROFILE)
-        .map_err(|error| format!("contracts/profile.json is not JSON: {error}"))?;
-    let atoms = value
-        .get("atoms")
-        .and_then(Json::as_object)
-        .ok_or_else(|| "contracts/profile.json has no `atoms` object".to_owned())?;
-    Ok(atoms.keys().cloned().collect())
-}
+/// The profile the admission spike enforces.
+///
+/// # Errors
+///
+/// Returns a description of the first missing, mistyped, or contradictory key
+/// in the committed contract.
+pub fn profile_contract() -> Result<Profile, String> { profile::profile(PROFILE) }
 
+/// The atom names registered by `contracts/profile.json`.
+///
+/// # Errors
+///
+/// Returns a description of the first fault in the committed contract.
+pub fn profile_atoms() -> Result<BTreeSet<String>, String> { Ok(profile_contract()?.atom_names()) }
+
+mod outcomes;
 #[cfg(test)]
 mod tests;
