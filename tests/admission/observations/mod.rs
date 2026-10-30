@@ -1,20 +1,21 @@
-//! What the pinned Regorus and the EP-M2 walk do with every corpus fixture.
+//! What the pinned Regorus, the walk, and the recognizer do with every fixture.
 //!
 //! One line per fixture records what the feasibility record needs: whether
 //! `Engine::add_policy` accepted the source, whether `get_ast_as_json` then
 //! succeeded, the multiset of typed AST node kinds the module contains, what
-//! admission decided, and how that decision compares with the manifest. A
-//! fixture that parses is not thereby admitted to the profile, so the frontend
-//! fields and the walk field are kept apart.
+//! the walk decided, what the recognizer decided, and how admission as a whole
+//! compares with the manifest. A fixture that parses is not thereby admitted to
+//! the profile, and one the walk admits is not thereby written canonically, so
+//! the three fields are kept apart.
 //!
 //! The snapshot is a change detector. A Regorus bump that changes which sources
 //! parse, or which node kinds they contain, changes the snapshot and must be
-//! reviewed. EP-M3 adds the recognizer's own field.
+//! reviewed.
 
 use std::fmt::Write as _;
 
 use crate::{
-    admission::{self, Comparison, Decision},
+    admission::{self, Classification, Comparison, Decision, Rejection},
     corpus::{self, Entry, Profile},
     inventory::{Observation, observe},
 };
@@ -54,28 +55,47 @@ fn describe(entry: &Entry, profile: &Profile) -> Result<String, String> {
         Observation::Rejected(message) => format!("regorus=rejected  {}", summarise(&message)),
     };
     let classification = admission::classify(profile, &source);
-    let walk = match &classification.decision {
-        None => "-".to_owned(),
-        Some(Decision::Admitted(_)) => "admitted".to_owned(),
-        Some(Decision::Rejected(rejection)) => {
-            let mut rendered = format!(
-                "rejected {}.{}",
-                rejection.stage.as_wire(),
-                rejection.code.as_wire()
-            );
-            if let Some((start, end)) = rejection.span {
-                write!(rendered, " [{start}, {end})")
-                    .map_err(|error| format!("cannot render a rejection span: {error}"))?;
-            }
-            rendered
-        }
-    };
     let outcome = match admission::compare(&entry.expected, &classification) {
         Comparison::Match => "match".to_owned(),
-        Comparison::Gap => "gap".to_owned(),
         Comparison::Mismatch(detail) => format!("mismatch: {}", clip(&detail)),
     };
-    Ok(format!("{observed}  walk={walk}  outcome={outcome}"))
+    let (walk, recognizer) = stages(&classification);
+    Ok(format!(
+        "{observed}  walk={walk}  recognizer={recognizer}  outcome={outcome}"
+    ))
+}
+
+/// Render the walk and recognizer fields of one classification.
+///
+/// The recognizer runs only on a module the walk admitted, so a recognizer
+/// trace means the walk admitted even when admission as a whole rejected the
+/// source. A `-` in the recognizer field means the source never reached it.
+fn stages(classification: &Classification) -> (String, String) {
+    let walk = match &classification.decision {
+        Some(Decision::Admitted(_)) => "admitted".to_owned(),
+        Some(Decision::Rejected(_)) if classification.recognizer.is_some() => "admitted".to_owned(),
+        Some(Decision::Rejected(rejection)) => rejection_text(rejection),
+        None => "-".to_owned(),
+    };
+    let recognizer = match (&classification.recognizer, &classification.decision) {
+        (None, _) => "-".to_owned(),
+        (Some(Ok(_)), _) => "accepted".to_owned(),
+        (Some(Err(_)), Some(Decision::Rejected(rejection))) => rejection_text(rejection),
+        (Some(Err(_)), Some(Decision::Admitted(_)) | None) => "rejected".to_owned(),
+    };
+    (walk, recognizer)
+}
+
+/// Render a rejection as its stage, code, and span.
+fn rejection_text(rejection: &Rejection) -> String {
+    let span = rejection
+        .span
+        .map_or_else(String::new, |(start, end)| format!(" [{start}, {end})"));
+    format!(
+        "rejected {}.{}{span}",
+        rejection.stage.as_wire(),
+        rejection.code.as_wire()
+    )
 }
 
 /// Reduce a mismatch description to one short line.

@@ -14,7 +14,10 @@
 mod admission;
 mod ast;
 mod ast_mutations;
+mod bdd;
 mod corpus;
 mod frontend;
 mod inventory;
 mod observations;
+mod properties;
+mod recognizer;

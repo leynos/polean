@@ -200,9 +200,6 @@ fn the_unmutated_ast_of_every_admitted_fixture_is_admitted() {
                     entry.label()
                 )
             }
-            admission::Comparison::Gap => {
-                panic!("{} is expected admitted but was only a gap", entry.label())
-            }
         }
     }
     assert!(checked > 0, "the corpus must contain an admitted fixture");
