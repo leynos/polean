@@ -18,7 +18,7 @@ cap-std = "=4.0.2"
 googletest = "=0.14.3"
 insta = "=1.49.0"
 pretty_assertions = "=1.4.1"
-regorus = { version = "=0.13.0", default-features = false, features = ["ast", "std"] }
+regorus = { version = "=0.14.0", default-features = false, features = ["ast", "std"] }
 rstest = "=0.27.0"
 rstest-bdd = "=0.6.0"
 rstest-bdd-macros = "=0.6.0"
