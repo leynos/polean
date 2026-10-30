@@ -200,7 +200,25 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   the sweep re-serializes valid JSON, `ast.serialize` gains its fixture from a
   decoder test that feeds malformed text (D17). No `src/` change,
   `examples/tenant-write/` untouched, no new dependency.
-- [ ] EP-M3: canonical-token recognizer, witness checker, and properties.
+- [x] (2026-10-30) EP-M3: canonical-token recognizer, witness checker, and
+  properties. `tests/admission/recognizer/` renders the canonical tokens from
+  `contracts/profile.json`, recognises them with the bounded kernel EP-M4 will
+  verify, confirms every accepted offset list with an independent witness, and
+  cross-checks the tokens against the pinned Regorus lexer. Four seeded kernel
+  faults (metadata rule skipped, token after a comment, empty trivia, bare
+  carriage return) are each caught by the witness.
+  `tests/admission/properties/` checks 64 generated canonical sources across
+  six trivia classes with a per-class floor, inserts 32 random strings into a
+  comment, and pins four boundary shapes. `tests/admission/features/` binds
+  three scenarios, each derived at test time from
+  `examples/tenant-write/policy.rego` and its committed rule list: the baseline
+  admitted, a leading `METADATA` comment refused at `trivia.metadata`, and a
+  parenthesised comparison refused at `token.mismatch`. The whole corpus now
+  matches the manifest: O3 reports zero mismatches, so the seven EP-M2 gaps are
+  closed and `Comparison::Gap` is deleted. 60 tests pass, and all six
+  applicable commit gates (`check-fmt`, `typecheck`, `lint`, `test`,
+  `markdownlint`, `design-check`) are green. The only new dependency is
+  `proptest = "=1.12.0"`. No `src/` change, `examples/tenant-write/` untouched.
 - [ ] EP-M4: Verus soundness proof of the recognizer kernel (D14).
 - [ ] EP-M5: feasibility record, ADR 0005, and documentation updates.
 
@@ -346,6 +364,31 @@ execution here. The probe harness was not committed.
   named fixture (a malformed-JSON decoder test) instead of an unproven claim
   that the sweep covers it. The general lesson: an oracle built from parsed
   values cannot exercise the parse step; that step needs its own input.
+- Observation (EP-M3, 2026-10-30): the pinned Regorus lexer excludes a string
+  token's quotes from its span, so `"write"` appears in the lexer as `write`,
+  while the canonical token keeps the quotes the source must spell. Evidence:
+  the first O7 run failed on 13 corpus fixtures and one generated case with
+  ``the lexer produced `write` where the canonical tokens have `"write"` ``.
+  Impact: the cross-check normalises the canonical token by stripping a matched
+  leading and trailing quote pair before comparing. This is a comparison rule,
+  not a change to the recognizer: the source still has to spell the quotes.
+- Observation (EP-M3, 2026-10-30): the D10 rule is not expressible as a token
+  property. A token that follows a comment on the same line has the right text
+  at a gap that contains no line feed, so only the gap's content distinguishes
+  it. Evidence: the seeded "comment ends at whitespace" fault returns the
+  correct offsets for `package #c authz`, and the witness refuses the gap. The
+  kernel and the witness both therefore require a comment to be followed by its
+  line feed inside the gap, and allow a comment to end at the end of the source
+  only when no token follows.
+- Observation (EP-M3, 2026-10-30): a source-mask fault is a weaker test than it
+  looks unless the faulty kernel is first shown to accept the source. The first
+  draft of the metadata and comment faults blanked the token text itself, so
+  the faulty kernel stopped before producing offsets and the test proved
+  nothing. Evidence:
+  `the faulty kernel must recognise the source, stopped at 18` and
+  `the comment holds the byte 0x0d`. Impact: `witness_refusal` panics when the
+  injected kernel refuses the source, so a mask that breaks the source cannot
+  masquerade as a caught fault.
 
 ## Decision log
 
@@ -496,6 +539,17 @@ execution here. The probe harness was not committed.
   apart from its dispatch; `admission/walk/` separates the module checks from
   the statement checks; and `ast_mutations/generate/` separates the classes and
   their application from the shape discovery.
+- D20 (2026-10-30, EP-M3): the O7 cross-check strips one matched pair of
+  quotes from a canonical string token before comparing it with the pinned
+  lexer, because Regorus excludes a string's quotes from its token span. The
+  recognizer itself is unchanged: the source must still spell the quotes.
+  Separately, a `Refusal::Harness` from the recognizer cannot occur after a
+  successful walk, because the walk rejects an unregistered atom first; it is
+  nevertheless reported as a profile `atom.unknown` rejection with no
+  recognizer trace, so a defect in the walk fails closed rather than admitting
+  the module. Rationale: a comparison rule for evidence must not weaken the
+  property it is evidence for, and an unreachable branch must still have a
+  defined, failing outcome.
 
 ## Outcomes & retrospective
 
@@ -1166,10 +1220,77 @@ total     mutants=77884
 The sweep also requires the unmutated AST of every admitted fixture to be
 admitted, so a decoder that rejected everything would not pass.
 
+### EP-M3 observation snapshot summary (2026-10-30)
+
+`tests/admission/snapshots/admission__observations__corpus.snap` now records
+`walk=`, `recognizer=`, and `outcome=` on each of its 105 lines, and all 105
+outcomes are `match`. The walk admits 28 fixtures. Of those, the recognizer
+accepts 21 and refuses seven: `atom/escaped-spelling` and `body/semicolon` and
+`body/unbraced` at `token.mismatch`, `trivia/metadata-block` and
+`trivia/metadata-inline` at `trivia.metadata` (span `[0, 1)`, the leading `#`),
+`trivia/parentheses` at `token.mismatch`, and `trivia/unicode-comment` at
+`trivia.byte` (span `[47, 49)`, both bytes of `é`). The 65 profile rejections
+and the 12 parse rejections are unchanged from EP-M2. Every recognizer span is
+inside its source.
+
+### EP-M3 property evidence (2026-10-30)
+
+`properties::tests::every_generated_canonical_source_is_admitted` generates 64
+cases with a deterministic `TestRunner` and requires each of the six trivia
+classes — space, tab, newline, blank line, comment, and CRLF — to appear at
+least four times across the generated gaps; the run passes, so every class
+exceeds the floor. Each generated source must be admitted as exactly its own
+rule list, confirmed by the witness, and agreed by the pinned lexer.
+`inserting_text_into_a_comment_does_not_change_the_outcome` performs 32 random
+insertions into a comment body and requires the same rule list each time.
+`pinned_boundary_shapes` admits the empty rule list and the 16×16 maximum, and
+requires `rule.limit` for 17 rules and `body.limit` for 17 literals.
+
+### EP-M3 seeded-fault transcript (2026-10-30)
+
+Each fault is a real kernel function with the kernel's signature, injected
+through `witness_refusal`. The harness first requires the faulty kernel to
+accept the source, then requires the witness to refuse the offsets it returns.
+The four faults and the witness's message:
+
+```plaintext
+metadata rule skipped        the gap before token 0: the comment spells METADATA
+comment ends at whitespace   the gap before token 1: a comment is not followed by a line feed
+empty trivia                 the gap before token 1 is empty
+bare carriage return         the gap before token 1: byte 0x0d at offset 24 is not trivia
+```
+
+### EP-M3 feasibility scenarios (2026-10-30)
+
+`tests/admission/features/admission_feasibility.feature` states the three
+scenarios the milestone's acceptance names, and `tests/admission/bdd.rs`
+derives every scenario from the committed baseline at test time rather than
+from a small fixture:
+
+- the baseline `examples/tenant-write/policy.rego` is admitted with exactly the
+  rule list in `examples/tenant-write/policy.json`;
+- the same source preceded by a `# METADATA` comment block is admitted by the
+  walk and refused by the recognizer at `trivia.metadata`;
+- the same source with one comparison wrapped in parentheses is admitted by the
+  walk and refused by the recognizer at `token.mismatch`.
+
+The second and third scenarios are the feasibility claim in miniature: each
+source is written in the profile's syntax, so the AST walk cannot tell it from
+the baseline, and only the source bytes separate them. All three pass.
+
+### EP-M3 gate evidence (2026-10-30)
+
+`make check-fmt`, `make typecheck`, `make lint`, `make test`,
+`make markdownlint`, and `make design-check` all pass on the candidate that
+introduces the recognizer, properties, and scenarios: `make test` reports the
+admission target's 60 tests, including the three scenarios; `make lint` is
+clean under `cargo doc` with `-D warnings` and
+`cargo clippy --all-targets --all-features -- -D warnings`. `make test-scripts`
+and `make toolchain-smoke` are not applicable: the change touches no pin,
+`scripts/`, `lean/`, or `tests/toolchain/` path.
+
 Still to be filled in during implementation:
 
-- the trivia-class counts;
-- the seeded-fault transcripts;
 - the Verus Red and Green transcripts.
 
 ## Interfaces and dependencies

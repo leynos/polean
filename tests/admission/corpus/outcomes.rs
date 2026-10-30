@@ -1,15 +1,15 @@
 //! O3: every fixture yields the outcome its manifest entry states.
 //!
 //! The manifest is the corpus's own contract. This module compares each
-//! entry's declared outcome with what admission decides, reports every
-//! disagreement together, and requires the only remaining gaps to be the
-//! recognizer-stage fixtures EP-M3 is due to close.
-
-use std::collections::BTreeSet;
+//! entry's declared outcome with what admission decides and reports every
+//! disagreement together. A fixture admission admits is then checked twice
+//! more: the witness confirms the recognizer's offsets independently (O4), and
+//! the pinned lexer confirms the canonical tokens (O7).
 
 use crate::{
-    admission::{self, Comparison, Decision, Rejection},
-    corpus::{self, Entry, Expected, Profile, Stage},
+    admission::{self, Classification, Comparison, Decision, Rejection},
+    corpus::{self, Entry, Profile},
+    recognizer,
 };
 
 /// The parsed manifest, or a panic naming the first parse failure.
@@ -28,25 +28,6 @@ fn profile() -> Profile {
     }
 }
 
-/// The source of one entry, or a panic naming the read failure.
-fn source(entry: &Entry) -> String {
-    match corpus::source(entry) {
-        Ok(source) => source,
-        Err(error) => panic!("{error}"),
-    }
-}
-
-/// Whether the manifest expects a recognizer-stage rejection.
-const fn expects_recognizer(expected: &Expected) -> bool {
-    matches!(
-        expected,
-        Expected::Rejected {
-            stage: Stage::Recognizer,
-            ..
-        }
-    )
-}
-
 /// The failure message for a rejection span that is not inside the source.
 fn span_problem(label: &str, rejection: &Rejection, len: usize) -> Option<String> {
     let (start, end) = rejection.span?;
@@ -58,32 +39,75 @@ fn span_problem(label: &str, rejection: &Rejection, len: usize) -> Option<String
     ))
 }
 
-/// Check one fixture, recording a failure and returning its gap label.
-fn check_fixture(
-    profile: &Profile,
-    entry: &Entry,
-    source: &str,
-    failures: &mut Vec<String>,
-) -> Option<String> {
-    let classification = admission::classify(profile, source);
-    if let Some(Decision::Rejected(rejection)) = &classification.decision
-        && let Some(problem) = span_problem(&entry.label(), rejection, source.len())
-    {
-        failures.push(problem);
+/// One pass over the corpus, accumulating faults rather than stopping at the
+/// first, so a reviewer sees every disagreement at once.
+struct Checker<'a> {
+    /// The profile every fixture is admitted against.
+    profile: &'a Profile,
+    /// The faults found so far.
+    failures: Vec<String>,
+}
+
+impl Checker<'_> {
+    /// Check one fixture against its manifest entry.
+    fn fixture(&mut self, entry: &Entry) {
+        let source = match corpus::source(entry) {
+            Ok(source) => source,
+            Err(error) => panic!("{error}"),
+        };
+        let classification = admission::classify(self.profile, &source);
+        if let Some(Decision::Rejected(rejection)) = &classification.decision
+            && let Some(problem) = span_problem(&entry.label(), rejection, source.len())
+        {
+            self.failures.push(problem);
+        }
+        match admission::compare(&entry.expected, &classification) {
+            Comparison::Match => self.admitted(entry, &source, &classification),
+            Comparison::Mismatch(detail) => {
+                self.failures.push(format!("{}: {detail}", entry.label()));
+            }
+        }
     }
-    match admission::compare(&entry.expected, &classification) {
-        Comparison::Match => None,
-        Comparison::Gap if expects_recognizer(&entry.expected) => Some(entry.label()),
-        Comparison::Gap => {
-            failures.push(format!(
-                "{}: only a recognizer-stage fixture may be a gap",
+
+    /// Re-check an admitted source with the witness and the pinned lexer.
+    ///
+    /// A manifest match that admitted the source must come with recognizer
+    /// offsets; one without them is itself a fault, because it means admission
+    /// accepted a source whose canonical spelling was never checked.
+    fn admitted(&mut self, entry: &Entry, source: &str, classification: &Classification) {
+        let Some(Decision::Admitted(ir)) = &classification.decision else {
+            return;
+        };
+        let Some(Ok(offsets)) = &classification.recognizer else {
+            self.failures.push(format!(
+                "{}: admission admitted the source without a recognizer witness",
                 entry.label()
             ));
-            None
+            return;
+        };
+        let tokens = match recognizer::canonical_tokens(self.profile, ir) {
+            Ok(tokens) => tokens,
+            Err(detail) => {
+                self.failures.push(format!("{}: {detail}", entry.label()));
+                return;
+            }
+        };
+        if let Err(detail) = recognizer::confirm(
+            source.as_bytes(),
+            &tokens.bytes(),
+            &tokens.needs_newline,
+            offsets,
+        ) {
+            self.failures.push(format!(
+                "{}: the witness refused the admission: {detail}",
+                entry.label()
+            ));
         }
-        Comparison::Mismatch(detail) => {
-            failures.push(format!("{}: {detail}", entry.label()));
-            None
+        if let Err(detail) = recognizer::cross_check(source, &tokens.text) {
+            self.failures.push(format!(
+                "{}: the pinned lexer disagrees with the canonical tokens: {detail}",
+                entry.label()
+            ));
         }
     }
 }
@@ -92,33 +116,25 @@ fn check_fixture(
 fn every_fixture_yields_its_manifest_outcome() {
     let entries = manifest();
     let profile = profile();
-    let mut failures = Vec::new();
-    let mut gaps = BTreeSet::new();
+    let mut checker = Checker {
+        profile: &profile,
+        failures: Vec::new(),
+    };
     for entry in &entries {
-        if let Some(label) = check_fixture(&profile, entry, &source(entry), &mut failures) {
-            gaps.insert(label);
-        }
+        checker.fixture(entry);
     }
-    let expected_gaps: BTreeSet<String> = entries
-        .iter()
-        .filter(|entry| expects_recognizer(&entry.expected))
-        .map(Entry::label)
-        .collect();
-    if !failures.is_empty() {
-        let shown = failures
+    if !checker.failures.is_empty() {
+        let shown = checker
+            .failures
             .iter()
             .take(20)
             .cloned()
             .collect::<Vec<_>>()
             .join("\n");
         panic!(
-            "{} of {} fixtures did not yield their manifest outcome; first mismatches:\n{shown}",
-            failures.len(),
+            "{} faults while checking {} fixtures; first faults:\n{shown}",
+            checker.failures.len(),
             entries.len()
         );
     }
-    assert_eq!(
-        gaps, expected_gaps,
-        "exactly the recognizer-stage fixtures must remain the only gaps"
-    );
 }

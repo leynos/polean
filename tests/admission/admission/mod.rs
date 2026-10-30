@@ -1,20 +1,22 @@
-//! Admission for `polean.tenant-write.v0`, up to the AST walk.
+//! Admission for `polean.tenant-write.v0`.
 //!
-//! Admission is a conjunction of checks. EP-M2 implements the first two: the
-//! closed decoder turns the frontend's AST JSON into a Polean-owned tree, and
-//! the profile walk decides whether that tree is the profile's module. EP-M3
-//! adds the canonical-token recognizer, which is the only check that can see
-//! what the AST discards.
+//! Admission is a conjunction of three checks. The closed decoder turns the
+//! frontend's AST JSON into a Polean-owned tree, the profile walk decides
+//! whether that tree is the profile's module, and the canonical-token
+//! recognizer decides whether the source is written as that module. Only the
+//! last can see what the AST discards.
 //!
 //! Two outcomes are distinguished from a harness failure. [`Decision`] is what
 //! admission decided about a source; [`Classification`] also records what the
-//! frontend itself did, so a caller can tell "Regorus refused this" from "the
-//! walk refused this". A contract or fixture that cannot be read is neither:
-//! those surface as `Err(String)` from the corpus module.
+//! frontend itself did and what the recognizer did, so a caller can tell
+//! "Regorus refused this" from "the walk refused this" from "the recognizer
+//! refused this". A contract or fixture that cannot be read is neither: those
+//! surface as `Err(String)` from the corpus module.
 
 use crate::{
     ast,
     corpus::{Expected, Profile, ReasonCode, Stage},
+    recognizer,
 };
 
 mod walk;
@@ -118,9 +120,15 @@ pub struct Classification {
     pub frontend: Frontend,
     /// What admission decided, when the frontend produced AST JSON.
     pub decision: Option<Decision>,
+    /// What the recognizer did, when the walk admitted the module.
+    ///
+    /// `Some(Ok)` gives every canonical token's start offset; `Some(Err)` gives
+    /// the offset at which recognition stopped. `None` means the recognizer did
+    /// not run, because the module never reached it.
+    pub recognizer: Option<Result<Vec<usize>, usize>>,
 }
 
-/// Classify one source with the pinned frontend and the profile walk.
+/// Classify one source with the pinned frontend and admission.
 #[must_use]
 pub fn classify(profile: &Profile, source: &str) -> Classification {
     match crate::frontend::parse(source) {
@@ -130,17 +138,23 @@ pub fn classify(profile: &Profile, source: &str) -> Classification {
                 message,
             },
             decision: None,
+            recognizer: None,
         },
         Ok(engine) => match engine.get_ast_as_json() {
-            Ok(ast_json) => Classification {
-                frontend: Frontend::Parsed(ast_json.clone()),
-                decision: Some(admit(profile, source, &ast_json)),
-            },
+            Ok(ast_json) => {
+                let (decision, recognizer) = decide(profile, source, &ast_json);
+                Classification {
+                    frontend: Frontend::Parsed(ast_json),
+                    decision: Some(decision),
+                    recognizer,
+                }
+            }
             Err(error) => Classification {
                 frontend: Frontend::SerializeFailed {
                     message: error.to_string(),
                 },
                 decision: None,
+                recognizer: None,
             },
         },
     }
@@ -161,12 +175,39 @@ fn parse_code(message: &str) -> ReasonCode {
 /// Admit one source from its AST JSON.
 #[must_use]
 pub fn admit(profile: &Profile, source: &str, ast_json: &str) -> Decision {
-    match ast::decode(source, ast_json) {
-        Ok(module) => match walk::map(profile, &module) {
-            Ok(ir) => Decision::Admitted(ir),
-            Err(rejection) => Decision::Rejected(rejection),
-        },
-        Err(fault) => Decision::Rejected(Rejection::from_fault(&fault)),
+    decide(profile, source, ast_json).0
+}
+
+/// Run admission, recording what the recognizer did as well as what it decided.
+///
+/// The recognizer runs only on a module the walk admitted, so its trace is
+/// absent exactly when the module never reached it.
+fn decide(
+    profile: &Profile,
+    source: &str,
+    ast_json: &str,
+) -> (Decision, Option<Result<Vec<usize>, usize>>) {
+    let module = match ast::decode(source, ast_json) {
+        Ok(module) => module,
+        Err(fault) => return (Decision::Rejected(Rejection::from_fault(&fault)), None),
+    };
+    let ir = match walk::map(profile, &module) {
+        Ok(ir) => ir,
+        Err(rejection) => return (Decision::Rejected(rejection), None),
+    };
+    match recognizer::check(profile, source, &ir) {
+        Ok(offsets) => (Decision::Admitted(ir), Some(Ok(offsets))),
+        Err(recognizer::Refusal::Offset(offset)) => {
+            let rejection = recognizer::rejection(source, offset);
+            (Decision::Rejected(rejection), Some(Err(offset)))
+        }
+        // The walk rejects an unregistered atom before the recognizer runs, so
+        // this branch is a defect in the walk. Reporting it as the profile
+        // rejection the source would deserve keeps admission failing closed.
+        Err(recognizer::Refusal::Harness(detail)) => (
+            Decision::Rejected(Rejection::profile(ReasonCode::AtomUnknown, None, detail)),
+            None,
+        ),
     }
 }
 
@@ -175,9 +216,6 @@ pub fn admit(profile: &Profile, source: &str, ast_json: &str) -> Decision {
 pub enum Comparison {
     /// The classification is exactly what the manifest states.
     Match,
-    /// The manifest expects a recognizer rejection and the walk admitted the
-    /// module. This is EP-M2's demonstrated gap, not a failure.
-    Gap,
     /// The classification is something else; the string describes the
     /// disagreement.
     Mismatch(String),
@@ -249,14 +287,9 @@ fn compare_decision(expected: &Expected, classification: &Classification) -> Com
                 ))
             }
         }
-        (Expected::Rejected { stage, .. }, Some(Decision::Admitted(_)))
-            if *stage == Stage::Recognizer =>
-        {
-            Comparison::Gap
-        }
         (Expected::Rejected { stage, code }, Some(Decision::Admitted(ir))) => {
             Comparison::Mismatch(format!(
-                "expected {}/{} but the walk admitted {ir:?}",
+                "expected {}/{} but admission admitted {ir:?}",
                 stage.as_wire(),
                 code.as_wire()
             ))

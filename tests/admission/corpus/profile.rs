@@ -48,6 +48,19 @@ impl Profile {
     pub fn atom_name(&self, canonical: &str) -> Option<&str> {
         self.atoms.get(canonical).map(String::as_str)
     }
+
+    /// The canonical source text registered for `name`, if there is one.
+    ///
+    /// The contract keys the table by canonical text, so this reverses it. The
+    /// recognizer renders tokens from the contract rather than from a table of
+    /// its own (D13), which is why the lookup lives here.
+    #[must_use]
+    pub fn atom_text(&self, name: &str) -> Option<&str> {
+        self.atoms
+            .iter()
+            .find(|(_, registered)| registered.as_str() == name)
+            .map(|(canonical, _)| canonical.as_str())
+    }
 }
 
 /// Read the contract's enforceable subset.
