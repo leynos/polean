@@ -180,3 +180,44 @@ fn a_path_behind_an_absolute_symlink_is_found() -> Result<(), String> {
         .cleanup()
         .map_err(|error| format!("cannot clean scratch directory: {error}"))
 }
+
+/// A parent that cannot be resolved for a reason other than absence is
+/// reported, never folded into "not installed".
+///
+/// With search permission withheld from the grandparent, resolving the parent
+/// fails with permission denied. A process that overrides permission bits
+/// resolves it and finds the path, which is the correct answer for it.
+#[test]
+fn an_unresolvable_parent_is_never_reported_as_absent() -> Result<(), String> {
+    let mut scratch = Scratch::try_new("unresolvable-parent-probe")
+        .map_err(|error| format!("cannot create scratch directory: {error}"))?;
+    let grandparent = scratch.path().join("outer");
+    let tool = grandparent.join("inner").join("tool");
+    let created = ambient::create_dir_all(&grandparent.join("inner"))
+        .and_then(|()| ambient::write(&tool, b""));
+    check!(
+        created.is_ok(),
+        "could not lay out the scratch tree under {}: {created:?}",
+        grandparent.display()
+    );
+    let hidden = ambient::set_mode(&grandparent, 0o000);
+    check!(
+        hidden.is_ok(),
+        "could not withhold permission on {}: {hidden:?}",
+        grandparent.display()
+    );
+    let inspected = path_exists(&tool);
+    let restored = ambient::set_mode(&grandparent, 0o755);
+    check!(
+        restored.is_ok(),
+        "could not restore permission on {}: {restored:?}",
+        grandparent.display()
+    );
+    check!(
+        inspected != Ok(false),
+        "a parent that cannot be resolved must not be reported as absent: {inspected:?}"
+    );
+    scratch
+        .cleanup()
+        .map_err(|error| format!("cannot clean scratch directory: {error}"))
+}
