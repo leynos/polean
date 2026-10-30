@@ -1,29 +1,31 @@
-//! What the pinned Regorus does with every corpus fixture.
+//! What the pinned Regorus and the EP-M2 walk do with every corpus fixture.
 //!
-//! One line per fixture records three things the feasibility record needs: whether
+//! One line per fixture records what the feasibility record needs: whether
 //! `Engine::add_policy` accepted the source, whether `get_ast_as_json` then
-//! succeeded, and the multiset of typed AST node kinds the module contains. It is
-//! an observation of a frontend, not an admission decision: a fixture that parses
-//! is not thereby admitted to the profile.
+//! succeeded, the multiset of typed AST node kinds the module contains, what
+//! admission decided, and how that decision compares with the manifest. A
+//! fixture that parses is not thereby admitted to the profile, so the frontend
+//! fields and the walk field are kept apart.
 //!
 //! The snapshot is a change detector. A Regorus bump that changes which sources
 //! parse, or which node kinds they contain, changes the snapshot and must be
-//! reviewed. EP-M2 and EP-M3 extend each line with the walk and recognizer
-//! results; the observation fields stay as they are.
+//! reviewed. EP-M3 adds the recognizer's own field.
 
 use std::fmt::Write as _;
 
 use crate::{
-    corpus::{self, Entry},
+    admission::{self, Comparison, Decision},
+    corpus::{self, Entry, Profile},
     inventory::{Observation, observe},
 };
 
 /// Render the observation snapshot: one sorted line per manifest entry.
 pub fn render() -> Result<String, String> {
     let entries = corpus::entries()?;
+    let profile = corpus::profile_contract()?;
     let mut lines = Vec::with_capacity(entries.len());
     for entry in &entries {
-        lines.push((entry.label(), describe(entry)?));
+        lines.push((entry.label(), describe(entry, &profile)?));
     }
     lines.sort_by(|left, right| left.0.cmp(&right.0));
     let mut rendered = String::new();
@@ -34,10 +36,10 @@ pub fn render() -> Result<String, String> {
     Ok(rendered)
 }
 
-/// Describe one fixture's observation.
-fn describe(entry: &Entry) -> Result<String, String> {
+/// Describe one fixture's observation and decision.
+fn describe(entry: &Entry, profile: &Profile) -> Result<String, String> {
     let source = corpus::source(entry)?;
-    Ok(match observe(&source) {
+    let observed = match observe(&source) {
         Observation::Parsed(counts) => {
             let mut kinds = String::new();
             for (kind, count) in counts {
@@ -50,7 +52,40 @@ fn describe(entry: &Entry) -> Result<String, String> {
             format!("regorus=serialize-failed  {}", summarise(&message))
         }
         Observation::Rejected(message) => format!("regorus=rejected  {}", summarise(&message)),
-    })
+    };
+    let classification = admission::classify(profile, &source);
+    let walk = match &classification.decision {
+        None => "-".to_owned(),
+        Some(Decision::Admitted(_)) => "admitted".to_owned(),
+        Some(Decision::Rejected(rejection)) => {
+            let mut rendered = format!(
+                "rejected {}.{}",
+                rejection.stage.as_wire(),
+                rejection.code.as_wire()
+            );
+            if let Some((start, end)) = rejection.span {
+                write!(rendered, " [{start}, {end})")
+                    .map_err(|error| format!("cannot render a rejection span: {error}"))?;
+            }
+            rendered
+        }
+    };
+    let outcome = match admission::compare(&entry.expected, &classification) {
+        Comparison::Match => "match".to_owned(),
+        Comparison::Gap => "gap".to_owned(),
+        Comparison::Mismatch(detail) => format!("mismatch: {}", clip(&detail)),
+    };
+    Ok(format!("{observed}  walk={walk}  outcome={outcome}"))
+}
+
+/// Reduce a mismatch description to one short line.
+fn clip(text: &str) -> String {
+    let first_line = text.lines().next().unwrap_or(text).trim();
+    let mut clipped: String = first_line.chars().take(100).collect();
+    if clipped.chars().count() < first_line.chars().count() {
+        clipped.push_str("...");
+    }
+    clipped
 }
 
 /// Reduce a frontend diagnostic to one reviewable clause.
