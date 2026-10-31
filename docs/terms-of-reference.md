@@ -179,14 +179,22 @@ the design.
 
 ### 8.2 Assumptions
 
-| ID  | Assumption                                                                                | Consequence if false                                                                                            | Resolution evidence                                                                      |
-| --- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| A1  | One constrained decision policy is enough to test the workflow's usefulness.              | Broader syntax work may hide the original experiment's value.                                                   | Review an actual baseline and mutation with the intended author.                         |
-| A2  | The source-to-model frontend may remain explicitly trusted in the first experiment.       | The first milestone needs a smaller checked parser or translation witness before it can claim useful assurance. | Sponsor accepts the assurance statement or rejects it before release.                    |
-| A3  | Request attributes come from trusted application components and obey the declared domain. | The theorem can hold while the application remains vulnerable.                                                  | Review the stated attribute provenance assumptions; do not infer deployment correctness. |
-| A4  | Local, offline verification after toolchain provisioning meets the first user's needs.    | Distribution, tenancy, or integration requirements may change the threat model.                                 | Complete a clean-machine reviewer replay.                                                |
-| A5  | Current frontend APIs can expose enough syntax information to enforce an exact allowlist. | A wrapper, small supported parser, or revised dependency choice becomes necessary.                              | A bounded frontend feasibility experiment, not a broad parser rewrite.                   |
-| A6  | The small proof domain fits the proposed resource envelope.                               | Simplify the representation or proof method before increasing the feature surface.                              | Record timings and memory for baseline, maximum admitted size, and failure cases.        |
+| ID  | Assumption                                                                                | Consequence if false                                                                                            | Resolution evidence                                                                                                                                         |
+| --- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | One constrained decision policy is enough to test the workflow's usefulness.              | Broader syntax work may hide the original experiment's value.                                                   | Review an actual baseline and mutation with the intended author.                                                                                            |
+| A2  | The source-to-model frontend may remain explicitly trusted in the first experiment.       | The first milestone needs a smaller checked parser or translation witness before it can claim useful assurance. | Sponsor accepts the assurance statement or rejects it before release.                                                                                       |
+| A3  | Request attributes come from trusted application components and obey the declared domain. | The theorem can hold while the application remains vulnerable.                                                  | Review the stated attribute provenance assumptions; do not infer deployment correctness.                                                                    |
+| A4  | Local, offline verification after toolchain provisioning meets the first user's needs.    | Distribution, tenancy, or integration requirements may change the threat model.                                 | Complete a clean-machine reviewer replay.                                                                                                                   |
+| A5  | Current frontend APIs can expose enough syntax information to enforce an exact allowlist. | A wrapper, small supported parser, or revised dependency choice becomes necessary.                              | Met for the pinned tuple by the [admission feasibility record](admission-feasibility-record.md); a bounded frontend experiment, not a broad parser rewrite. |
+| A6  | The small proof domain fits the proposed resource envelope.                               | Simplify the representation or proof method before increasing the feature surface.                              | Record timings and memory for baseline, maximum admitted size, and failure cases.                                                                           |
+
+[KNOWN] A5 is resolved for the pinned tuple, not in general. On 2026-10-31 the
+[admission feasibility record](admission-feasibility-record.md) showed that a
+closed decode of the Regorus 0.13.0 AST, a profile walk, and a canonical-token
+recognizer with a Verus-verified kernel admit the profile and refuse every
+excluded construct in the committed corpus. The frontend remains trusted: the
+record establishes feasibility, not a source-preservation theorem, and it does
+not cover another frontend, another profile, or hostile sources.
 
 ### 8.3 Dependencies
 

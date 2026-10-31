@@ -86,6 +86,18 @@ recorded as questions, not gates:
    computation, within the resource envelope (A6), so that proof-search code
    stays outside the trusted computing base?
 
+### Open question 2: answered (2026-10-31)
+
+The [admission feasibility record](../admission-feasibility-record.md) answers
+open question 2 for the pinned tuple. Admission is a closed decode of the
+Regorus 0.13.0 AST, a profile walk, and a canonical-token recognizer whose
+kernel is verified in Verus. No unverified Polean parser is introduced; the
+frontend remains trusted as this record's item 3 describes, and the theorem
+concerns byte-level decomposition rather than Rego meaning.
+[ADR 0005](adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md)
+records the decision and the trust it removes and retains. This answer does not
+extend to another frontend, another profile, or hostile sources.
+
 Technical design §13 lists the remaining prerequisites for E0 and for public
 release.
 

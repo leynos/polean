@@ -232,7 +232,22 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   `scripts/install_verus_z3.py` with its tests, and the `install-verus` and
   `verus` targets. `vstd` is the only new dependency, dev-only and already in
   `Cargo.lock`. Verus is not part of `make all` or CI.
-- [ ] EP-M5: feasibility record, ADR 0005, and documentation updates.
+- [x] (2026-10-31) EP-M5: feasibility record, ADR 0005, and documentation.
+  `docs/admission-feasibility-record.md` records the question, method, verdict
+  per construct class, the excluded-entry mapping, the six AST gaps and their
+  closures, the frontend divergences, the assurance boundaries, and what 2.1.1
+  and 2.1.2 must carry forward. It finds no E0 issue.
+  `docs/adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md`
+  records the conjunction design. TDD §4.1 gains the D7–D11 and D13 narrowings
+  and the exact-spelling rule; §6.1 links the record and ADR 0005; §13's
+  Admission coverage row is met; R14 and R15 cite the OPA parser and scanner.
+  The ToR resolves A5 for the pinned tuple, ADR 0002 notes open question 2
+  answered, roadmap 1.2.2 is ticked, and the developer guide and repository
+  layout describe the spike, the corpus, and the on-demand Verus targets.
+  `SHA256SUMS` is refreshed for the three covered files whose bytes changed,
+  including the drift inherited from `b6acb06`, and every one of its 39 entries
+  verifies. All ten gates pass; the evidence table is under
+  `Artefacts and notes`.
 
 ## Surprises & discoveries
 
@@ -447,6 +462,29 @@ execution here. The probe harness was not committed.
   `check-cfg = ["cfg(verus_keep_ghost)"]`, and the spec imports carry
   `#[cfg(verus_keep_ghost)]`, so both builds are warning-free without an
   `allow` attribute.
+- Observation (EP-M5, 2026-10-31): mapping the twenty unexercised manifest
+  entries to the construct that refuses each one exposed a construct with no
+  dedicated fixture. A `data` reference inside a rule body is refused by the
+  same atom lookup that `atom/unknown-attribute.rego` exercises, so the mapping
+  is sound, but a reader cannot confirm the refusal from the corpus alone.
+  Evidence: section 5 of the feasibility record. Impact: recorded as future
+  work for 2.1.1 rather than widened now, because adding a fixture here would
+  change the corpus snapshot that EP-M2 already accepted.
+- Observation (EP-M5, 2026-10-31): the divergence table can only cite the OPA
+  frontend by source reading. Decision D6 forbids executing OPA in this task,
+  so the OPA column of section 7 records what the pinned `parser.go` and
+  `scanner.go` do, not what an observed run did. Evidence: a throwaway local
+  probe produced matching results but is deliberately excluded from the record.
+  Impact: the column is labelled as source reading, and 2.3.2 owns the executed
+  comparison; a probe run must not be mistaken for recorded evidence.
+- Observation (EP-M5, 2026-10-31): the pre-existing `SHA256SUMS` drift is a
+  manifest-maintenance gap, not a content problem. `contracts/cli.txt` changed
+  in `b6acb06` and its digest was never recomputed, and
+  `docs/technical-design.md` changed in the same commit. Evidence: no working
+  tree difference for `contracts/cli.txt`, and `git show b6acb06` names it.
+  Impact: EP-M5 recomputes the digest for the bytes now committed, which
+  records those bytes without certifying the base commit's content, and
+  `sha256sum -c SHA256SUMS` passes for every covered file.
 
 ## Decision log
 
@@ -620,9 +658,43 @@ execution here. The probe harness was not committed.
 
 ## Outcomes & retrospective
 
-Not started. At completion, record the verdict for each construct class, every
-E0 finding and whether it blocks 2.1.2, the commit at which `make verus`
-passed, and lessons for 2.1.2.
+Completed 2026-10-31.
+
+- Verdict: admission through the pinned frontend is feasible.
+  `docs/admission-feasibility-record.md` states the verdict for every construct
+  class, with the fixture or test that demonstrates it.
+- E0 findings: none. No construct was distinguishable by neither check, so the
+  Design tolerance was not triggered and 2.1.2 is not blocked.
+- Evidence: the corpus has 105 manifest entries — 21 admitted and 84 rejected
+  (12 at parse, 65 at the profile walk, 7 at the recognizer). All 46 AST node
+  kinds are observed, and all 77,884 mutants across ten classes are rejected at
+  `decode` or earlier.
+- Verification: `make verus` reported 40 verified obligations and no errors at
+  commit `16dd183`, with no `assume`, `admit`, or `external_body`.
+- Lessons for 2.1.2:
+  - Admission must stay a conjunction. The recognizer is the only check that
+    sees comments, parentheses, `if`, braces, separators, and spelling, and it
+    must render from the profile rather than from the walker's table.
+  - Verified beats assumed where the property is universal: the kernel proof
+    removed the need to trust an unbounded scan, but it did not remove trust in
+    the renderer, the walk, or Regorus. State that split wherever the result is
+    reported.
+  - A closed table is not a closed walk. The mutation sweep, not review, found
+    the decoder's unread literal span; keep the sweep at the boundary where a
+    new field would reappear.
+  - Fixtures a committed file cannot carry (BOM, NUL, bare carriage return,
+    over-long token) belong in generated sources, not in `.rego` files that
+    tooling might rewrite.
+  - Verus cost lay in invariant shape rather than in the kernel: opaque
+    predicates, recursive scans instead of existentials, and countdowns instead
+    of arithmetic near `usize::MAX`. Budget for that, not for lemma count.
+  - The prover launcher could not read the pinned release's version output
+    (D21), so the target runs the installed, digest-checked binary. Pin-driven
+    wrappers still need an end-to-end run before they are documented.
+  - The record's excluded-entry table has one row without a dedicated fixture
+    (`data` references inside a rule body) and one divergence column taken from
+    source reading rather than execution. Both are recorded as future work for
+    2.1.1 and 2.3.2 rather than widened here.
 
 ## Context and orientation
 
@@ -1432,6 +1504,34 @@ final working tree:
 `make verus` is not part of the commit gates and is covered by the Green
 transcript above. The logs are
 `/tmp/<gate>-polean-1-2-2-complete-module-admission-feasibility-record.out`.
+
+### EP-M5 gate evidence (2026-10-31)
+
+All ten gates pass on the candidate that adds the record, ADR 0005, the amended
+documents, and the refreshed `SHA256SUMS`, run sequentially by the scrutineer
+against the working tree at `16dd183`:
+
+| Gate                   | Result                                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| `make check-fmt`       | `cargo fmt --all -- --check` clean; `mdtablefix --check` reports 32 unchanged                   |
+| `make typecheck`       | `cargo check --all-targets --all-features` with `-D warnings`, no diagnostics                   |
+| `make lint`            | `cargo doc` with `-D warnings` and Clippy clean                                                 |
+| `make test`            | 108 passed, 0 failed, 7 ignored: admission 60, doc-examples 27, stub 2, toolchain 18, doctest 1 |
+| `make markdownlint`    | 33 files, 0 issues                                                                              |
+| `make design-check`    | 5 schemas, 7 source headers, 224 comparisons, 19 negative controls, 2 seams                     |
+| `make test-scripts`    | 70 passed under Python 3.14 via `uv run --with pytest==9.1.1`                                   |
+| `make toolchain-smoke` | 7 passed, 0 failed, from the provisioned `.polean/tools`                                        |
+| `make verus`           | 40 verified, 0 errors                                                                           |
+| `sha256sum -c`         | 39 entries, every line `OK`                                                                     |
+
+The standalone `python3.14` on this host has no `pytest`, so
+`make test-scripts` cannot start under `PYTHON=<that interpreter>`. The run
+above uses the `uv run --python 3.14 --with pytest==9.1.1` invocation recorded
+in the developer guide, which leaves no `uv.lock` or `.venv` behind. The failed
+precondition is kept at
+`/tmp/test-scripts-polean-1-2-2-complete-module-admission-feasibility-record-pre-uv.out`
+rather than overwritten. Logs use the branch slug
+`polean-1-2-2-complete-module-admission-feasibility-record`.
 
 ## Interfaces and dependencies
 

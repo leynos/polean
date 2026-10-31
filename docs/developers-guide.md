@@ -16,13 +16,18 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - for the toolchain targets only: Python 3.14 built with `zstd` support (so
   that `compression.zstd` imports), `pytest` from
   `scripts/requirements-test.txt`, network access for the first provisioning
-  run, and about 3.7 GiB of disk under `.polean/tools`.
+  run, and about 3.7 GiB of disk under `.polean/tools`; and
+- for the Verus targets only: network access on the first `make install-verus`
+  run, `uv`, and the pinned release and solver under `.verus/`.
 
 `make tools`, `make test-scripts`, and `make toolchain-smoke` are the only
 targets that need the 3.14 interpreter, because the tests import the script and
 it imports `compression.zstd` at load time. Point them at one with
-`make toolchain-smoke PYTHON=...`. `cargo-insta` is needed only to review a
-changed Regorus AST snapshot.
+`make toolchain-smoke PYTHON=...`. If no 3.14 interpreter with `pytest` is
+installed,
+`uv run --python 3.14 --with pytest==9.1.1 python -m pytest scripts/tests` runs
+the same suite in an ephemeral environment and leaves no `uv.lock` or `.venv`
+behind. `cargo-insta` is needed only to review a changed Regorus AST snapshot.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
 `mdtablefix` 0.6.0 or later and `markdownlint-cli2` to reproduce every
@@ -45,6 +50,8 @@ targets are:
 | `make test-scripts`      | Test the provisioning script with pytest.                          |
 | `make tools`             | Provision the digest-checked OPA and Lean artefacts.               |
 | `make toolchain-smoke`   | Provision, then run the ignored OPA and Lean observations.         |
+| `make install-verus`     | Install the pinned Verus release and Z3 solver (on demand).        |
+| `make verus`             | Run the Verus proof entry point (on demand; not in `make all`).    |
 | `make design-check`      | Validate schemas, policy fixtures, abstractions, and witnesses.    |
 | `make design-properties` | Search the admitted input domain for model-side counterexamples.   |
 | `make design-boundary`   | Test the harness's orchestration and storage boundaries.           |
@@ -58,7 +65,9 @@ The usual loop is `make check-fmt`, `make typecheck`, `make lint`, `make test`,
 in scope. `make all` runs the commit gates, but run them individually while
 iterating, so a failure is attributable to one gate. Do not run these
 concurrently: the build cache serializes better sequentially, and concurrent
-gate runs interleave their output.
+gate runs interleave their output. `make verus` is an on-demand proof check,
+not part of that loop or of `make all`; run it when the recognizer kernel, its
+specification, or its lemmas change.
 
 `make toolchain-smoke` depends on `make tools`, so one command covers
 provisioning. The first run downloads 628 MiB; later runs verify whatever is
@@ -140,6 +149,44 @@ module header held in `validate_design.py`, and the design check fails on any
 byte difference between the rendered text and the committed file. Edit the rule
 list or the header and regenerate; do not hand-edit a `.rego` fixture, because
 the check will reject the result.
+
+## Admission spike
+
+`tests/admission/` is the test-only spike from roadmap 1.2.2. It classifies a
+committed corpus through a closed decode of the Regorus AST JSON, a profile
+walk, and a canonical-token recognizer. Nothing under `src/` is involved, and
+the spike decides nothing in production: 2.1.1 owns ingestion and IR types, and
+2.1.2 owns production admission and diagnostics.
+
+The spike's evidence is in three places:
+
+- `examples/admission/` holds one `.rego` fixture per profile and excluded
+  construct, plus generated sources for byte sequences a file cannot carry
+  safely. The manifest `examples/admission/manifest.json` is JSON Lines; each
+  entry names the fixture, the AST node kinds it adds, and the outcome the
+  admission spike must reach. A committed fixture without an entry, or an entry
+  without a fixture, fails the bijection test.
+- `tests/admission/snapshots/` holds the reviewed observation of every fixture
+  and the mutation counts. A diff means the frontend, the walk, or the corpus
+  changed; review it with `cargo insta review` rather than accepting it.
+- `docs/admission-feasibility-record.md` states the verdict per construct class
+  and what the evidence does and does not establish. Update it, not only the
+  tests, when a verdict changes.
+
+Adding a fixture means adding its manifest entry and checking that the observed
+node kinds are the ones the entry claims. Do not widen the grammar to make a
+fixture pass: the profile is the specification, and the design check and the
+record both depend on it staying fixed.
+
+`make install-verus` installs the Verus release and Z3 solver pinned in
+`tools/verus/`, digest-checked. `make verus` runs the proof entry point
+`verus/admission_recognizer.rs`, which compiles the recognizer kernel through
+`#[path]`. Both are on-demand: `make all` and CI do not need a solver, a
+network connection, or several gigabytes of disk for Verus. The proof
+establishes the kernel's byte-level soundness for sources of any length. It
+does not establish that the AST walk maps Regorus faithfully, that the renderer
+chooses the right tokens, or that Rego means what the model means. Those remain
+tested or open as the record describes.
 
 ## Planned CLI configuration boundary
 
