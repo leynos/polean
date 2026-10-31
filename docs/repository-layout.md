@@ -7,33 +7,38 @@ The module split proposed by the technical design is not yet implemented.
 
 ## Paths and responsibilities
 
-| Path                              | Responsibility                                                                         |
-| --------------------------------- | -------------------------------------------------------------------------------------- |
-| `src/lib.rs`                      | Current Rust crate root and disposable scaffold identity.                              |
-| `tests/`                          | Rust integration tests for implemented public behaviour.                               |
-| `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple.                         |
-| `lean/`                           | Pinned Lean package: toolchain selection, Lake configuration, and the smoke library.   |
-| `contracts/`                      | Versioned profile, profile schema, request, policy, claims, result, and CLI contracts. |
-| `examples/tenant-write/`          | Baseline Rego source, canonical IR, claims, requests, and mutations.                   |
-| `validation/`                     | Design-fixture checks, property checks, and witnesses; not the production checker.     |
-| `scripts/`                        | Digest-checked toolchain provisioning, with its pytest suite in `scripts/tests/`.      |
-| `toolchain-pins.json`             | The authoritative upstream URL, digest, size, and version of each pinned artefact.     |
-| `.polean/tools/`                  | Untracked, digest-named install root for the provisioned OPA binary and Lean archive.  |
-| `docs/`                           | Terms of reference, technical design, guides, vocabulary, and decisions.               |
-| `docs/contents.md`                | Canonical documentation index.                                                         |
-| `docs/adrs/`                      | Accepted architecture decision records, named `adr-nnnn-title-slug.md`.                |
-| `docs/rfcs/`                      | Reserved for proposed changes, named `rfc-nnnn-title-slug.md`; none are committed yet. |
-| `.github/workflows/ci.yml`        | Hosted Rust, Markdown, and basic repository gate.                                      |
-| `.github/workflows/design.yml`    | Independent design-contract validation lane.                                           |
-| `.github/workflows/toolchain.yml` | Path-filtered provisioning and smoke run for the pinned tuple and its example policy.  |
-| `.github/dependabot.yml`          | Cargo and GitHub Actions dependency updates.                                           |
-| `Cargo.toml`, `Cargo.lock`        | Package metadata, lint policy, and dependency lockfile.                                |
-| `rust-toolchain.toml`             | Pinned Rust toolchain and required components.                                         |
-| `Makefile`                        | Public contributor entry points.                                                       |
-| `AGENTS.md`                       | Contributor and coding-agent instructions.                                             |
-| `.markdownlint-cli2.jsonc`        | Markdown lint policy.                                                                  |
-| `.rustfmt.toml`, `clippy.toml`    | Rust formatting and lint policy.                                                       |
-| `README.md`, `LICENSE`            | Project introduction and ISC licence.                                                  |
+| Path                              | Responsibility                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/lib.rs`                      | Current Rust crate root and disposable scaffold identity.                                               |
+| `tests/`                          | Rust integration tests for implemented public behaviour, including the test-only 1.2.2 admission spike. |
+| `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple.                                          |
+| `tests/admission/`                | The 1.2.2 admission spike: closed decoder, profile walk, recognizer, properties, and feature scenarios. |
+| `examples/admission/`             | Admission corpus fixtures and their JSON Lines manifest; separate from the tenant-write example.        |
+| `verus/`                          | Verification of the recognizer kernel: specification, lemmas, and proof entry point.                    |
+| `tools/`                          | Pins for the Verus release, the Z3 solver, and the prover launcher; development-only.                   |
+| `lean/`                           | Pinned Lean package: toolchain selection, Lake configuration, and the smoke library.                    |
+| `contracts/`                      | Versioned profile, profile schema, request, policy, claims, result, and CLI contracts.                  |
+| `examples/tenant-write/`          | Baseline Rego source, canonical IR, claims, requests, and mutations.                                    |
+| `validation/`                     | Design-fixture checks, property checks, and witnesses; not the production checker.                      |
+| `scripts/`                        | Digest-checked toolchain provisioning, with its pytest suite in `scripts/tests/`.                       |
+| `toolchain-pins.json`             | The authoritative upstream URL, digest, size, and version of each pinned artefact.                      |
+| `.polean/tools/`                  | Untracked, digest-named install root for the provisioned OPA binary and Lean archive.                   |
+| `.verus/`                         | Untracked install root for the pinned Verus release and Z3 solver.                                      |
+| `docs/`                           | Terms of reference, technical design, guides, vocabulary, and decisions.                                |
+| `docs/contents.md`                | Canonical documentation index.                                                                          |
+| `docs/adrs/`                      | Accepted architecture decision records, named `adr-nnnn-title-slug.md`.                                 |
+| `docs/rfcs/`                      | Reserved for proposed changes, named `rfc-nnnn-title-slug.md`; none are committed yet.                  |
+| `.github/workflows/ci.yml`        | Hosted Rust, Markdown, and basic repository gate.                                                       |
+| `.github/workflows/design.yml`    | Independent design-contract validation lane.                                                            |
+| `.github/workflows/toolchain.yml` | Path-filtered provisioning and smoke run for the pinned tuple and its example policy.                   |
+| `.github/dependabot.yml`          | Cargo and GitHub Actions dependency updates.                                                            |
+| `Cargo.toml`, `Cargo.lock`        | Package metadata, lint policy, and dependency lockfile.                                                 |
+| `rust-toolchain.toml`             | Pinned Rust toolchain and required components.                                                          |
+| `Makefile`                        | Public contributor entry points.                                                                        |
+| `AGENTS.md`                       | Contributor and coding-agent instructions.                                                              |
+| `.markdownlint-cli2.jsonc`        | Markdown lint policy.                                                                                   |
+| `.rustfmt.toml`, `clippy.toml`    | Rust formatting and lint policy.                                                                        |
+| `README.md`, `LICENSE`            | Project introduction and ISC licence.                                                                   |
 
 _Table 1: Repository paths and their responsibilities._
 
@@ -68,6 +73,13 @@ a false statement is caught early, but a passing search is sampling rather than
 kernel-checked quantification, and it cannot stand in for the Lean development.
 Once the Rust frontend or Lean package exists, their checks belong in separate
 lanes with distinct result language.
+
+`verus/` and `tools/` support the recognizer proof, not production admission.
+They are not part of the E0 toolchain tuple in `toolchain-pins.json`, the
+installed release under `.verus/` is untracked, and `make verus` is an
+on-demand check rather than a commit gate. The admission spike in
+`tests/admission/` is test-only: its IR is a throwaway type, and production
+ingestion and admission remain roadmap 2.1.1 and 2.1.2 work.
 
 Update [documentation contents](contents.md) when adding, removing, or renaming
 durable documents. Prefer Make targets for contributor entry points. Generated

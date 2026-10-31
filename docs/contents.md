@@ -31,6 +31,11 @@ already exist.
 - [Admission feasibility ExecPlan][admission-plan]: the approved plan for the
   spike and record that test whether the pinned frontend can enforce complete,
   fail-closed admission.
+- [Admission feasibility record](admission-feasibility-record.md): the 1.2.2
+  verdict per construct class, the AST gaps and their closures, and what the
+  evidence does not establish.
+- [Admission design decision][adr-0005]: AST mapping plus a canonical-token
+  recognizer with a Verus-verified kernel.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,
   and explicit omissions.
 
@@ -74,6 +79,7 @@ already exist.
 [adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md
 [adr-0002]: adrs/adr-0002-first-profile-assurance-boundary.md
 [adr-0003]: adrs/adr-0003-pin-the-e0-toolchain-tuple.md
+[adr-0005]: adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md
 [admission-plan]: execplans/1-2-2-complete-module-admission-feasibility-record.md
 
 ## Machine-readable design

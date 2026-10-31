@@ -70,13 +70,19 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
     baseline, and evaluate its source; lockfiles, Regorus features, and OPA
     digest are recorded. Regorus 0.13.0 was tested in process and OPA replay
     was observed; ADR-003 records the tuple and its provenance.
-- [ ] 1.2.2. Produce a complete-module admission feasibility record.
+- [x] 1.2.2. Produce a complete-module admission feasibility record.
   - Requires 1.2.1.
-  - See technical-design.md §§4.1 and 6.1; ../contracts/profile.json.
+  - See technical-design.md §§4.1 and 6.1; ../contracts/profile.json;
+    [admission-feasibility-record.md](admission-feasibility-record.md) and
+    [ADR 0005][adr-0005].
   - Success: fixtures account for package, import, default, every rule and
     expression, metadata, and unknown AST variants. Missing API coverage has a
     demonstrated bounded check or is recorded as an E0 finding that blocks
     2.1.2; unreachable syntax is not ignored.
+  - Recorded: the 105-entry corpus matches its manifest in every case, all 46
+    AST node kinds are observed, and the recognizer kernel proves with no
+    `assume`, `admit`, or `external_body`. The record finds no E0 blocking
+    issue. The spike is test-only; 2.1.1 and 2.1.2 own production admission.
 - [ ] 1.2.3. Demonstrate declaration-type and transitive-axiom auditing.
   - Requires 1.2.1.
   - See technical-design.md §§5 and 6.2.
@@ -446,3 +452,4 @@ See technical-design.md §§7, 11, and 13; terms-of-reference.md §6.2.
 
 [adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md
 [adr-0003]: adrs/adr-0003-pin-the-e0-toolchain-tuple.md
+[adr-0005]: adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md
