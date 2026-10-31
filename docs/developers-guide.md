@@ -7,7 +7,9 @@ technical design rather than racing ahead to a broad Rego interpreter.
 ## Prerequisites
 
 - Git;
-- the Rust toolchain pinned by `rust-toolchain.toml`;
+- the Rust toolchain pinned by `rust-toolchain.toml`, with its
+  `rustc-codegen-cranelift-preview` component;
+- the `mold` linker on Linux, because `.cargo/config.toml` selects it;
 - Python 3.11 or later for the design harness;
 - `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
   checks;
@@ -107,6 +109,26 @@ has it: `make design-properties PYTHON=/path/to/python`.
 `make audit` requires `cargo-audit` and reaches the network to fetch the
 advisory database, so it is a periodic dependency check rather than part of
 every commit. It is not in `make all` for that reason.
+
+## The development build standard
+
+`.cargo/config.toml` holds the estate's development build defaults, so a bare
+`cargo build` gets them:
+
+- the parallel `rustc` frontend (`-Zthreads=8`) in `[build] rustflags`;
+- the `mold` linker, in a Linux-only target table. Cargo selects a single
+  `rustflags` source rather than merging them, so the Linux table repeats
+  `-Zthreads=8`; and
+- the Cranelift backend as the `dev` profile default. The whole suite
+  (`make test`, which leaves the ignored toolchain smoke tests that need the
+  provisioned tools) passes under it on `nightly-2026-08-27`, measured on
+  2026-10-31.
+
+Assigning `RUSTFLAGS` replaces every `rustflags` source, so the `typecheck`
+recipe restates the flags through `STANDARD_RUSTFLAGS`. The Whitaker route
+takes none of them: `WHITAKER_CLEAN_ENV` clears inherited flags and backend
+overrides so its installer-managed toolchain builds without repository
+development flags. CI installs `mold` through `install-mold` on `setup-rust`.
 
 ## Changing a toolchain pin
 
