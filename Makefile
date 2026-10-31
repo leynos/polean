@@ -10,6 +10,15 @@ PYTHON ?= python3
 
 SHELL := bash
 
+# The development build standard (concordat rule `rust-build-defaults`): the
+# parallel rustc frontend and, on Linux, the mold linker. An assigned RUSTFLAGS
+# replaces every `rustflags` table in .cargo/config.toml, so each gate recipe
+# that sets it composes these onto any inherited value (CI's setup-rust may
+# export one). The Whitaker route takes neither, because its installer-managed
+# toolchain must not inherit repository development flags.
+BUILD_HOST_OS := $(shell uname -s)
+STANDARD_RUSTFLAGS := -Zthreads=8$(if $(filter Linux,$(BUILD_HOST_OS)), -Clink-arg=-fuse-ld=mold)
+
 all: check-fmt markdownlint typecheck lint test design-check design-properties design-boundary ## Run every local commit gate
 
 build: ## Build the Rust scaffold
@@ -23,15 +32,20 @@ lint: lint-whitaker ## Build documentation, run Clippy and the Whitaker suite wi
 	RUSTDOCFLAGS="-D warnings" $(CARGO) doc --no-deps --all-features
 	$(CARGO) clippy --all-targets --all-features -- -D warnings
 
-lint-whitaker: ## Run the Whitaker Dylint suite through its wrapper with warnings denied
-	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
+WHITAKER_CLEAN_ENV = env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS \
+	-u CARGO_PROFILE_DEV_CODEGEN_BACKEND -u CARGO_BUILD_TARGET \
+	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
+	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS -u CFLAGS -u LDFLAGS
+
+lint-whitaker: ## Run the Whitaker Dylint suite with clean driver inputs and warnings denied
+	$(WHITAKER_CLEAN_ENV) DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
 test: ## Run Rust unit, integration, and documentation tests
 	$(CARGO) test --all-targets --all-features
 	RUSTDOCFLAGS="-D warnings" $(CARGO) test --doc --all-features
 
 typecheck: ## Type-check every Rust target with warnings denied
-	RUSTFLAGS="-D warnings" $(CARGO) check --all-targets --all-features
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(STANDARD_RUSTFLAGS)" $(CARGO) check --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
