@@ -57,13 +57,16 @@ targets are:
 
 `make lint-whitaker` runs `whitaker --all` over every target and feature. To
 set it up locally, install `whitaker-installer` 0.2.11 or later (for example
-with `cargo binstall whitaker-installer`) and run `whitaker-installer` once. It
-installs the lint libraries and writes the `whitaker` and `whitaker-ls`
-wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`); add that directory to `PATH`.
-Run lints through the `whitaker` wrapper, which points Dylint at Whitaker's
-verified Clippy snapshot; bare `cargo dylint` is unsupported. The first run
-builds the Dylint driver once. Whitaker's driver uses its own pinned toolchain,
-so it coexists with the repository's.
+with `cargo binstall whitaker-installer`) and run
+`whitaker-installer --cranelift` once. The flag also installs
+`rustc-codegen-cranelift` for Whitaker's own toolchain, which the repository's
+Cranelift default needs; the repository's `rust-toolchain.toml` component does
+not cover it. The installer installs the lint libraries and writes the
+`whitaker` and `whitaker-ls` wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`);
+add that directory to `PATH`. Run lints through the `whitaker` wrapper, which
+points Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
+unsupported. The first run builds the Dylint driver once. Whitaker's driver
+uses its own pinned toolchain, so it coexists with the repository's.
 
 Test code reaches the filesystem through `cap-std`: the toolchain tests share
 the ambient-authority helpers in `tests/toolchain/ambient.rs`, because
@@ -131,7 +134,8 @@ overrides so its installer-managed toolchain builds without repository
 development flags. `scripts/tests/test_build_standard.py` holds each of these
 properties (`make test-scripts`). CI installs `mold` through `install-mold` on
 `setup-rust`, and the Cranelift component for the Whitaker toolchain through
-`cranelift: 'true'` on `install-whitaker`.
+`cranelift: 'true'` on `install-whitaker`, the CI equivalent of
+`whitaker-installer --cranelift`.
 
 ## Changing a toolchain pin
 
