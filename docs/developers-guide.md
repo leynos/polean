@@ -128,7 +128,9 @@ Assigning `RUSTFLAGS` replaces every `rustflags` source, so the `typecheck`
 recipe restates the flags through `STANDARD_RUSTFLAGS`. The Whitaker route
 takes none of them: `WHITAKER_CLEAN_ENV` clears inherited flags and backend
 overrides so its installer-managed toolchain builds without repository
-development flags. CI installs `mold` through `install-mold` on `setup-rust`.
+development flags. CI installs `mold` through `install-mold` on `setup-rust`, and the
+Cranelift component for the Whitaker toolchain through `cranelift: 'true'` on
+`install-whitaker`.
 
 ## Changing a toolchain pin
 
