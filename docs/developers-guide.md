@@ -9,7 +9,7 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - Git;
 - the Rust toolchain pinned by `rust-toolchain.toml`, with its
   `rustc-codegen-cranelift-preview` component;
-- the `mold` linker on Linux, because `.cargo/config.toml` selects it;
+- the `mold` linker on Linux (`.cargo/config.toml` selects it);
 - Python 3.11 or later for the design harness;
 - `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
   checks;
@@ -128,8 +128,9 @@ Assigning `RUSTFLAGS` replaces every `rustflags` source, so the `typecheck`
 recipe restates the flags through `STANDARD_RUSTFLAGS`. The Whitaker route
 takes none of them: `WHITAKER_CLEAN_ENV` clears inherited flags and backend
 overrides so its installer-managed toolchain builds without repository
-development flags. CI installs `mold` through `install-mold` on `setup-rust`,
-and the Cranelift component for the Whitaker toolchain through
+development flags. `scripts/tests/test_build_standard.py` holds each of these
+properties (`make test-scripts`). CI installs `mold` through `install-mold` on
+`setup-rust`, and the Cranelift component for the Whitaker toolchain through
 `cranelift: 'true'` on `install-whitaker`.
 
 ## Changing a toolchain pin
