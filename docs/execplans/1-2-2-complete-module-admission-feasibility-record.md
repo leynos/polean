@@ -219,7 +219,19 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   applicable commit gates (`check-fmt`, `typecheck`, `lint`, `test`,
   `markdownlint`, `design-check`) are green. The only new dependency is
   `proptest = "=1.12.0"`. No `src/` change, `examples/tenant-write/` untouched.
-- [ ] EP-M4: Verus soundness proof of the recognizer kernel (D14).
+- [x] (2026-10-31) EP-M4: Verus soundness proof of the recognizer kernel.
+  `verus/admission_spec.rs` states the decomposition, trivia, metadata, and
+  line-feed predicates over `Seq<u8>`; `verus/admission_lemmas.rs` proves the
+  scan steps that lift each kernel loop step to that specification;
+  `verus/admission_recognizer.rs` pulls the kernel in with `#[path]`, so one
+  file is both compiled by Cargo and verified by Verus. `make verus` reports 40
+  verified obligations and no errors, with no `assume`, `admit`, or
+  `external_body`, and the proof is parametric in the source length (O6). The
+  kernel's behaviour is unchanged: every admission test still passes. New files:
+  `tools/verus/` (release and Z3 pins), `tools/rust-prover-tools/REF`,
+  `scripts/install_verus_z3.py` with its tests, and the `install-verus` and
+  `verus` targets. `vstd` is the only new dependency, dev-only and already in
+  `Cargo.lock`. Verus is not part of `make all` or CI.
 - [ ] EP-M5: feasibility record, ADR 0005, and documentation updates.
 
 ## Surprises & discoveries
@@ -389,6 +401,52 @@ execution here. The probe harness was not committed.
   `the comment holds the byte 0x0d`. Impact: `witness_refusal` panics when the
   injected kernel refuses the source, so a mask that breaks the source cannot
   masquerade as a caught fault.
+- Observation (EP-M4, 2026-10-31): Verus does not accept a recursive spec
+  function as a quantifier trigger. The flags invariant originally wrote
+  `#[trigger] gap_has_newline(...)`; Verus discarded it, fell back to another
+  term, and reported "recommendation not met" on every push into the offset
+  vector. Evidence: the failing run and the warning text at the trigger
+  position; a minimal probe showed the same. Impact: the flag property moved
+  behind an opaque `flags_prefix` predicate, with `lemma_flags_prefix_push`
+  carrying one token's step and a `#[trigger] p[j] as int` term. The same
+  pattern (opaque predicate plus a push lemma) is what makes the per-token
+  invariant affordable.
+- Observation (EP-M4, 2026-10-31): the first `gap_has_newline` was an
+  existential, and Verus instantiated it 5,180 times for 78% of the profile's
+  quantifier cost; the `recognize` loop then exceeded the default rlimit at
+  2,000. Evidence: `--profile` output on the kernel. Impact: the predicate is
+  now a recursive scan, and `trivia` is opaque, so the loop verifies at the
+  default rlimit with no rlimit failures.
+- Observation (EP-M4, 2026-10-31): a `requires` clause is not available inside
+  a loop body unless the loop invariant restates it, and `at + 8 <= to` is a
+  genuine overflow hazard rather than a proof gap: `at` may approach
+  `usize::MAX`. Evidence: the `contains_metadata` counterexample and the failed
+  invariant. Impact: the scan counts down with `remaining` and states
+  `at as int + remaining as int == to as int`, so neither `+` nor `-` appears
+  in the loop condition; `lemma_slice_len_fits` supplies the `src.len()` term
+  that vstd's broadcast length axiom needs before any addition can be proved in
+  range.
+- Observation (EP-M4, 2026-10-31): Verus warns that `==>` inside
+  `assert forall ... by { }` does not assume the antecedent in the body, and
+  the assertion fails without the assumption. Evidence: the failing
+  `lemma_flags_prefix_push` and the compiler's own recommendation to use
+  `implies`. Impact: guarded bodies in an `assert forall` use `implies`.
+- Observation (EP-M4, 2026-10-31): `prover-tools verus run` cannot drive the
+  pinned release. It parses `Toolchain:` with a pattern anchored at the start
+  of a line, while the pinned `verus --version` indents that line by two
+  spaces, so every run fails before verification; the pinned `verus install` is
+  unaffected. Evidence: the target's output and the pattern in
+  `rust_prover_tools/versions.py`. Impact: the `verus` target runs the
+  installed, digest-checked binary directly (D21), and the deviation is
+  recorded rather than hidden.
+- Observation (EP-M4, 2026-10-31): the plain `rustc` build sees the
+  `#[cfg(verus_keep_ghost)]` imports as an unexpected configuration, and Verus
+  sees the specification items as used only under that same configuration.
+  Evidence: `cargo check` warnings before the change, and the `dead_code`
+  warning for an unreferenced constant. Impact: Cargo declares
+  `check-cfg = ["cfg(verus_keep_ghost)"]`, and the spec imports carry
+  `#[cfg(verus_keep_ghost)]`, so both builds are warning-free without an
+  `allow` attribute.
 
 ## Decision log
 
@@ -550,6 +608,15 @@ execution here. The probe harness was not committed.
   the module. Rationale: a comparison rule for evidence must not weaken the
   property it is evidence for, and an unreachable branch must still have a
   defined, failing outcome.
+- D21 (2026-10-31, EP-M4): `make verus` invokes the installed Verus binary
+  directly, after `make install-verus` has downloaded it through `prover-tools`
+  and checked it against `tools/verus/SHA256SUMS`. It does not call
+  `prover-tools verus run`, because that command parses the pinned release's
+  `--version` output and cannot read its indented `Toolchain:` line. Rationale:
+  the release and the installer stay pinned and digest-checked; only the
+  launcher changes, and the failure is deterministic and recorded. The target
+  still fails closed: it refuses to run when the binary is absent and names
+  `make install-verus`.
 
 ## Outcomes & retrospective
 
@@ -1289,9 +1356,82 @@ clean under `cargo doc` with `-D warnings` and
 and `make toolchain-smoke` are not applicable: the change touches no pin,
 `scripts/`, `lean/`, or `tests/toolchain/` path.
 
-Still to be filled in during implementation:
+### EP-M4 Red transcript (2026-10-31)
 
-- the Verus Red and Green transcripts.
+The Red state is the kernel's contract with the specification attached and no
+proof steps. A scratch copy of the four Verus inputs under
+`/tmp/verus-red-probe/` had every `proof { … }` block removed and kept every
+contract, invariant, and assertion; the probe was not committed.
+`verus --multiple-errors 40 verus/admission_recognizer.rs` reported:
+
+```plaintext
+error: possible arithmetic underflow/overflow
+   --> verus/../tests/admission/recognizer/kernel.rs:116:25
+    |
+116 |         if byte_at(src, at + j) != metadata_byte(j) {
+    |                         ^^^^^^
+
+error: possible arithmetic underflow/overflow
+   --> verus/../tests/admission/recognizer/kernel.rs:187:15
+    |
+187 |     } else if at + 1 < src.len() {
+    |               ^^^^^^
+
+error: invariant not satisfied before loop
+   --> verus/../tests/admission/recognizer/kernel.rs:302:13
+    |
+302 |             trivia(src@, at as int, index as int, last),
+
+error: invariant not satisfied at end of loop body
+   --> verus/../tests/admission/recognizer/kernel.rs:376:13
+    |
+376 |             flags_prefix(src@, toks@, offsets@, needs_newline@, index as int),
+
+verification results:: 34 verified, 6 errors
+```
+
+The six errors are the arithmetic obligations and the loop invariants that
+carry the postcondition. Verus reports the first unmet obligation at the loop
+that needs it, so the empty proof fails there rather than at the function's
+closing `ensures`. The log is `/tmp/verus-epm4-red.out`.
+
+### EP-M4 Green transcript (2026-10-31)
+
+With the lemmas and invariants in place, `make verus` reports:
+
+```plaintext
+VERUS_Z3_PATH="…/.verus/z3/z3" "…/.verus/0.2026.09.06.8dea4a2/verus/verus" "verus/admission_recognizer.rs"
+verification results:: 40 verified, 0 errors
+```
+
+The kernel contains no `assume`, `admit`, or `external_body`. The log is
+`/tmp/verus-polean-1-2-2-complete-module-admission-feasibility-record.out`.
+`make test-scripts` passes 70 tests with the Python 3.14 interpreter, including
+24 new tests for `scripts/install_verus_z3.py`, run through
+`uv run --python 3.14 --with pytest==9.1.1 python -m pytest scripts/tests`
+after the repository's default interpreter reported that it lacks
+`compression.zstd`.
+
+### EP-M4 gate evidence (2026-10-31)
+
+All eight applicable gates pass on the candidate that adds the Verus inputs,
+the pins, and the Z3 installer, run sequentially by the scrutineer against the
+final working tree:
+
+| Gate                   | Result                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `make check-fmt`       | `cargo fmt --all -- --check` clean; `mdtablefix --check` reports 30 files unchanged    |
+| `make typecheck`       | `cargo check --all-targets --all-features` with `-D warnings`, no diagnostics          |
+| `make lint`            | `cargo doc` with `-D warnings` and Clippy clean                                        |
+| `make test`            | admission 60, documentation-example 27, stub 2, toolchain 18 with 7 ignored, doctest 1 |
+| `make markdownlint`    | 31 files, 0 issues                                                                     |
+| `make design-check`    | 5 schemas, 6 witnesses, 19 negative controls, 2 boundary seams                         |
+| `make test-scripts`    | 70 passed under Python 3.14 (substituted interpreter)                                  |
+| `make toolchain-smoke` | 7 smoke tests pass, 18 filtered out                                                    |
+
+`make verus` is not part of the commit gates and is covered by the Green
+transcript above. The logs are
+`/tmp/<gate>-polean-1-2-2-complete-module-admission-feasibility-record.out`.
 
 ## Interfaces and dependencies
 

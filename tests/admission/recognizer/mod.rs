@@ -30,13 +30,10 @@ mod render;
 mod tests;
 mod witness;
 
-pub use kernel::recognize;
+pub use kernel::{METADATA, has_metadata, recognize};
 pub use lexer::cross_check;
 pub use render::{Tokens, canonical_tokens};
 pub use witness::confirm;
-
-/// The bytes a comment may not spell.
-const METADATA: &[u8] = b"METADATA";
 
 /// Why the recognizer did not accept an admitted module.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -82,7 +79,7 @@ fn refusal_code(source: &[u8], offset: usize) -> ReasonCode {
 
 /// Whether the comment starting at `hash` spells `METADATA`.
 fn metadata_comment(source: &[u8], hash: usize) -> bool {
-    has_metadata(kernel::comment_body(source, hash))
+    kernel::has_metadata(kernel::comment_body(source, hash))
 }
 
 /// Whether `byte` is a byte the profile does not permit outside a token.
@@ -107,13 +104,4 @@ fn refusal_span(source: &str, offset: usize) -> ByteSpan {
         })
     });
     (offset, end)
-}
-
-/// Whether `body` spells `METADATA` anywhere.
-///
-/// Both the kernel and the witness use this one definition, so a comment the
-/// witness refuses is a comment the kernel refuses.
-fn has_metadata(body: &[u8]) -> bool {
-    body.windows(METADATA.len())
-        .any(|window| window == METADATA)
 }

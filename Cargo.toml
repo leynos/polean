@@ -23,6 +23,7 @@ rstest = "=0.27.0"
 rstest-bdd = "=0.6.0"
 rstest-bdd-macros = "=0.6.0"
 serde_json = "=1.0.154"
+vstd = "=0.0.0-2026-09-06-0133"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
@@ -82,6 +83,10 @@ error_impl_error = "deny"
 result_large_err = "deny"
 
 [lints.rust]
+# The Verus entry point compiles the recognizer kernel with this configuration
+# set, while Cargo always compiles it without it. Declaring it keeps both builds
+# from reporting an unexpected configuration.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(verus_keep_ghost)"] }
 unknown_lints = "deny"
 renamed_and_removed_lints = "deny"
 unsafe_code = "forbid"

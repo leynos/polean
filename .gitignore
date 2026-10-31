@@ -32,3 +32,6 @@ evidence/
 
 # Lake build output for the repository-owned smoke package
 .lake/
+
+# Pinned Verus release, installed on demand by `make install-verus`
+.verus/
