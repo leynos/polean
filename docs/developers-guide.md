@@ -27,7 +27,7 @@ it imports `compression.zstd` at load time. Point them at one with
 changed Regorus AST snapshot.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
-`mdtablefix` 0.6.0 or later and `markdownlint-cli2` to reproduce every
+`mdtablefix` 0.6.1 or later and `markdownlint-cli2` to reproduce every
 formatting and prose gate.
 
 ## Common commands
