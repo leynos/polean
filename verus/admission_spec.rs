@@ -206,4 +206,157 @@ pub open spec fn flags_hold(s: Seq<u8>, k: Seq<&[u8]>, p: Seq<usize>, flags: Seq
     flags.len() == k.len() && flags_prefix(s, k, p, flags, k.len() as int)
 }
 
+// ---------------------------------------------------------------------------
+// The concrete baseline
+// ---------------------------------------------------------------------------
+
+/// The baseline source every fixture is derived from, byte for byte.
+///
+/// This is the string `tests/admission/corpus/generated.rs` names
+/// `BASELINE`. The source is stated as a specification sequence, not as an
+/// exec constant: Verus refuses to coerce a byte literal to a slice
+/// reference in a constant initialiser, and a slice built that way has
+/// opaque contents, so the proof could not inspect its bytes.
+pub open spec fn baseline_src() -> Seq<u8> {
+    seq![b'p', b'a', b'c', b'k', b'a', b'g', b'e', b' ', b'a', b'u', b't', b'h', b'z',
+    b'\n', b'\n', b'i', b'm', b'p', b'o', b'r', b't', b' ', b'r', b'e', b'g', b'o',
+    b'.', b'v', b'1', b'\n', b'\n', b'd', b'e', b'f', b'a', b'u', b'l', b't', b' ',
+    b'a', b'l', b'l', b'o', b'w', b' ', b':', b'=', b' ', b'f', b'a', b'l', b's', b'e',
+    b'\n', b'\n', b'a', b'l', b'l', b'o', b'w', b' ', b'i', b'f', b' ', b'{', b'\n',
+    b' ', b' ', b' ', b' ', b'i', b'n', b'p', b'u', b't', b'.', b's', b'u', b'b', b'j',
+    b'e', b'c', b't', b'.', b't', b'e', b'n', b'a', b'n', b't', b' ', b'=', b'=', b' ',
+    b'i', b'n', b'p', b'u', b't', b'.', b'r', b'e', b's', b'o', b'u', b'r', b'c', b'e',
+    b'.', b't', b'e', b'n', b'a', b'n', b't', b'\n', b' ', b' ', b' ', b' ', b'i',
+    b'n', b'p', b'u', b't', b'.', b'a', b'c', b't', b'i', b'o', b'n', b' ', b'=', b'=',
+    b' ', b'"', b'w', b'r', b'i', b't', b'e', b'"', b'\n', b'}', b'\n']
+}
+
+/// The baseline's canonical tokens, as byte sequences.
+pub open spec fn baseline_tokens() -> Seq<Seq<u8>> {
+    seq![
+        seq![b'p', b'a', b'c', b'k', b'a', b'g', b'e'],
+        seq![b'a', b'u', b't', b'h', b'z'],
+        seq![b'i', b'm', b'p', b'o', b'r', b't'],
+        seq![b'r', b'e', b'g', b'o', b'.', b'v', b'1'],
+        seq![b'd', b'e', b'f', b'a', b'u', b'l', b't'],
+        seq![b'a', b'l', b'l', b'o', b'w'],
+        seq![b':', b'='],
+        seq![b'f', b'a', b'l', b's', b'e'],
+        seq![b'a', b'l', b'l', b'o', b'w'],
+        seq![b'i', b'f'],
+        seq![b'{'],
+        seq![b'i', b'n', b'p', b'u', b't', b'.', b's', b'u', b'b', b'j', b'e', b'c',
+        b't', b'.', b't', b'e', b'n', b'a', b'n', b't'],
+        seq![b'=', b'='],
+        seq![b'i', b'n', b'p', b'u', b't', b'.', b'r', b'e', b's', b'o', b'u', b'r',
+        b'c', b'e', b'.', b't', b'e', b'n', b'a', b'n', b't'],
+        seq![b'i', b'n', b'p', b'u', b't', b'.', b'a', b'c', b't', b'i', b'o', b'n'],
+        seq![b'=', b'='],
+        seq![b'"', b'w', b'r', b'i', b't', b'e', b'"'],
+        seq![b'}'],
+    ]
+}
+
+/// The offsets recognition returns for the baseline.
+pub open spec fn baseline_offsets() -> Seq<usize> {
+    seq![0usize, 8usize, 15usize, 22usize, 31usize, 39usize, 45usize, 48usize, 55usize,
+    61usize, 64usize, 70usize, 91usize, 94usize, 120usize, 133usize, 136usize, 144usize]
+}
+
+/// The line-feed flags of the baseline's canonical tokens.
+///
+/// Only the second literal of the rule body begins a line; every other
+/// token is on its predecessor's line or begins a module section.
+pub open spec fn baseline_flags() -> Seq<bool> {
+    seq![false, false, false, false, false, false, false, false, false, false, false,
+    false, false, false, true, false, false, false]
+}
+
+/// Whether the token byte sequence `tok` sits at `at`.
+///
+/// This is [`token_at`] with the token stated as its bytes. A concrete proof
+/// can inspect such a sequence; the contents of a byte-literal slice are opaque
+/// to the verifier, so no concrete instance could be stated with one.
+pub open spec fn token_seq_at(s: Seq<u8>, at: int, tok: Seq<u8>) -> bool {
+    at + tok.len() <= s.len() && (forall|k: int| 0 <= k < tok.len() ==> s[at + k] == tok[k])
+}
+
+/// Whether the first `m` sequence tokens sit at their offsets with trivia in
+/// the gaps.
+///
+/// The counterpart of [`prefix_decomposes`] for token byte sequences.
+pub open spec fn prefix_decomposes_seq(
+    s: Seq<u8>,
+    k: Seq<Seq<u8>>,
+    p: Seq<usize>,
+    m: int,
+) -> bool {
+    &&& m <= k.len()
+    &&& p.len() == m
+    &&& (forall|j: int| 0 <= j < m ==> #[trigger] k[j].len() > 0)
+    &&& (forall|j: int| 0 <= j < m ==> #[trigger] token_seq_at(s, p[j] as int, k[j]))
+    &&& if m == 0 {
+        true
+    } else {
+        &&& trivia(s, 0, p[0] as int, false)
+        &&& (forall|j: int|
+            0 < j < m ==> p[j - 1] as int + k[j - 1].len() < #[trigger] p[j] as int && trivia(
+                s,
+                p[j - 1] as int + k[j - 1].len(),
+                p[j] as int,
+                false,
+            ))
+    }
+}
+
+/// Whether `k` sits at `p` with trivia filling the whole source elsewhere.
+///
+/// The counterpart of [`decomposes_at`] for token byte sequences.
+pub open spec fn decomposes_seq(s: Seq<u8>, k: Seq<Seq<u8>>, p: Seq<usize>) -> bool {
+    prefix_decomposes_seq(s, k, p, k.len() as int) && if k.len() == 0 {
+        trivia(s, 0, s.len() as int, true)
+    } else {
+        trivia(s, p[k.len() - 1] as int + k[k.len() - 1].len(), s.len() as int, true)
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// T1 and T2: what an accepted source may contain
+// ---------------------------------------------------------------------------
+
+/// Whether byte `i` may appear anywhere in an accepted source.
+///
+/// This is the permitted set of T1: a tab, printable ASCII, a line feed, or a
+/// carriage return that starts a line ending. A token byte is printable ASCII
+/// by assumption; trivia is covered by this predicate from the specification.
+pub open spec fn permitted_byte(s: Seq<u8>, i: int) -> bool {
+    0 <= i < s.len()
+        && (s[i] == b'\t' || (0x20 <= s[i] && s[i] <= 0x7e) || s[i] == b'\n' || (s[i]
+            == b'\r' && i + 1 < s.len() && s[i + 1] == b'\n'))
+}
+
+/// Whether every byte of `a..b` is permitted.
+pub open spec fn permitted_range(s: Seq<u8>, a: int, b: int) -> bool {
+    forall|i: int| a <= i < b ==> #[trigger] permitted_byte(s, i)
+}
+
+/// Whether the `#` at `q` begins a comment that spells the metadata marker on
+/// its own line.
+///
+/// Such a comment is exactly what [`comment_ok`] refuses, so an accepted source
+/// has none. The marker must start immediately after the `#` and must not
+/// contain a line feed, which is the inline and block forms OPA treats as
+/// annotations (D9).
+pub open spec fn annotates_metadata(s: Seq<u8>, q: int) -> bool {
+    0 <= q < s.len() && s[q] == b'#'
+        && metadata_at(s, q + 1)
+        && !gap_has_newline(s, q + 1, q + 1 + metadata_bytes().len())
+}
+
+/// Whether no byte of `s` begins a metadata annotation.
+pub open spec fn no_metadata_annotation(s: Seq<u8>) -> bool {
+    forall|q: int| 0 <= q < s.len() && #[trigger] s[q] == b'#' ==> !annotates_metadata(s, q)
+}
+
 } // verus!

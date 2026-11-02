@@ -79,7 +79,7 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
     expression, metadata, and unknown AST variants. Missing API coverage has a
     demonstrated bounded check or is recorded as an E0 finding that blocks
     2.1.2; unreachable syntax is not ignored.
-  - Recorded: the 105-entry corpus matches its manifest in every case, all 46
+  - Recorded: the 106-entry corpus matches its manifest in every case, all 46
     AST node kinds are observed, and the recognizer kernel proves with no
     `assume`, `admit`, or `external_body`. The record finds no E0 blocking
     issue. The spike is test-only; 2.1.1 and 2.1.2 own production admission.

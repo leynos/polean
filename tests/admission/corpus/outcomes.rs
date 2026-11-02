@@ -7,8 +7,8 @@
 //! the pinned lexer confirms the canonical tokens (O7).
 
 use crate::{
-    admission::{self, Classification, Comparison, Decision, Rejection},
-    corpus::{self, Entry, Profile},
+    admission::{self, Classification, Comparison, Decision, Frontend, Rejection},
+    corpus::{self, Entry, Expected, Origin, Profile, ReasonCode, Stage},
     recognizer,
 };
 
@@ -112,29 +112,123 @@ impl Checker<'_> {
     }
 }
 
-#[test]
-fn every_fixture_yields_its_manifest_outcome() {
+/// Check every manifest entry against `profile`, returning the faults found.
+fn check_corpus(profile: &Profile) -> Vec<String> {
     let entries = manifest();
-    let profile = profile();
     let mut checker = Checker {
-        profile: &profile,
+        profile,
         failures: Vec::new(),
     };
     for entry in &entries {
         checker.fixture(entry);
     }
-    if !checker.failures.is_empty() {
-        let shown = checker
-            .failures
+    checker.failures
+}
+
+#[test]
+fn every_fixture_yields_its_manifest_outcome() {
+    let failures = check_corpus(&profile());
+    if !failures.is_empty() {
+        let shown = failures
             .iter()
             .take(20)
             .cloned()
             .collect::<Vec<_>>()
             .join("\n");
         panic!(
-            "{} faults while checking {} fixtures; first faults:\n{shown}",
-            checker.failures.len(),
-            entries.len()
+            "{} faults while checking the corpus; first faults:\n{shown}",
+            failures.len()
         );
     }
+}
+
+/// The `nul_in_comment` fixture splits the frontend from the recognizer.
+///
+/// Regorus reads the NUL inside the trailing comment as the end of its input,
+/// so the frontend parses the prefix, the walk admits the baseline rule list,
+/// and the rule written after the NUL never reaches either. The recognizer
+/// reads the submitted bytes instead, so it must refuse at the NUL rather than
+/// accept the module the AST describes.
+#[test]
+fn a_nul_in_a_trailing_comment_is_hidden_from_the_frontend() {
+    let profile = profile();
+    let entry = Entry {
+        origin: Origin::Generated("nul_in_comment".to_owned()),
+        covers: Vec::new(),
+        expected: Expected::Rejected {
+            stage: Stage::Recognizer,
+            code: ReasonCode::TriviaByte,
+        },
+    };
+    let source = corpus::source(&entry).unwrap_or_else(|error| panic!("{error}"));
+    let Some(nul) = source.find('\u{0}') else {
+        panic!("the fixture must contain a NUL");
+    };
+    assert!(
+        source
+            .get(..nul)
+            .is_some_and(|prefix| prefix.contains("package authz")),
+        "the admissible prefix must come before the NUL"
+    );
+    assert!(
+        source
+            .get(nul..)
+            .is_some_and(|tail| tail.contains("input.subject.role")),
+        "the hidden trailing syntax must come after the NUL"
+    );
+    let classification = admission::classify(&profile, &source);
+    assert!(
+        matches!(classification.frontend, Frontend::Parsed(_)),
+        "the frontend must parse the prefix and hide the trailing rule"
+    );
+    assert_eq!(
+        classification.recognizer,
+        Some(Err(nul)),
+        "the recognizer must read the raw bytes and stop at the NUL"
+    );
+    assert_refused_at_nul(&classification, nul);
+}
+
+/// Assert the classification refused the NUL at `nul` as `trivia.byte`.
+fn assert_refused_at_nul(classification: &Classification, nul: usize) {
+    match &classification.decision {
+        Some(Decision::Rejected(rejection)) => {
+            assert_eq!(
+                rejection.stage,
+                Stage::Recognizer,
+                "the NUL is the recognizer's refusal, not the frontend's"
+            );
+            assert_eq!(
+                rejection.code,
+                ReasonCode::TriviaByte,
+                "a NUL outside a comment body is trivia.byte"
+            );
+            assert_eq!(
+                rejection.span,
+                Some((nul, nul + 1)),
+                "the refusal must point at the NUL itself"
+            );
+        }
+        other => panic!("the recognizer must refuse the submitted bytes, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_swapped_renderer_is_refused_by_the_corpus() {
+    let faulty = profile().with_swapped_lock_atoms();
+    let failures = check_corpus(&faulty);
+    let lock_fixture_failed = failures.iter().any(|failure| {
+        [
+            "admitted/locked-owner-rule.rego",
+            "atom/locked.rego",
+            "atom/unlocked.rego",
+        ]
+        .iter()
+        .any(|fixture| failure.contains(fixture))
+    });
+    assert!(
+        lock_fixture_failed,
+        "a swapped renderer must make the lock-atom fixtures disagree with the manifest; faults: \
+         {failures:?}"
+    );
 }

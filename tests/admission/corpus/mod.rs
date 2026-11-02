@@ -28,6 +28,9 @@ pub const MANIFEST: &str = include_str!("../../../examples/admission/manifest.js
 /// Every generated fixture name, as the manifest lists them.
 pub const GENERATED_NAMES: [&str; 5] = generated::NAMES;
 
+/// The baseline every generated fixture is derived from.
+pub use generated::BASELINE;
+
 /// The profile contract, as committed.
 const PROFILE: &str = include_str!("../../../contracts/profile.json");
 

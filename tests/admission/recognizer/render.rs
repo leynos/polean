@@ -166,9 +166,44 @@ fn quoted_end(canonical: &str, mut at: usize) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    //! Tokenisation must keep quoted strings, including spaces, intact.
+    //! Tokenisation must keep quoted strings, including spaces, intact, and the
+    //! rendered atoms must be exactly the contract's texts.
 
-    use super::split;
+    use super::{canonical_tokens, split};
+    use crate::corpus;
+
+    /// The committed profile, or a panic naming the read failure.
+    fn profile() -> corpus::Profile {
+        match corpus::profile_contract() {
+            Ok(profile) => profile,
+            Err(error) => panic!("the profile must parse: {error}"),
+        }
+    }
+
+    #[test]
+    fn every_registered_atom_renders_its_contract_text() {
+        let profile = profile();
+        for (canonical, name) in &profile.atoms {
+            assert_eq!(
+                profile.atom_text(name),
+                Some(canonical.as_str()),
+                "atom `{name}` must render the text the contract registers"
+            );
+            let ir = vec![vec![name.clone()]];
+            let tokens = match canonical_tokens(&profile, &ir) {
+                Ok(tokens) => tokens,
+                Err(error) => panic!("`{name}` must render: {error}"),
+            };
+            let Some(rendered) = tokens.text.get(11..tokens.text.len().saturating_sub(1)) else {
+                panic!("`{name}` must render after the fixed rule header");
+            };
+            assert_eq!(
+                rendered.join(" "),
+                canonical.as_str(),
+                "the renderer must spell atom `{name}` exactly as the contract does"
+            );
+        }
+    }
 
     #[test]
     fn a_quoted_string_with_a_space_stays_one_token() {

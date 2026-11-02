@@ -61,12 +61,12 @@ criterion is met, and there are no E0 findings:
 | S1: package, import, and default                              | Enforced by the profile walk; fixtures in `examples/admission/{package,import,default}/`.                                                             |
 | S2: every rule and expression                                 | Every one of the 46 node kinds is observed; the closed decoder and walk cover all of them; fixtures in `head/`, `literal/`, `expr/`, and `operator/`. |
 | S3: metadata                                                  | Rejected by the recognizer as `trivia.metadata`; fixtures `trivia/metadata-block.rego` and `trivia/metadata-inline.rego`.                             |
-| S4: unknown AST variants                                      | Rejected by the closed decoder; 77,884 structural mutants across ten classes are all rejected at `decode`.                                            |
+| S4: unknown AST variants                                      | Rejected by the closed decoder; 79,181 structural mutants across ten classes are all rejected at `decode`.                                            |
 | S5: missing API coverage has a bounded check or an E0 finding | Six AST gaps are closed by the recognizer; the kernel's soundness is proved in Verus. No gap remains open.                                            |
 | S6: unreachable syntax is not ignored                         | Unreachable v0 forms are parse errors; `unreachable/v0-body.rego` and `unreachable/v0-partial-set.rego` are refused.                                  |
 
-The manifest's 105 entries split as 21 admitted and 84 rejected: 12 at parse,
-65 at the profile walk, and 7 at the recognizer. Nineteen of the 28 reason
+The manifest's 106 entries split as 21 admitted and 85 rejected: 11 at parse,
+66 at the profile walk, and 8 at the recognizer. Nineteen of the 28 reason
 codes are reachable from source; the remaining nine describe AST JSON
 corruption and are exercised by the mutation sweep and the decoder's
 malformed-input test. The observation snapshot records, for every fixture, what
@@ -132,28 +132,28 @@ Each `excluded` entry in `contracts/profile.json` maps to a reason code or is
 not applicable to source admission. The mapping is part of the record, not only
 of the code, so a future profile change must revisit it.
 
-| Profile exclusion     | Reason code                                                               | Evidence                                                                                                                          |
-| --------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Other packages        | `package.shape`                                                           | `package/other.rego`                                                                                                              |
-| Other imports         | `import.shape`                                                            | `import/other.rego`                                                                                                               |
-| Additional modules    | `ast.module_count` at the decode stage; a second package is a parse error | `module/two-packages.rego`; decoder module-count test                                                                             |
-| Metadata annotations  | `trivia.metadata`                                                         | `trivia/metadata-*.rego`                                                                                                          |
-| Other rules           | `rule.head`                                                               | `head/other-name.rego`                                                                                                            |
-| Variables             | `literal.kind` or `atom.unknown`                                          | `expr/var.rego`, `literal/some-vars.rego`                                                                                         |
-| Unification           | `expr.kind`                                                               | `operator/assign-eq.rego`                                                                                                         |
-| Negation              | `literal.kind`                                                            | `literal/not-expr.rego`                                                                                                           |
-| `else`                | `rule.body`                                                               | `body/else.rego`                                                                                                                  |
-| `with`                | `with.modifier`                                                           | `body/with.rego`                                                                                                                  |
-| `some`                | `literal.kind`                                                            | `literal/some-in.rego`, `literal/some-vars.rego`                                                                                  |
-| `every`               | `literal.kind`                                                            | `literal/every.rego`                                                                                                              |
-| Built-in calls        | `expr.kind`                                                               | `expr/call.rego`                                                                                                                  |
-| Functions             | `rule.head`                                                               | `head/function.rego`                                                                                                              |
-| `data` references     | `atom.unknown`                                                            | No dedicated fixture; the atom lookup rejects any reference that is not a registered atom, as `atom/unknown-attribute.rego` shows |
-| Dynamic references    | `atom.unknown`                                                            | `expr/ref-brack.rego`, `atom/bracket-reference.rego`                                                                              |
-| Numeric expressions   | `expr.kind` or `operator.kind`                                            | `operator/arith-*.rego`, `operator/bool-*.rego`                                                                                   |
-| Collections           | `atom.unknown`                                                            | `expr/{array,set,object,*-compr}.rego`                                                                                            |
-| Arbitrary Lean source | Not applicable to source admission                                        | The verifier's template boundary, not source syntax                                                                               |
-| Custom invariants     | Not applicable to source admission                                        | A claims-set construct, not source syntax                                                                                         |
+| Profile exclusion     | Reason code                                                               | Evidence                                                                                        |
+| --------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Other packages        | `package.shape`                                                           | `package/other.rego`                                                                            |
+| Other imports         | `import.shape`                                                            | `import/other.rego`                                                                             |
+| Additional modules    | `ast.module_count` at the decode stage; a second package is a parse error | `module/two-packages.rego`; decoder module-count test                                           |
+| Metadata annotations  | `trivia.metadata`                                                         | `trivia/metadata-*.rego`                                                                        |
+| Other rules           | `rule.head`                                                               | `head/other-name.rego`                                                                          |
+| Variables             | `literal.kind` or `atom.unknown`                                          | `expr/var.rego`, `literal/some-vars.rego`                                                       |
+| Unification           | `expr.kind`                                                               | `operator/assign-eq.rego`                                                                       |
+| Negation              | `literal.kind`                                                            | `literal/not-expr.rego`                                                                         |
+| `else`                | `rule.body`                                                               | `body/else.rego`                                                                                |
+| `with`                | `with.modifier`                                                           | `body/with.rego`                                                                                |
+| `some`                | `literal.kind`                                                            | `literal/some-in.rego`, `literal/some-vars.rego`                                                |
+| `every`               | `literal.kind`                                                            | `literal/every.rego`                                                                            |
+| Built-in calls        | `expr.kind`                                                               | `expr/call.rego`                                                                                |
+| Functions             | `rule.head`                                                               | `head/function.rego`                                                                            |
+| `data` references     | `atom.unknown`                                                            | `expr/data-reference.rego`; the atom lookup rejects any reference that is not a registered atom |
+| Dynamic references    | `atom.unknown`                                                            | `expr/ref-brack.rego`, `atom/bracket-reference.rego`                                            |
+| Numeric expressions   | `expr.kind` or `operator.kind`                                            | `operator/arith-*.rego`, `operator/bool-*.rego`                                                 |
+| Collections           | `atom.unknown`                                                            | `expr/{array,set,object,*-compr}.rego`                                                          |
+| Arbitrary Lean source | Not applicable to source admission                                        | The verifier's template boundary, not source syntax                                             |
+| Custom invariants     | Not applicable to source admission                                        | A claims-set construct, not source syntax                                                       |
 
 ## 6. What the AST does not expose, and how each gap is closed
 
@@ -209,13 +209,24 @@ the one the spike calls.
 | Refusal         | An `Err` offset is never past the end of the source                                                                                 | `recognize`'s postcondition                |
 | Scope           | The property holds for sources of any length; no bound on token count                                                               | O6                                         |
 
-`make verus` reports 41 verified obligations and no errors on the current head.
-The count was 40 at commit `14d29d9`; splitting the carriage-return test into
-its own `crlf_at` function in `kernel/mod.rs` added one obligation. The proof
-contains no `assume`, `admit`, or `external_body`. The Red transcript in the
-ExecPlan shows the same contracts and invariants with the proof steps removed:
-Verus then reports 34 verified and 6 errors, the arithmetic obligations and the
+`make verus` reports 59 verified obligations and no errors on the current head.
+The count was 41 before O6's T1, T2, and concrete-baseline proofs were added,
+and 40 at commit `14d29d9`, when splitting the carriage-return test into its own
+`crlf_at` function in `kernel/mod.rs` added one obligation. The proof contains
+no `assume`, `admit`, or `external_body`. The Red transcript in the ExecPlan
+shows the same contracts and invariants with the proof steps removed: Verus
+then reports 34 verified and 6 errors, the arithmetic obligations and the
 invariants that carry the postcondition.
+
+`make verus` also runs the negative controls, which show the proof responds to
+defects rather than merely passing. Three body controls remove one kernel rule
+each — the `METADATA` scan, the non-empty gap rule, and the line-feed rule —
+with the specification unchanged. Two specification controls weaken a trivia
+definition with the kernel unchanged: `body_byte` is made to admit NUL, and
+`comment_ok` loses its metadata exclusion. Verus rejects every control at the
+named obligation, including T1's `lemma_comment_body_permitted` and T2's
+`lemma_comment_no_metadata`. A control whose anchor no longer occurs exactly
+once fails closed.
 
 The theorem is about the kernel only. It does not establish that:
 
@@ -256,14 +267,9 @@ None. No construct was found that can be distinguished neither through the AST
 nor by the bounded check. The Design tolerance was therefore not triggered, and
 this record does not block roadmap item 2.1.2.
 
-The two gaps that remain are future work rather than findings:
-
-- the corpus has no dedicated fixture for a `data` reference inside a rule body;
-  the atom lookup rejects it by shape, and `atom/unknown-attribute.rego`
-  exercises that lookup, but a direct fixture would make the evidence local;
-- OPA was not executed, by design; the divergence table rests on source reading.
-
-Neither affects the admission verdict for the pinned tuple.
+One gap remains, and it is future work rather than a finding: OPA was not
+executed, by design, so the divergence table rests on source reading. It does
+not affect the admission verdict for the pinned tuple.
 
 ## 11. Proposed status and exit mapping for 2.1.2
 

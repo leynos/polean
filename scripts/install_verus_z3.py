@@ -16,6 +16,13 @@ not installed, and no archive member path is followed. The pin file is the only
 source of the archive name and digest, so a missing or malformed pin fails
 closed rather than falling back to a solver found on ``PATH``.
 
+The install directory carries a stamp recording the pin that produced the
+solver and the solver's own digest. An existing binary is reused only when the
+stamp matches the current pin and the binary still hashes to the recorded
+digest; a changed pin, a missing or malformed stamp, or a modified binary makes
+the installer fetch and verify the archive again. Cached state therefore cannot
+outlive the pin that justified it.
+
 Downloading is a parameter rather than a module global, so the tests can inject
 a fetcher without patching. The script launches no subprocess and uses the
 standard library only.
@@ -24,6 +31,7 @@ standard library only.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import sys
@@ -37,6 +45,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PINS_PATH = ROOT / "tools" / "verus" / "Z3_SHA256SUMS"
 INSTALL_DIR = ROOT / ".verus" / "z3"
+STAMP_NAME = "z3.pin"
 
 BASE_URL = "https://github.com/Z3Prover/z3/releases/download"
 CHUNK_SIZE = 1024 * 1024
@@ -122,14 +131,68 @@ def download(url: str, destination: Path) -> None:
                 sink.write(chunk)
 
 
-def verify_digest(path: Path, digest: str) -> None:
-    """Raise `ValueError` unless `path` hashes to `digest`."""
+def file_digest(path: Path) -> str:
+    """Return the SHA-256 digest of `path`'s bytes."""
     hasher = hashlib.sha256()
     with path.open("rb") as source:
         for chunk in iter(lambda: source.read(CHUNK_SIZE), b""):
             hasher.update(chunk)
-    if hasher.hexdigest() != digest:
+    return hasher.hexdigest()
+
+
+def verify_digest(path: Path, digest: str) -> None:
+    """Raise `ValueError` unless `path` hashes to `digest`."""
+    if file_digest(path) != digest:
         raise ValueError(f"{path} does not match the pinned SHA-256 digest")
+
+
+def read_stamp(path: Path) -> dict[str, str] | None:
+    """Return the recorded pin identity, or `None` if it is unusable.
+
+    A missing, unreadable, malformed, or partially recorded stamp is treated as
+    absent: the caller reinstalls rather than trusting the cached binary.
+    """
+    try:
+        recorded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(recorded, dict):
+        return None
+    fields = ("archive", "archive_sha256", "solver_sha256")
+    if any(not isinstance(recorded.get(field), str) for field in fields):
+        return None
+    return {field: recorded[field] for field in fields}
+
+
+def write_stamp(path: Path, archive: str, archive_digest: str, solver_digest: str) -> None:
+    """Record the pin identity and the extracted solver's digest."""
+    path.write_text(
+        json.dumps(
+            {
+                "archive": archive,
+                "archive_sha256": archive_digest,
+                "solver_sha256": solver_digest,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def stamp_matches(
+    stamp: Path, binary: Path, name: str, digest: str
+) -> bool:
+    """Whether the cached solver was produced by the current pin and is intact."""
+    recorded = read_stamp(stamp)
+    if recorded is None or not binary.is_file():
+        return False
+    if recorded["archive"] != name or recorded["archive_sha256"] != digest:
+        return False
+    try:
+        return file_digest(binary) == recorded["solver_sha256"]
+    except OSError:
+        return False
 
 
 def extract_solver(archive: Path, name: str, destination: Path) -> None:
@@ -158,8 +221,10 @@ def install(
 ) -> Path:
     """Install the pinned solver and return the path to the binary.
 
-    The install is idempotent: an existing binary short-circuits before any
-    download, and a failed verification leaves no binary behind.
+    The install is idempotent only while the cached solver matches the current
+    pin: the stamp must name the pinned archive and digest, and the binary must
+    still hash to the digest the stamp records. Any mismatch reinstalls, and a
+    failed verification leaves neither a binary nor a stamp behind.
 
     Raises
     ------
@@ -169,7 +234,8 @@ def install(
     """
     name, digest = read_pin(pins)
     binary = install_dir / "z3"
-    if binary.is_file():
+    stamp = install_dir / STAMP_NAME
+    if stamp_matches(stamp, binary, name, digest):
         return binary
     install_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=install_dir) as temporary:
@@ -178,7 +244,13 @@ def install(
         verify_digest(archive, digest)
         staged = Path(temporary) / "z3"
         extract_solver(archive, name, staged)
+        staged_stamp = Path(temporary) / STAMP_NAME
+        write_stamp(staged_stamp, name, digest, file_digest(staged))
+        # The stamp lands last, so a crash between the two replacements leaves
+        # a binary with an old stamp: the next run sees a mismatch and
+        # reinstalls instead of trusting it.
         os.replace(staged, binary)
+        os.replace(staged_stamp, stamp)
     return binary
 
 

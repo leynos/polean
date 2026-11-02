@@ -6,10 +6,11 @@
 //! decoded here, so this reader neither claims nor widens the contract's other
 //! sections.
 //!
-//! The atoms are keyed by their canonical source text, which is exactly the
-//! string the profile walk renders from an admitted comparison. Keeping the
-//! canonical text in the contract, rather than duplicating it in the spike,
-//! means EP-M3's renderer and the recognizer share one source of truth (D13).
+//! The atoms are keyed by their canonical source text. The recognizer's
+//! renderer reads that table, so the contract is its single source of truth
+//! (D13). The profile walk deliberately does not: it carries its own hand-
+//! written pattern table in [`crate::admission::walk`], so the two conjuncts
+//! cannot agree on a wrong text-to-name association by sharing it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -43,12 +44,6 @@ impl Profile {
     #[must_use]
     pub fn atom_names(&self) -> BTreeSet<String> { self.atoms.values().cloned().collect() }
 
-    /// The atom name registered for `canonical`, if there is one.
-    #[must_use]
-    pub fn atom_name(&self, canonical: &str) -> Option<&str> {
-        self.atoms.get(canonical).map(String::as_str)
-    }
-
     /// The canonical source text registered for `name`, if there is one.
     ///
     /// The contract keys the table by canonical text, so this reverses it. The
@@ -60,6 +55,26 @@ impl Profile {
             .iter()
             .find(|(_, registered)| registered.as_str() == name)
             .map(|(canonical, _)| canonical.as_str())
+    }
+
+    /// A copy of this profile whose `locked` and `unlocked` texts are exchanged.
+    ///
+    /// The tests call this a renderer fault: the walker still names each
+    /// source spelling from its own table, but the renderer now demands the
+    /// other atom's text, so a source it used to admit is refused. It exists to
+    /// show that a wrong association would be caught rather than agreed with.
+    #[cfg(test)]
+    #[must_use]
+    pub fn with_swapped_lock_atoms(&self) -> Self {
+        let mut swapped = self.clone();
+        for name in swapped.atoms.values_mut() {
+            match name.as_str() {
+                "locked" => *name = "unlocked".to_owned(),
+                "unlocked" => *name = "locked".to_owned(),
+                _ => {}
+            }
+        }
+        swapped
     }
 }
 

@@ -28,6 +28,7 @@
 {"path": "examples/admission/expr/assign.rego", "covers": ["ExprAssign"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
 {"path": "examples/admission/expr/bool.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
 {"path": "examples/admission/expr/call.rego", "covers": ["ExprCall"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
+{"path": "examples/admission/expr/data-reference.rego", "covers": ["ExprRefDot"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
 {"path": "examples/admission/expr/membership.rego", "covers": ["ExprMembership"], "expected": {"outcome": "rejected", "stage": "profile", "code": "expr.kind"}}
 {"path": "examples/admission/expr/null.rego", "covers": ["ExprNull"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
 {"path": "examples/admission/expr/number.rego", "covers": ["ExprNumber"], "expected": {"outcome": "rejected", "stage": "profile", "code": "atom.unknown"}}
@@ -43,7 +44,7 @@
 {"generated": "bare_carriage_return", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
 {"generated": "crlf", "covers": [], "expected": {"outcome": "admitted", "ir": "examples/admission/trivia/crlf.json"}}
 {"generated": "leading_bom", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
-{"generated": "nul_in_comment", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
+{"generated": "nul_in_comment", "covers": [], "expected": {"outcome": "rejected", "stage": "recognizer", "code": "trivia.byte"}}
 {"generated": "over_long_line", "covers": [], "expected": {"outcome": "rejected", "stage": "parse", "code": "parse.syntax"}}
 {"path": "examples/admission/head/dotted-name.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}
 {"path": "examples/admission/head/function.rego", "covers": ["HeadFunc"], "expected": {"outcome": "rejected", "stage": "profile", "code": "rule.head"}}

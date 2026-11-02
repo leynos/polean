@@ -6,7 +6,7 @@ CARGO ?= cargo
 WHITAKER ?= whitaker
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke install-verus verus
+.PHONY: help all build clean test typecheck lint lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke install-verus verus verus-proof verus-controls
 
 SHELL := bash
 
@@ -102,12 +102,22 @@ install-verus: ## Install the pinned Verus release and its pinned Z3 solver
 	$(PROVER_TOOLS) verus install --repo-root .
 	$(PYTHON) scripts/install_verus_z3.py
 
-verus: ## Run the Verus proof entry point
+verus: verus-proof verus-controls ## Run the Verus proof and its negative controls
+
+verus-proof: ## Run the Verus proof entry point
 	@test -x "$(VERUS_BIN)" || { \
 		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
 		exit 1; \
 	}
 	VERUS_Z3_PATH="$(VERUS_Z3_PATH)" "$(VERUS_BIN)" "$(VERUS_PROOF_FILE)" $(VERUS_FLAGS)
+
+verus-controls: ## Show the proof rejects mutated kernel bodies and weakened specs
+	@test -x "$(VERUS_BIN)" || { \
+		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
+		exit 1; \
+	}
+	$(PYTHON) scripts/check_verus_controls.py \
+		--verus "$(VERUS_BIN)" --z3 "$(VERUS_Z3_PATH)"
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

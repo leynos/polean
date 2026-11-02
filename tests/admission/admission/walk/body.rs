@@ -107,8 +107,28 @@ pub(super) fn check_operators(bodies: &[&Body]) -> Result<(), Rejection> {
     Ok(())
 }
 
+/// The comparison spellings the profile admits, and the atom each denotes.
+///
+/// The walk's atom table is deliberately written out here rather than read from
+/// `contracts/profile.json`. The recognizer renders the same atoms from the
+/// contract, so if the walker also looked them up there, a wrong text-to-name
+/// association would be agreed with by both conjuncts. With this table, the
+/// walk holds its own statement of which spelling means which atom, and the
+/// recognizer holds the contract's (D13, O5).
+const ATOMS: [(&str, &str); 6] = [
+    ("input.action == \"write\"", "write_action"),
+    ("input.resource.locked == false", "unlocked"),
+    ("input.resource.locked == true", "locked"),
+    ("input.subject.id == input.resource.owner", "owns_resource"),
+    ("input.subject.role == \"admin\"", "admin_role"),
+    (
+        "input.subject.tenant == input.resource.tenant",
+        "same_tenant",
+    ),
+];
+
 /// Map every statement to its atom name.
-pub(super) fn collect_atoms(profile: &Profile, bodies: &[&Body]) -> Result<Ir, Rejection> {
+pub(super) fn collect_atoms(bodies: &[&Body]) -> Result<Ir, Rejection> {
     let mut rules = Vec::with_capacity(bodies.len());
     for body in bodies {
         let mut atoms = Vec::with_capacity(body.query.stmts.len());
@@ -119,7 +139,7 @@ pub(super) fn collect_atoms(profile: &Profile, bodies: &[&Body]) -> Result<Ir, R
             let ExprKind::Compare { lhs, rhs, .. } = &expr.kind else {
                 continue;
             };
-            let name = atom_name(profile, lhs, rhs, expr.span)?;
+            let name = atom_name(lhs, rhs, expr.span)?;
             atoms.push(name.to_owned());
         }
         rules.push(atoms);
@@ -127,13 +147,8 @@ pub(super) fn collect_atoms(profile: &Profile, bodies: &[&Body]) -> Result<Ir, R
     Ok(rules)
 }
 
-/// Look up one comparison's canonical text in the profile's atom table.
-fn atom_name<'a>(
-    profile: &'a Profile,
-    lhs: &Expr,
-    rhs: &Expr,
-    span: Span,
-) -> Result<&'a str, Rejection> {
+/// Look up one comparison in the walker's own atom table.
+fn atom_name(lhs: &Expr, rhs: &Expr, span: Span) -> Result<&'static str, Rejection> {
     let canonical = match (text(lhs), text(rhs)) {
         (Some(left), Some(right)) => format!("{left} == {right}"),
         _ => {
@@ -144,13 +159,16 @@ fn atom_name<'a>(
             ));
         }
     };
-    profile.atom_name(&canonical).ok_or_else(|| {
-        Rejection::profile(
-            ReasonCode::AtomUnknown,
-            Some(range(span)),
-            format!("`{canonical}` is not a registered atom"),
-        )
-    })
+    ATOMS
+        .iter()
+        .find_map(|(pattern, name)| (*pattern == canonical).then_some(*name))
+        .ok_or_else(|| {
+            Rejection::profile(
+                ReasonCode::AtomUnknown,
+                Some(range(span)),
+                format!("`{canonical}` is not a registered atom"),
+            )
+        })
 }
 
 /// Whether a comparison operand is an expression kind the profile excludes.

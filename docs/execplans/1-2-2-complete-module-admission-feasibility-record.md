@@ -5,8 +5,9 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: APPROVED (revision 4). The user accepted Q1 and Q2 and approved the
-plan to begin implementation on 2026-10-29.
+Status: APPROVED (revision 5). The user accepted Q1 and Q2 and approved the
+plan to begin implementation on 2026-10-29. See `Revision notes` for the
+2026-11-02 scope-exception record and corpus reconciliation.
 
 Roadmap item: [1.2.2](../roadmap.md). Branch:
 `1-2-2-complete-module-admission-feasibility-record`.
@@ -686,9 +687,9 @@ Completed 2026-10-31.
   class, with the fixture or test that demonstrates it.
 - E0 findings: none. No construct was distinguishable by neither check, so the
   Design tolerance was not triggered and 2.1.2 is not blocked.
-- Evidence: the corpus has 105 manifest entries — 21 admitted and 84 rejected
-  (12 at parse, 65 at the profile walk, 7 at the recognizer). All 46 AST node
-  kinds are observed, and all 77,884 mutants across ten classes are rejected at
+- Evidence: the corpus has 106 manifest entries — 21 admitted and 85 rejected
+  (11 at parse, 66 at the profile walk, 8 at the recognizer). All 46 AST node
+  kinds are observed, and all 79,181 mutants across ten classes are rejected at
   `decode` or earlier.
 - Verification: `make verus` reported 40 verified obligations and no errors at
   commit `14d29d9`, and 41 after the post-rebase repair split `crlf_at` into
@@ -713,10 +714,11 @@ Completed 2026-10-31.
   - The prover launcher could not read the pinned release's version output
     (D21), so the target runs the installed, digest-checked binary. Pin-driven
     wrappers still need an end-to-end run before they are documented.
-  - The record's excluded-entry table has one row without a dedicated fixture
-    (`data` references inside a rule body) and one divergence column taken from
-    source reading rather than execution. Both are recorded as future work for
-    2.1.1 and 2.3.2 rather than widened here.
+  - The record's excluded-entry table now has a dedicated fixture for every
+    row, including `data` references inside a rule body
+    (`expr/data-reference.rego`). One divergence column is still taken from
+    source reading rather than execution; that remains future work for 2.1.1
+    and 2.3.2 rather than widened here.
 
 ## Context and orientation
 
@@ -1593,6 +1595,65 @@ condition is a regression of this candidate.
 
 Logs use the branch slug
 `polean-1-2-2-complete-module-admission-feasibility-record`.
+
+### Assessment repair and corpus reconciliation (2026-11-02)
+
+The ExecPlan assessment of `10aec6f` raised five in-scope findings. All five
+are repaired on the candidate:
+
+1. The walker's six atom mappings are hand-written in
+   `tests/admission/admission/walk/body.rs` and no longer read the profile's
+   atom table; the recognizer renderer stays contract-derived, and a separate
+   renderer-fault test covers the `locked`/`unlocked` swap.
+2. O6's T1 and T2 source-wide exclusions and the concrete accepting proof are
+   in `verus/admission_spec.rs` and `verus/admission_lemmas.rs`, with their
+   token-byte and no-`#` conditions stated in `tools/verus/README.md`.
+3. The generated `nul_in_comment` fixture now places the NUL inside a trailing
+   comment after an admissible prefix, so the frontend parses and admits the
+   prefix while the recognizer refuses the submitted bytes. O7's named
+   adversarial refusals (token after `#`, NUL in a comment, `//`) are separate
+   normal-kernel tests.
+4. `scripts/install_verus_z3.py` validates a cached solver against the current
+   pin and reinstalls or rejects a mismatch, with changed-pin and invalid-cache
+   regression tests.
+5. The properties run through the shrinking runner, the trivia floor counts
+   emitted gaps, and `expr/data-reference.rego` supplies the dedicated rule-body
+   `data` fixture.
+
+The proof assessment of the same head raised four further findings. Three are
+repaired by the work above: O6's T1, T2, and concrete baseline (finding 1), the
+README's token conditions (finding 2), and the solver-cache identity check
+(finding 4). The fourth asked for verifier-negative controls, which are now
+`scripts/check_verus_controls.py`, run by `make verus-controls` and by
+`make verus`:
+
+- three body controls remove one kernel rule each — the `METADATA` scan, the
+  non-empty gap rule, and the line-feed rule — with the specification
+  unchanged, and require Verus to reject the result at that rule's obligation;
+- two specification controls weaken `body_byte` to admit NUL and drop
+  `comment_ok`'s metadata exclusion, with the kernel unchanged, and require
+  Verus to reject T1's `lemma_comment_body_permitted` and T2's
+  `lemma_comment_no_metadata` respectively.
+
+Each control runs on a scratch copy, requires the unmodified copy to verify
+first, and requires its anchor to occur exactly once, so a drifted source fails
+closed rather than replacing nothing. The current proof verifies 59 functions
+with 0 errors, and all five controls are rejected at the named obligation.
+
+The corpus therefore changed after the EP-M1 to EP-M3 summaries above, which
+record the snapshots as they stood on 2026-10-30. The committed corpus now has
+106 manifest entries: 21 admitted and 85 rejected, split as 11 at parse, 66 at
+the profile walk, and 8 at the recognizer. The frontend parses 95 fixtures, and
+the mutation sweep records 79,181 mutants across the same ten classes. The
+observation snapshot has 106 lines and every outcome is `match`.
+
+Scope exception: the comparison against `2ca284c` contains 82 non-fixture
+changed files and 12,110 net added lines, and the corpus holds 94 `.rego`
+fixtures. The tolerances are 40 files, about 4,000 lines, and 90 fixtures, so
+all three are exceeded. The user approved the plan at revision 4 and, on
+2026-11-02, directed the work to continue through assessment repair to merge;
+that instruction is the recorded escalation approval for these three
+exceedances. No further escalation is outstanding.
 
 ## Interfaces and dependencies
 

@@ -111,8 +111,8 @@ fn clip(text: &str) -> String {
 /// Reduce a frontend diagnostic to one reviewable clause.
 ///
 /// The full message repeats the offending source line, which for the
-/// over-long-line fixture is over a kilobyte, and for the embedded-NUL fixture
-/// contains a NUL. Only the trailing `error:` clause carries the observation.
+/// over-long-line fixture is over a kilobyte. Only the trailing `error:`
+/// clause carries the observation.
 fn summarise(message: &str) -> String {
     let clause = message
         .rsplit_once("error: ")

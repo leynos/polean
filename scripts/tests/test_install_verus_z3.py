@@ -5,12 +5,14 @@ the installer at temporary directories, so no test touches `.verus/z3` or the
 pinned release. The download tests replace `urllib.request.urlopen` so the size
 bound and the deadline can be exercised without a transfer.
 
-The tests cover the two obligations the plan states for the installer:
+The tests cover the three obligations the plan states for the installer:
 
 * the pin file is the only source of the archive name and digest, so a pin that
-  is missing, ambiguous, or malformed fails closed; and
+  is missing, ambiguous, or malformed fails closed;
 * only the archive's exact `bin/z3` member is written, so no other member can
-  place a file outside the install directory.
+  place a file outside the install directory; and
+* a cached solver is reused only while it matches the current pin, so a
+  changed pin or an unrecognised binary forces a fresh verified install.
 """
 
 from __future__ import annotations
@@ -40,11 +42,15 @@ def write_pin(directory: Path, digest: str = DIGEST, name: str = ARCHIVE_NAME) -
     return path
 
 
-def archive_bytes(root: str = ROOT_NAME, extra: dict[str, bytes] | None = None) -> bytes:
-    """Build a zip holding the solver under `root`, plus any extra members."""
+def archive_bytes(
+    root: str = ROOT_NAME,
+    extra: dict[str, bytes] | None = None,
+    solver: bytes = SOLVER_BYTES,
+) -> bytes:
+    """Build a zip holding `solver` under `root`, plus any extra members."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, mode="w") as bundle:
-        bundle.writestr(f"{root}/bin/z3", SOLVER_BYTES)
+        bundle.writestr(f"{root}/bin/z3", solver)
         for member, payload in (extra or {}).items():
             bundle.writestr(member, payload)
     return buffer.getvalue()
@@ -256,27 +262,118 @@ def test_install_writes_the_solver_from_the_pin(tmp_path: Path) -> None:
 
     assert binary == install_dir / "z3", "the binary lands at the install path"
     assert binary.read_bytes() == SOLVER_BYTES, "the solver bytes are intact"
-    assert sorted(path.name for path in install_dir.iterdir()) == ["z3"], (
-        "the temporary directory is removed"
-    )
+    assert sorted(path.name for path in install_dir.iterdir()) == [
+        "z3",
+        "z3.pin",
+    ], "the temporary directory is removed"
     assert getattr(fetch, "seen") == [
         install_verus_z3.archive_url(ARCHIVE_NAME)
     ], "the installer fetches the pinned archive"
 
 
-def test_install_is_idempotent(tmp_path: Path) -> None:
-    """An existing binary short-circuits before any download."""
+def test_install_stamps_the_pin_that_produced_the_solver(tmp_path: Path) -> None:
+    """The stamp records the pin's archive identity and the solver's digest."""
+    payload = archive_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    pins = write_pin(tmp_path, digest=digest)
     install_dir = tmp_path / "z3-home"
-    install_dir.mkdir()
-    existing = install_dir / "z3"
-    existing.write_bytes(SOLVER_BYTES)
 
-    binary = install_verus_z3.install(
-        pins=write_pin(tmp_path), install_dir=install_dir, fetch=refusing_fetcher
+    install_verus_z3.install(pins=pins, install_dir=install_dir, fetch=serving(payload))
+
+    stamp = install_verus_z3.read_stamp(install_dir / "z3.pin")
+    assert stamp == {
+        "archive": ARCHIVE_NAME,
+        "archive_sha256": digest,
+        "solver_sha256": hashlib.sha256(SOLVER_BYTES).hexdigest(),
+    }, "the stamp binds the cached solver to the pin"
+
+
+def test_install_is_idempotent(tmp_path: Path) -> None:
+    """A solver installed from the current pin short-circuits any download."""
+    payload = archive_bytes()
+    pins = write_pin(tmp_path, digest=hashlib.sha256(payload).hexdigest())
+    install_dir = tmp_path / "z3-home"
+    first = install_verus_z3.install(
+        pins=pins, install_dir=install_dir, fetch=serving(payload)
     )
 
-    assert binary == existing, "the installed binary is returned"
-    assert binary.read_bytes() == SOLVER_BYTES, "the installed binary is untouched"
+    second = install_verus_z3.install(
+        pins=pins, install_dir=install_dir, fetch=refusing_fetcher
+    )
+
+    assert second == first, "the installed binary is returned"
+    assert second.read_bytes() == SOLVER_BYTES, "the installed binary is untouched"
+
+
+def test_install_reinstalls_after_the_pin_changes(tmp_path: Path) -> None:
+    """A cached solver from a superseded pin is replaced, not reused."""
+    old_payload = archive_bytes()
+    old_digest = hashlib.sha256(old_payload).hexdigest()
+    install_dir = tmp_path / "z3-home"
+    old_pins = write_pin(tmp_path, digest=old_digest)
+    install_verus_z3.install(
+        pins=old_pins, install_dir=install_dir, fetch=serving(old_payload)
+    )
+
+    new_root = f"z3-{VERSION}-arm64-glibc-2.39"
+    new_solver = b"\x7fELF-new-z3"
+    new_payload = archive_bytes(root=new_root, solver=new_solver)
+    new_name = f"{new_root}.zip"
+    new_pins = tmp_path / "new" / "Z3_SHA256SUMS"
+    new_pins.parent.mkdir()
+    new_pins.write_text(
+        f"{hashlib.sha256(new_payload).hexdigest()}  {new_name}\n", encoding="utf-8"
+    )
+    fetch = serving(new_payload)
+
+    binary = install_verus_z3.install(
+        pins=new_pins, install_dir=install_dir, fetch=fetch
+    )
+
+    assert getattr(fetch, "seen") == [install_verus_z3.archive_url(new_name)], (
+        "the changed pin forces a fresh verified download"
+    )
+    assert binary.read_bytes() == new_solver, "the new solver replaces the old one"
+    assert install_verus_z3.read_stamp(install_dir / "z3.pin") == {
+        "archive": new_name,
+        "archive_sha256": hashlib.sha256(new_payload).hexdigest(),
+        "solver_sha256": hashlib.sha256(new_solver).hexdigest(),
+    }, "the stamp follows the pin"
+
+
+def test_install_rejects_an_unrecognised_cached_binary(tmp_path: Path) -> None:
+    """A pre-existing solver without a valid stamp is replaced, not trusted."""
+    install_dir = tmp_path / "z3-home"
+    install_dir.mkdir()
+    (install_dir / "z3").write_bytes(b"unrelated bytes")
+    (install_dir / "z3.pin").write_text("{not json", encoding="utf-8")
+    payload = archive_bytes()
+    pins = write_pin(tmp_path, digest=hashlib.sha256(payload).hexdigest())
+    fetch = serving(payload)
+
+    binary = install_verus_z3.install(pins=pins, install_dir=install_dir, fetch=fetch)
+
+    assert getattr(fetch, "seen") == [install_verus_z3.archive_url(ARCHIVE_NAME)], (
+        "an unstamped cached binary is not trusted"
+    )
+    assert binary.read_bytes() == SOLVER_BYTES, "the verified solver is installed"
+
+
+def test_install_rejects_a_cached_binary_whose_digest_changed(tmp_path: Path) -> None:
+    """A stamped solver modified after installation is replaced."""
+    payload = archive_bytes()
+    pins = write_pin(tmp_path, digest=hashlib.sha256(payload).hexdigest())
+    install_dir = tmp_path / "z3-home"
+    install_verus_z3.install(pins=pins, install_dir=install_dir, fetch=serving(payload))
+    (install_dir / "z3").write_bytes(b"tampered solver")
+    fetch = serving(payload)
+
+    binary = install_verus_z3.install(pins=pins, install_dir=install_dir, fetch=fetch)
+
+    assert getattr(fetch, "seen") == [install_verus_z3.archive_url(ARCHIVE_NAME)], (
+        "the digest mismatch forces a fresh verified download"
+    )
+    assert binary.read_bytes() == SOLVER_BYTES, "the verified solver is restored"
 
 
 def test_install_rejects_a_digest_mismatch_and_leaves_no_binary(tmp_path: Path) -> None:

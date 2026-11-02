@@ -130,7 +130,17 @@ pub fn strategy(profile: &Profile) -> impl Strategy<Value = Case> {
 /// body's first begins a new line, which is the rule the renderer turns into
 /// `needs_newline`.
 #[must_use]
-pub fn source(profile: &Profile, case: &Case) -> String {
+pub fn source(profile: &Profile, case: &Case) -> String { render(profile, case).0 }
+
+/// The canonical source of `case`, with the trivia class actually emitted
+/// before each token after the first.
+///
+/// A class that lacks the line feed a position requires is replaced by a line
+/// feed, and the replacement is itself a [`Gap::Newline`]. Counting these
+/// values is therefore counting the trivia the sources contain, not the classes
+/// the strategy happened to select.
+#[must_use]
+pub fn render(profile: &Profile, case: &Case) -> (String, Vec<Gap>) {
     let mut tokens: Vec<(&str, bool)> = vec![
         ("package", false),
         (profile.package.as_str(), false),
@@ -158,27 +168,30 @@ pub fn source(profile: &Profile, case: &Case) -> String {
     join(case, &tokens)
 }
 
-/// Join the tokens with the cycled trivia.
-fn join(case: &Case, tokens: &[(&str, bool)]) -> String {
+/// Join the tokens with the cycled trivia, returning the emitted classes too.
+fn join(case: &Case, tokens: &[(&str, bool)]) -> (String, Vec<Gap>) {
     let mut source = String::new();
+    let mut emitted = Vec::with_capacity(tokens.len().saturating_sub(1));
     let mut gaps = case.gaps.iter().cycle();
     for (index, &(token, must_newline)) in tokens.iter().enumerate() {
         if index > 0 {
-            source.push_str(gap_text(gaps.next().copied(), must_newline));
+            let gap = emitted_gap(gaps.next().copied(), must_newline);
+            source.push_str(gap.text());
+            emitted.push(gap);
         }
         source.push_str(token);
     }
-    source
+    (source, emitted)
 }
 
 /// The trivia before a token, upgraded to a line feed when the position needs
 /// one and the cycled class lacks it.
-const fn gap_text(cycled: Option<Gap>, must_newline: bool) -> &'static str {
+const fn emitted_gap(cycled: Option<Gap>, must_newline: bool) -> Gap {
     match cycled {
-        Some(gap) if must_newline && !gap.has_newline() => "\n",
-        Some(gap) => gap.text(),
-        None if must_newline => "\n",
-        None => " ",
+        Some(gap) if must_newline && !gap.has_newline() => Gap::Newline,
+        Some(gap) => gap,
+        None if must_newline => Gap::Newline,
+        None => Gap::Space,
     }
 }
 

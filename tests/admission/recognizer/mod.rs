@@ -23,6 +23,8 @@ use crate::{
     corpus::{Profile, ReasonCode, Stage},
 };
 
+#[cfg(test)]
+mod faults;
 mod kernel;
 mod lexer;
 mod render;

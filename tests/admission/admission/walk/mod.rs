@@ -54,7 +54,7 @@ pub(super) fn map(profile: &Profile, module: &Module) -> Result<Ir, Rejection> {
     check_with(&bodies)?;
     check_expressions(&bodies)?;
     check_operators(&bodies)?;
-    collect_atoms(profile, &bodies)
+    collect_atoms(&bodies)
 }
 
 /// The parts of a normal rule the walk reads.
