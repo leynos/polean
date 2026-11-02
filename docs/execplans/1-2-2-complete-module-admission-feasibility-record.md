@@ -1655,13 +1655,14 @@ the profile walk, and 8 at the recognizer. The frontend parses 95 fixtures, and
 the mutation sweep records 79,181 mutants across the same ten classes. The
 observation snapshot has 106 lines and every outcome is `match`.
 
-Scope exception: the comparison against `2ca284c` contains 82 non-fixture
-changed files and 12,110 net added lines, and the corpus holds 94 `.rego`
-fixtures. The tolerances are 40 files, about 4,000 lines, and 90 fixtures, so
-all three are exceeded. The user approved the plan at revision 4 and, on
-2026-11-02, directed the work to continue through assessment repair to merge;
-that instruction is the recorded escalation approval for these three
-exceedances. No further escalation is outstanding.
+Scope exception: the comparison against the rebased base `05edbba` contains 96
+non-fixture changed files and 15,957 net added lines (16,022 insertions and 65
+deletions), and the corpus holds 94 `.rego` fixtures. The tolerances are 40
+files, about 4,000 lines, and 90 fixtures, so all three are exceeded. The user
+approved the plan at revision 4 and, on 2026-11-02, directed the work to
+continue through assessment repair to merge; that instruction is the recorded
+escalation approval for these three exceedances. No further escalation is
+outstanding.
 
 ## Interfaces and dependencies
 
