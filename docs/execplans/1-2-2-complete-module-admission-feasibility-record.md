@@ -1640,6 +1640,14 @@ first, and requires its anchor to occur exactly once, so a drifted source fails
 closed rather than replacing nothing. The current proof verifies 59 functions
 with 0 errors, and all five controls are rejected at the named obligation.
 
+Both the repair and the lemma split landed as `804a0fb`, which was then rebased
+onto `05edbba`; the replay was clean, and the only replayed difference is the
+target's `mdtablefix` 0.6.1 pin in `docs/developers-guide.md`. The rebased head
+`03a965d` passed every gate: formatting, lint, typecheck, Markdown lint, tests,
+design checks, the script suite (114 tests), toolchain smoke, the checksum
+manifest, and `make verus` with 59 verified, 0 errors, and all five controls
+rejected at the named obligations.
+
 The corpus therefore changed after the EP-M1 to EP-M3 summaries above, which
 record the snapshots as they stood on 2026-10-30. The committed corpus now has
 106 manifest entries: 21 admitted and 85 rejected, split as 11 at parse, 66 at
