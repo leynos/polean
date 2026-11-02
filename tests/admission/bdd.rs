@@ -11,12 +11,13 @@
 //! following `tests/toolchain/bdd.rs`: every step borrows the state immutably
 //! and fills one slot.
 
-/// The per-scenario state fixture.
-///
-/// `rstest`'s fixture expansion wraps a single-expression body in braces, which
-/// `unused_braces` rejects. The expectation is scoped to this module so it
-/// covers only the generation it is about.
 mod fixture {
+    //! The per-scenario state fixture generated for each BDD scenario.
+    //!
+    //! `rstest`'s fixture expansion wraps a single-expression body in braces,
+    //! which `unused_braces` rejects. The expectation is scoped to this module
+    //! so it covers only the generation it is about.
+
     #![expect(
         unused_braces,
         reason = "rstest fixture expansion wraps a single-expression body in braces"

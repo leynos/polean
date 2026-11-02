@@ -14,12 +14,10 @@ use crate::{
 
 /// The baseline module, decoded from the admitted policy.
 fn baseline() -> Module {
-    let source =
-        match std::fs::read_to_string(corpus::repository_path("examples/tenant-write/policy.rego"))
-        {
-            Ok(source) => source,
-            Err(error) => panic!("the baseline policy must be readable: {error}"),
-        };
+    let source = match corpus::read_text("examples/tenant-write/policy.rego") {
+        Ok(source) => source,
+        Err(error) => panic!("the baseline policy must be readable: {error}"),
+    };
     let ast_json = match frontend::parse(&source) {
         Ok(engine) => match engine.get_ast_as_json() {
             Ok(ast_json) => ast_json,

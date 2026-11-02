@@ -15,9 +15,7 @@ use crate::{
 
 /// The admitted baseline source.
 fn source() -> String {
-    match std::fs::read_to_string(crate::corpus::repository_path(
-        "examples/tenant-write/policy.rego",
-    )) {
+    match crate::corpus::read_text("examples/tenant-write/policy.rego") {
         Ok(source) => source,
         Err(error) => panic!("the baseline policy must be readable: {error}"),
     }

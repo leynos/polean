@@ -127,6 +127,8 @@ fn summarise(message: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! The committed snapshot must agree with a fresh observation.
+
     use std::collections::BTreeSet;
 
     use crate::{

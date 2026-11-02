@@ -261,44 +261,69 @@ fn import(value: &Json, source: &str) -> Result<Import, Fault> {
 fn rule(value: &Json, source: &str) -> Result<Rule, Fault> {
     let fields = variant(value, RULE_VARIANTS)?;
     match fields.tag() {
-        Some("Spec") => Ok(Rule::Spec {
-            span: span(fields.value("span")?, source)?,
-            head: head(fields.value("head")?, source)?,
-            bodies: each(fields.value("bodies")?, source, body)?,
-        }),
-        Some("Default") => Ok(Rule::Default {
-            span: span(fields.value("span")?, source)?,
-            refr: expr(fields.value("refr")?, source)?,
-            args: each(fields.value("args")?, source, expr)?,
-            op: assign_op(fields.value("op")?)?,
-            value: expr(fields.value("value")?, source)?,
-        }),
+        Some("Spec") => spec_rule(fields, source),
+        Some("Default") => default_rule(fields, source),
         _ => Err(untabled("rule")),
     }
+}
+
+/// Decode the members of a `Spec` rule.
+fn spec_rule(fields: Fields<'_>, source: &str) -> Result<Rule, Fault> {
+    Ok(Rule::Spec {
+        span: span(fields.value("span")?, source)?,
+        head: head(fields.value("head")?, source)?,
+        bodies: each(fields.value("bodies")?, source, body)?,
+    })
+}
+
+/// Decode the members of a `Default` rule.
+fn default_rule(fields: Fields<'_>, source: &str) -> Result<Rule, Fault> {
+    Ok(Rule::Default {
+        span: span(fields.value("span")?, source)?,
+        refr: expr(fields.value("refr")?, source)?,
+        args: each(fields.value("args")?, source, expr)?,
+        op: assign_op(fields.value("op")?)?,
+        value: expr(fields.value("value")?, source)?,
+    })
 }
 
 /// Decode one rule head.
 fn head(value: &Json, source: &str) -> Result<Head, Fault> {
     let fields = variant(value, HEAD_VARIANTS)?;
     match fields.tag() {
-        Some("Compr") => Ok(Head::Compr {
-            span: span(fields.value("span")?, source)?,
-            refr: expr(fields.value("refr")?, source)?,
-            assign: nullable_assign(fields.value("assign")?, source)?,
-        }),
-        Some("Set") => Ok(Head::Set {
-            span: span(fields.value("span")?, source)?,
-            refr: expr(fields.value("refr")?, source)?,
-            key: nullable_expr(fields.value("key")?, source)?,
-        }),
-        Some("Func") => Ok(Head::Func {
-            span: span(fields.value("span")?, source)?,
-            refr: expr(fields.value("refr")?, source)?,
-            args: each(fields.value("args")?, source, expr)?,
-            assign: nullable_assign(fields.value("assign")?, source)?,
-        }),
+        Some("Compr") => compr_head(fields, source),
+        Some("Set") => set_head(fields, source),
+        Some("Func") => func_head(fields, source),
         _ => Err(untabled("rule head")),
     }
+}
+
+/// Decode the members of a comprehension head.
+fn compr_head(fields: Fields<'_>, source: &str) -> Result<Head, Fault> {
+    Ok(Head::Compr {
+        span: span(fields.value("span")?, source)?,
+        refr: expr(fields.value("refr")?, source)?,
+        assign: nullable_assign(fields.value("assign")?, source)?,
+    })
+}
+
+/// Decode the members of a set head.
+fn set_head(fields: Fields<'_>, source: &str) -> Result<Head, Fault> {
+    Ok(Head::Set {
+        span: span(fields.value("span")?, source)?,
+        refr: expr(fields.value("refr")?, source)?,
+        key: nullable_expr(fields.value("key")?, source)?,
+    })
+}
+
+/// Decode the members of a function head.
+fn func_head(fields: Fields<'_>, source: &str) -> Result<Head, Fault> {
+    Ok(Head::Func {
+        span: span(fields.value("span")?, source)?,
+        refr: expr(fields.value("refr")?, source)?,
+        args: each(fields.value("args")?, source, expr)?,
+        assign: nullable_assign(fields.value("assign")?, source)?,
+    })
 }
 
 /// Decode an optional value assignment the frontend writes as null.

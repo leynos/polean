@@ -261,13 +261,7 @@ fn compare_decision(expected: &Expected, classification: &Classification) -> Com
             "the frontend parsed the source but no decision was recorded".to_owned(),
         ),
         (Expected::Admitted { ir }, Some(Decision::Admitted(actual))) => {
-            match crate::corpus::ir_rules(ir) {
-                Ok(want) if want == *actual => Comparison::Match,
-                Ok(want) => Comparison::Mismatch(format!(
-                    "expected IR {want:?} but the walk admitted {actual:?}"
-                )),
-                Err(error) => Comparison::Mismatch(error),
-            }
+            compare_admitted(ir, actual)
         }
         (Expected::Admitted { .. }, Some(Decision::Rejected(rejection))) => {
             Comparison::Mismatch(format!(
@@ -276,16 +270,7 @@ fn compare_decision(expected: &Expected, classification: &Classification) -> Com
             ))
         }
         (Expected::Rejected { stage, code }, Some(Decision::Rejected(rejection))) => {
-            if rejection.stage == *stage && rejection.code == *code {
-                Comparison::Match
-            } else {
-                Comparison::Mismatch(format!(
-                    "expected {}/{} but admission reported {}",
-                    stage.as_wire(),
-                    code.as_wire(),
-                    rejection.describe()
-                ))
-            }
+            compare_rejection(*stage, *code, rejection)
         }
         (Expected::Rejected { stage, code }, Some(Decision::Admitted(ir))) => {
             Comparison::Mismatch(format!(
@@ -294,6 +279,31 @@ fn compare_decision(expected: &Expected, classification: &Classification) -> Com
                 code.as_wire()
             ))
         }
+    }
+}
+
+/// Compare an admitted decision with the entry's declared IR.
+fn compare_admitted(ir: &str, actual: &[Vec<String>]) -> Comparison {
+    match crate::corpus::ir_rules(ir) {
+        Ok(want) if want.as_slice() == actual => Comparison::Match,
+        Ok(want) => Comparison::Mismatch(format!(
+            "expected IR {want:?} but the walk admitted {actual:?}"
+        )),
+        Err(error) => Comparison::Mismatch(error),
+    }
+}
+
+/// Compare a rejected decision with the entry's declared stage and code.
+fn compare_rejection(stage: Stage, code: ReasonCode, rejection: &Rejection) -> Comparison {
+    if rejection.stage == stage && rejection.code == code {
+        Comparison::Match
+    } else {
+        Comparison::Mismatch(format!(
+            "expected {}/{} but admission reported {}",
+            stage.as_wire(),
+            code.as_wire(),
+            rejection.describe()
+        ))
     }
 }
 

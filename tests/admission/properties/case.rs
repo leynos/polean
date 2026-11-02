@@ -146,9 +146,9 @@ pub fn source(profile: &Profile, case: &Case) -> String {
         tokens.push(("if", false));
         tokens.push(("{", false));
         for (index, atom) in rule.iter().enumerate() {
-            let canonical = profile.atom_text(atom).unwrap_or_else(|| {
-                panic!("the generated case names the unregistered atom `{atom}`")
-            });
+            let Some(canonical) = profile.atom_text(atom) else {
+                panic!("a generated property case names only registered atoms");
+            };
             for (part_index, part) in canonical.split(' ').enumerate() {
                 tokens.push((part, index > 0 && part_index == 0));
             }
@@ -184,6 +184,8 @@ const fn gap_text(cycled: Option<Gap>, must_newline: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    //! Every trivia class must agree with its documented line-feed flag.
+
     use super::Gap;
 
     #[test]

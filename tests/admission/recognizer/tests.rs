@@ -356,16 +356,26 @@ fn blank_to_whitespace(text: &mut [u8], hash: usize) -> usize {
 fn without_bare_carriage_returns(src: &[u8]) -> Vec<u8> {
     let mut rewritten = src.to_vec();
     let mut at = 0;
-    while let Some(&byte) = rewritten.get(at) {
-        if byte == b'\r'
-            && rewritten.get(at.saturating_add(1)) != Some(&b'\n')
-            && let Some(slot) = rewritten.get_mut(at)
-        {
-            *slot = b'\n';
-        }
+    while rewritten.get(at).is_some() {
+        rewrite_bare_carriage_return(&mut rewritten, at);
         at = at.saturating_add(1);
     }
     rewritten
+}
+
+/// Replace a bare carriage return at `at` with a line feed, keeping offsets.
+fn rewrite_bare_carriage_return(text: &mut [u8], at: usize) {
+    if !is_bare_carriage_return(text, at) {
+        return;
+    }
+    if let Some(slot) = text.get_mut(at) {
+        *slot = b'\n';
+    }
+}
+
+/// Whether `text` holds a carriage return at `at` that is not part of CRLF.
+fn is_bare_carriage_return(text: &[u8], at: usize) -> bool {
+    text.get(at) == Some(&b'\r') && text.get(at.saturating_add(1)) != Some(&b'\n')
 }
 
 /// The first offset at or after `from` where `token` occurs.

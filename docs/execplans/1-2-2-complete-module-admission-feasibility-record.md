@@ -248,6 +248,19 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   including the drift inherited from `b6acb06`, and every one of its 39 entries
   verifies. All ten gates pass; the evidence table is under
   `Artefacts and notes`.
+- [x] (2026-11-02) Rebased onto `2ca284c` and repaired the gates it added.
+  `main` now runs Whitaker from `make lint` and builds with the standard
+  `-Zthreads=8`/mold flags. The replay was clean, but the new lint reported 18
+  findings in `tests/admission/`: `std::fs` in three helpers, three bumpy
+  functions, four modules without inner docs, one `unwrap_or_else` panic, one
+  over-long module, and two conditions with three branches. The repairs use
+  `cap_std` capability handles, extract helpers along natural seams, move the
+  docs inside their modules, and split the kernel's byte predicates into
+  `kernel/scan.rs`, which also brought `crlf_at` out as its own function. The
+  proof now reports 41 verified obligations and no errors. Clippy then found
+  three consequences of the repairs (`mixed_attributes_style`, `shadow_reuse`,
+  `expect_used`, `manual_let_else`), all fixed. All ten gates pass; the
+  evidence table is under `Artefacts and notes`.
 
 ## Surprises & discoveries
 
@@ -485,6 +498,14 @@ execution here. The probe harness was not committed.
   Impact: EP-M5 recomputes the digest for the bytes now committed, which
   records those bytes without certifying the base commit's content, and
   `sha256sum -c SHA256SUMS` passes for every covered file.
+- Observation (rebase, 2026-11-02): `main` now runs Whitaker from `make lint`,
+  so the replayed candidate acquired a gate it had never been measured against.
+  Evidence: 18 findings in `tests/admission/` on the first run after the
+  replay. Impact: the repairs are mechanical rather than semantic, but the
+  kernel split into `kernel/scan.rs` also improved the proof boundary by giving
+  `crlf_at` its own contract, and the obligation count rose from 40 to
+  41. The repairs are part of the EP-M5 milestone, not deferred, because a red
+  commit gate on the branch blocks delivery.
 
 ## Decision log
 
@@ -670,7 +691,8 @@ Completed 2026-10-31.
   kinds are observed, and all 77,884 mutants across ten classes are rejected at
   `decode` or earlier.
 - Verification: `make verus` reported 40 verified obligations and no errors at
-  commit `16dd183`, with no `assume`, `admit`, or `external_body`.
+  commit `14d29d9`, and 41 after the post-rebase repair split `crlf_at` into
+  its own function, with no `assume`, `admit`, or `external_body`.
 - Lessons for 2.1.2:
   - Admission must stay a conjunction. The recognizer is the only check that
     sees comments, parentheses, `if`, braces, separators, and spelling, and it
@@ -988,9 +1010,10 @@ about how Rego interprets the tokens; that is axiom X3.
 - O6, recognizer soundness, `theorem_recognize_sound` with lemmas T1 and T2
   (D14).
   - Method: Verus over the single-source kernel.
-  - Artefact: `tests/admission/recognizer/kernel.rs`, verified through the
-    crate root `verus/admission_recognizer.rs`, which contains only a
-    `#[path]` module declaration.
+  - Artefact: `tests/admission/recognizer/kernel/mod.rs`, with the byte-level
+    predicates it shares in `kernel/scan.rs`, verified through the crate root
+    `verus/admission_recognizer.rs`, which contains only a `#[path]` module
+    declaration.
   - Evidence: `make verus` reports zero errors. Before the proof is complete,
     the run shows the open postcondition, which is the Red state.
   - Non-vacuity: the antecedent is inhabited, shown by a proof that
@@ -1507,9 +1530,11 @@ transcript above. The logs are
 
 ### EP-M5 gate evidence (2026-10-31)
 
-All ten gates pass on the candidate that adds the record, ADR 0005, the amended
-documents, and the refreshed `SHA256SUMS`, run sequentially by the scrutineer
-against the working tree at `16dd183`:
+All ten gates pass on the pre-rebase candidate that adds the record, ADR 0005,
+the amended documents, and the refreshed `SHA256SUMS`, run sequentially by the
+scrutineer against the working tree at `16dd183`. The post-rebase, post-repair
+evidence is recorded in “EP-M5 gate evidence after the rebase and Whitaker
+repair” below.
 
 | Gate                   | Result                                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------------------------- |
@@ -1531,6 +1556,42 @@ in the developer guide, which leaves no `uv.lock` or `.venv` behind. The failed
 precondition is kept at
 `/tmp/test-scripts-polean-1-2-2-complete-module-admission-feasibility-record-pre-uv.out`
 rather than overwritten. Logs use the branch slug
+`polean-1-2-2-complete-module-admission-feasibility-record`.
+
+### EP-M5 gate evidence after the rebase and Whitaker repair (2026-11-02)
+
+The candidate was replayed onto `2ca284c`, which adds the Whitaker lint to
+`make lint` and the standard `-Zthreads=8`/mold build flags. The replay itself
+was clean; the repairs it forced are recorded in the 2026-11-02 Progress entry.
+All ten gates then pass, run sequentially by the scrutineer against the working
+tree:
+
+| Gate                   | Result                                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- |
+| `make check-fmt`       | `cargo fmt --all -- --check` clean; `mdtablefix --check` reports 32 files unchanged                   |
+| `make typecheck`       | `cargo check --all-targets --all-features` with `-D warnings`, no diagnostics                         |
+| `make lint`            | `lint-whitaker`, `cargo doc -D warnings`, and `cargo clippy -D warnings` all clean                    |
+| `make test`            | 110 passed, 0 failed, 7 ignored: admission 60, doc-examples 27, stub 2, toolchain 20, doctest 1       |
+| `make markdownlint`    | 33 files, 0 issues                                                                                    |
+| `make design-check`    | unchanged from the pre-rebase run: 5 schemas, 7 source headers, 224 comparisons, 19 controls, 2 seams |
+| `make test-scripts`    | 76 passed under Python 3.14.7 and pytest 9.1.1 via the documented `uv run` invocation                 |
+| `make toolchain-smoke` | 7 passed, 0 failed, with `PYTHON=/home/leynos/.local/bin/python3.14`                                  |
+| `make verus`           | 41 verified, 0 errors                                                                                 |
+| `sha256sum -c`         | 39 entries, every line `OK`                                                                           |
+
+Two gates depend on the interpreter present on the host rather than on the
+candidate. `make test-scripts` still fails to start under the default
+`python3`, which is 3.12 and has no `compression.zstd`; the run above uses the
+`uv run --python 3.14 --with pytest==9.1.1` command from the developer guide.
+The failing pre-run is preserved at
+`/tmp/test-scripts-polean-1-2-2-complete-module-admission-feasibility-record-default-python3.out`,
+so the interpreter condition is recorded rather than erased.
+`make toolchain-smoke` needs the same 3.14 interpreter, and this host has one at
+`/home/leynos/.local/bin/python3.14` with the smoke test's dependencies but no
+`pytest`, which is why the two gates take different overrides. Neither
+condition is a regression of this candidate.
+
+Logs use the branch slug
 `polean-1-2-2-complete-module-admission-feasibility-record`.
 
 ## Interfaces and dependencies
@@ -1620,7 +1681,8 @@ under 400 lines:
 - `corpus/`, `inventory/`, and `observations/`;
 - `decode/`, holding the key table and a generic closed-object check;
 - `profile/`;
-- `recognizer/`, with `kernel.rs`, `render.rs`, and `witness.rs`;
+- `recognizer/`, with `kernel/` (`mod.rs` and `scan.rs`), `render.rs`, and
+  `witness.rs`;
 - `ast_mutations/` and `properties/`;
 - `bdd.rs`.
 
@@ -1721,3 +1783,7 @@ Documentation changes in EP-M5:
   approval to begin EP-M1.
 - Revision 4 (2026-10-29): records the user's approval to begin
   implementation and marks the plan `APPROVED`. No plan content changed.
+- Revision 5 (2026-11-02): records the rebase onto `2ca284c` and the gate
+  repairs it required. The milestone scope, the four assurance claims, and the
+  verdict are unchanged; the kernel's module layout, the obligation count, and
+  the evidence tables are updated to the replayed candidate.

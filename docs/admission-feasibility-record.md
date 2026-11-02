@@ -209,11 +209,13 @@ the one the spike calls.
 | Refusal         | An `Err` offset is never past the end of the source                                                                                 | `recognize`'s postcondition                |
 | Scope           | The property holds for sources of any length; no bound on token count                                                               | O6                                         |
 
-`make verus` reports 40 verified obligations and no errors at commit `16dd183`.
-The proof contains no `assume`, `admit`, or `external_body`. The Red transcript
-in the ExecPlan shows the same contracts and invariants with the proof steps
-removed: Verus then reports 34 verified and 6 errors, the arithmetic
-obligations and the invariants that carry the postcondition.
+`make verus` reports 41 verified obligations and no errors on the current head.
+The count was 40 at commit `14d29d9`; splitting the carriage-return test into
+its own `crlf_at` function in `kernel/mod.rs` added one obligation. The proof
+contains no `assume`, `admit`, or `external_body`. The Red transcript in the
+ExecPlan shows the same contracts and invariants with the proof steps removed:
+Verus then reports 34 verified and 6 errors, the arithmetic obligations and the
+invariants that carry the postcondition.
 
 The theorem is about the kernel only. It does not establish that:
 

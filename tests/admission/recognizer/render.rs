@@ -166,6 +166,8 @@ fn quoted_end(canonical: &str, mut at: usize) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
+    //! Tokenisation must keep quoted strings, including spaces, intact.
+
     use super::split;
 
     #[test]

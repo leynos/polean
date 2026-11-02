@@ -10,11 +10,9 @@
 //! committed `.rego` file that the manifest does not list, or a manifest entry
 //! with no file, fails the bijection test.
 
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeSet;
 
+use cap_std::{ambient_authority, fs::Dir};
 use serde_json::Value as Json;
 
 mod generated;
@@ -39,24 +37,40 @@ pub fn entries() -> Result<Vec<Entry>, String> { manifest::parse(MANIFEST) }
 /// The source bytes of one entry.
 pub fn source(entry: &Entry) -> Result<String, String> {
     match &entry.origin {
-        Origin::File(path) => std::fs::read_to_string(repository_path(path))
-            .map_err(|error| format!("cannot read `{path}`: {error}")),
+        Origin::File(path) => read_text(path),
         Origin::Generated(name) => {
             generated::source(name).ok_or_else(|| format!("no generated fixture is named `{name}`"))
         }
     }
 }
 
-/// Resolve a repository-relative path.
-#[must_use]
-pub fn repository_path(relative: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)
+/// Open the repository root as a capability handle.
+///
+/// Every corpus read goes through this handle, so the tests never touch an
+/// ambient working directory.
+///
+/// # Errors
+///
+/// Returns a description of any failure to open the crate directory.
+pub fn root() -> Result<Dir, String> {
+    Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .map_err(|error| format!("cannot open the repository root: {error}"))
+}
+
+/// Read a repository-relative text file.
+///
+/// # Errors
+///
+/// Returns a description of any failure to open or read `relative`.
+pub fn read_text(relative: &str) -> Result<String, String> {
+    root()?
+        .read_to_string(relative)
+        .map_err(|error| format!("cannot read `{relative}`: {error}"))
 }
 
 /// Read a hand-written IR file as its rule list.
 pub fn ir_rules(relative: &str) -> Result<Vec<Vec<String>>, String> {
-    let text = std::fs::read_to_string(repository_path(relative))
-        .map_err(|error| format!("cannot read `{relative}`: {error}"))?;
+    let text = read_text(relative)?;
     let value: Json = serde_json::from_str(&text)
         .map_err(|error| format!("`{relative}` is not JSON: {error}"))?;
     let rules = value

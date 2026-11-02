@@ -309,41 +309,43 @@ fn parse_expected(object: &Map<String, Json>) -> Result<Expected, String> {
         .ok_or_else(|| "a manifest entry needs an `expected` object".to_owned())?;
     let expected = as_object(raw, "expected")?;
     match expected.get("outcome").and_then(Json::as_str) {
-        Some("admitted") => {
-            check_keys(expected, &["outcome", "ir"])?;
-            Ok(Expected::Admitted {
-                ir: string(
-                    expected
-                        .get("ir")
-                        .ok_or_else(|| "an admitted entry needs an `ir` path".to_owned())?,
-                    "ir",
-                )?
-                .to_owned(),
-            })
-        }
-        Some("rejected") => {
-            check_keys(expected, &["outcome", "stage", "code"])?;
-            let stage = string(
-                expected
-                    .get("stage")
-                    .ok_or_else(|| "a rejected entry needs a `stage`".to_owned())?,
-                "stage",
-            )?;
-            let code = string(
-                expected
-                    .get("code")
-                    .ok_or_else(|| "a rejected entry needs a `code`".to_owned())?,
-                "code",
-            )?;
-            Ok(Expected::Rejected {
-                stage: Stage::from_wire(stage).ok_or_else(|| format!("unknown stage `{stage}`"))?,
-                code: ReasonCode::from_wire(code)
-                    .ok_or_else(|| format!("unknown reason code `{code}`"))?,
-            })
-        }
+        Some("admitted") => admitted_expected(expected),
+        Some("rejected") => rejected_expected(expected),
         Some(other) => Err(format!("unknown outcome `{other}`")),
         None => Err("an expected object needs an `outcome`".to_owned()),
     }
+}
+
+/// Read an admitted entry's IR path.
+fn admitted_expected(expected: &Map<String, Json>) -> Result<Expected, String> {
+    check_keys(expected, &["outcome", "ir"])?;
+    let ir = expected
+        .get("ir")
+        .ok_or_else(|| "an admitted entry needs an `ir` path".to_owned())?;
+    Ok(Expected::Admitted {
+        ir: string(ir, "ir")?.to_owned(),
+    })
+}
+
+/// Read a rejected entry's stage and reason code.
+fn rejected_expected(expected: &Map<String, Json>) -> Result<Expected, String> {
+    check_keys(expected, &["outcome", "stage", "code"])?;
+    let stage = string(
+        expected
+            .get("stage")
+            .ok_or_else(|| "a rejected entry needs a `stage`".to_owned())?,
+        "stage",
+    )?;
+    let code = string(
+        expected
+            .get("code")
+            .ok_or_else(|| "a rejected entry needs a `code`".to_owned())?,
+        "code",
+    )?;
+    Ok(Expected::Rejected {
+        stage: Stage::from_wire(stage).ok_or_else(|| format!("unknown stage `{stage}`"))?,
+        code: ReasonCode::from_wire(code).ok_or_else(|| format!("unknown reason code `{code}`"))?,
+    })
 }
 
 /// Require `value` to be an object.

@@ -13,8 +13,8 @@ in `toolchain-pins.json`. `make verus` is an on-demand target: it is not part of
 ## What the proof covers
 
 `verus/admission_recognizer.rs` is the proof root. It pulls in
-`tests/admission/recognizer/kernel.rs` with `#[path]`, so the same source is
-compiled by Cargo as test code and verified by Verus. The proof establishes
+`tests/admission/recognizer/kernel/mod.rs` with `#[path]`, so the same source
+is compiled by Cargo as test code and verified by Verus. The proof establishes
 that an `Ok` from the kernel decomposes the source into the rendered tokens
 with permitted trivia between them, and that the accepted source holds no
 `METADATA` annotation and no byte outside the permitted set. It does not

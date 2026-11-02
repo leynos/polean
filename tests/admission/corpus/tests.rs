@@ -8,8 +8,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::OsStr,
-    path::Path,
+    path::PathBuf,
 };
+
+use cap_std::fs::Dir;
 
 use crate::{
     corpus::{self, Entry, Expected, Origin, ReasonCode, Stage},
@@ -24,38 +26,67 @@ fn manifest() -> Vec<Entry> {
     }
 }
 
-/// Every `*.rego` file under `root`, as repository-relative paths.
-fn rego_files(root: &Path) -> Vec<String> {
+/// The repository root as a capability handle, or a panic naming the failure.
+fn repository() -> Dir {
+    match corpus::root() {
+        Ok(root) => root,
+        Err(error) => panic!("{error}"),
+    }
+}
+
+/// The entries of `directory`, or a panic naming `label`.
+fn entries_of(directory: &Dir, label: &str) -> Vec<cap_std::fs::DirEntry> {
+    let entries = match directory.read_dir(".") {
+        Ok(entries) => entries,
+        Err(error) => panic!("cannot read {label}: {error}"),
+    };
+    entries
+        .map(|next| match next {
+            Ok(entry) => entry,
+            Err(error) => panic!("cannot read {label}: {error}"),
+        })
+        .collect()
+}
+
+/// Whether `name` names a directory of `directory`, or a panic naming `label`.
+fn is_directory(directory: &Dir, name: &OsStr, label: &str) -> bool {
+    match directory.metadata(name) {
+        Ok(metadata) => metadata.is_dir(),
+        Err(error) => panic!("cannot read {label}: {error}"),
+    }
+}
+
+/// Open `name` inside `directory`, or a panic naming `label`.
+fn open_directory(directory: &Dir, name: &OsStr, label: &str) -> Dir {
+    match directory.open_dir(name) {
+        Ok(child) => child,
+        Err(error) => panic!("cannot open {label}: {error}"),
+    }
+}
+
+/// Every `*.rego` file under `relative`, as repository-relative paths.
+fn rego_files(relative: &str) -> Vec<String> {
+    let start = match repository().open_dir(relative) {
+        Ok(directory) => directory,
+        Err(error) => panic!("cannot open {relative}: {error}"),
+    };
     let mut found = Vec::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(directory) = pending.pop() {
-        let entries = match std::fs::read_dir(&directory) {
-            Ok(entries) => entries,
-            Err(error) => panic!("cannot read {}: {error}", directory.display()),
-        };
-        for dir_entry in entries {
-            let path = match dir_entry {
-                Ok(resolved) => resolved.path(),
-                Err(error) => panic!("cannot read {}: {error}", directory.display()),
-            };
-            if path.is_dir() {
-                pending.push(path);
+    let mut pending = vec![(start, PathBuf::from(relative))];
+    while let Some((directory, prefix)) = pending.pop() {
+        let label = prefix.to_string_lossy().into_owned();
+        for entry in entries_of(&directory, &label) {
+            let name = entry.file_name();
+            let path = prefix.join(&name);
+            let child = path.to_string_lossy().into_owned();
+            if is_directory(&directory, &name, &child) {
+                pending.push((open_directory(&directory, &name, &child), path));
             } else if path.extension() == Some(OsStr::new("rego")) {
-                found.push(relative(&path));
+                found.push(path.to_string_lossy().into_owned());
             }
         }
     }
     found.sort();
     found
-}
-
-/// The repository-relative form of an absolute path under the crate root.
-fn relative(path: &Path) -> String {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    match path.strip_prefix(root) {
-        Ok(relative) => relative.to_string_lossy().into_owned(),
-        Err(error) => panic!("{} is outside the repository: {error}", path.display()),
-    }
 }
 
 /// The labels of every entry with the given origin discriminant.
@@ -87,9 +118,7 @@ fn every_entry_has_a_distinct_label() {
 fn every_committed_fixture_appears_exactly_once() {
     let entries = manifest();
     let declared = file_labels(&entries, "examples/admission/");
-    let committed: BTreeSet<String> = rego_files(&corpus::repository_path("examples/admission"))
-        .into_iter()
-        .collect();
+    let committed: BTreeSet<String> = rego_files("examples/admission").into_iter().collect();
     let undeclared: Vec<&String> = committed.difference(&declared).collect();
     let missing: Vec<&String> = declared.difference(&committed).collect();
     assert!(
@@ -102,9 +131,7 @@ fn every_committed_fixture_appears_exactly_once() {
 fn every_tenant_write_source_is_referenced() {
     let entries = manifest();
     let declared = file_labels(&entries, "examples/tenant-write/");
-    let committed: BTreeSet<String> = rego_files(&corpus::repository_path("examples/tenant-write"))
-        .into_iter()
-        .collect();
+    let committed: BTreeSet<String> = rego_files("examples/tenant-write").into_iter().collect();
     assert_eq!(
         declared, committed,
         "the manifest must reference every tenant-write source and no other"
@@ -139,18 +166,13 @@ fn every_generated_name_resolves_to_a_source() {
 
 #[test]
 fn every_manifest_file_exists() {
+    let root = repository();
     for entry in manifest() {
         if let Origin::File(path) = &entry.origin {
-            assert!(
-                corpus::repository_path(path).is_file(),
-                "`{path}` does not exist"
-            );
+            assert!(root.is_file(path), "`{path}` does not exist");
         }
         if let Expected::Admitted { ir } = &entry.expected {
-            assert!(
-                corpus::repository_path(ir).is_file(),
-                "`{ir}` does not exist"
-            );
+            assert!(root.is_file(ir), "`{ir}` does not exist");
         }
     }
 }
