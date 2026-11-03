@@ -24,6 +24,7 @@ use crate::{
     admission::{self, Decision},
     corpus::{Profile, ReasonCode, Stage},
     recognizer,
+    support::profile,
 };
 
 /// How many generated cases the property checks.
@@ -34,14 +35,6 @@ const FLOOR: usize = 4;
 
 /// How many comment insertions the second property checks.
 const INSERTIONS: u32 = 32;
-
-/// The profile contract, or a panic naming the read failure.
-fn profile() -> Profile {
-    match crate::corpus::profile_contract() {
-        Ok(profile) => profile,
-        Err(error) => panic!("the profile must parse: {error}"),
-    }
-}
 
 /// A shrinking runner with a fixed seed and explicit regression persistence.
 ///

@@ -4,15 +4,10 @@
 //! The seeded kernel faults the witness must catch live in [`super::faults`].
 
 use super::{Refusal, Tokens, canonical_tokens, confirm, cross_check, rejection};
-use crate::corpus::{Profile, ReasonCode, Stage};
-
-/// The profile contract, or a panic naming the read failure.
-pub(super) fn profile() -> Profile {
-    match crate::corpus::profile_contract() {
-        Ok(profile) => profile,
-        Err(error) => panic!("the profile must parse: {error}"),
-    }
-}
+use crate::{
+    corpus::{Profile, ReasonCode, Stage},
+    support::profile,
+};
 
 /// The canonical tokens of `ir` under `profile`.
 pub(super) fn tokens_for<'a>(profile: &'a Profile, ir: &[Vec<String>]) -> Tokens<'a> {

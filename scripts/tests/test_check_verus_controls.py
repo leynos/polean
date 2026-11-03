@@ -8,7 +8,6 @@ exercised by replacing the verifier run with a stub.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -26,42 +25,52 @@ def completed(
 
 
 @pytest.mark.parametrize("control", controls.CONTROLS, ids=lambda c: c.name)
-def test_every_anchor_occurs_exactly_once_in_the_tracked_source(control):
+def test_every_anchor_occurs_exactly_once_in_the_tracked_source(
+    control: controls.Control,
+) -> None:
     """The control describes the source as it is committed."""
     source = (ROOT / control.path).read_text(encoding="utf-8")
-    assert source.count(control.anchor) == 1
+    assert source.count(control.anchor) == 1, (
+        f"control {control.name} must name exactly one anchor in {control.path}"
+    )
 
 
 @pytest.mark.parametrize("control", controls.CONTROLS, ids=lambda c: c.name)
-def test_every_control_changes_the_source(control):
+def test_every_control_changes_the_source(control: controls.Control) -> None:
     """The edit is a real change, not a rewrite to the same text."""
-    assert control.anchor != control.replacement
+    assert control.anchor != control.replacement, (
+        f"control {control.name} must change the source"
+    )
 
 
 @pytest.mark.parametrize("control", controls.CONTROLS, ids=lambda c: c.name)
-def test_every_control_expects_a_named_obligation(control):
+def test_every_control_expects_a_named_obligation(control: controls.Control) -> None:
     """A rejection must name the proof item the control targets."""
-    assert control.expects
-    assert all(name.strip() == name and name for name in control.expects)
+    assert control.expects, f"control {control.name} must expect an obligation"
+    assert all(name.strip() == name and name for name in control.expects), (
+        f"control {control.name} must name its obligations without stray space"
+    )
 
 
-def test_the_controls_cover_both_kinds():
+def test_the_controls_cover_both_kinds() -> None:
     """Both body and specification defects are represented."""
-    assert {control.kind for control in controls.CONTROLS} == {"body", "spec"}
+    assert {control.kind for control in controls.CONTROLS} == {"body", "spec"}, (
+        "the controls must cover both body and specification defects"
+    )
 
 
-def test_apply_control_replaces_the_anchor(tmp_path):
+def test_apply_control_replaces_the_anchor(tmp_path: Path) -> None:
     """A staged control writes the replacement text."""
     control = controls.CONTROLS[0]
     path = tmp_path / control.path
     path.parent.mkdir(parents=True)
     path.write_text(f"before\n{control.anchor}after\n", encoding="utf-8")
     changed = controls.apply_control(tmp_path, control)
-    assert control.replacement in changed
-    assert control.anchor not in changed
+    assert control.replacement in changed, "the replacement must be written"
+    assert control.anchor not in changed, "the anchor must be replaced"
 
 
-def test_apply_control_rejects_a_missing_anchor(tmp_path):
+def test_apply_control_rejects_a_missing_anchor(tmp_path: Path) -> None:
     """A drifted source fails closed instead of replacing nothing."""
     control = controls.CONTROLS[0]
     path = tmp_path / control.path
@@ -71,7 +80,7 @@ def test_apply_control_rejects_a_missing_anchor(tmp_path):
         controls.apply_control(tmp_path, control)
 
 
-def test_apply_control_rejects_an_ambiguous_anchor(tmp_path):
+def test_apply_control_rejects_an_ambiguous_anchor(tmp_path: Path) -> None:
     """An edit that would not be the bounded change the control claims fails."""
     control = controls.CONTROLS[0]
     path = tmp_path / control.path
@@ -81,45 +90,47 @@ def test_apply_control_rejects_an_ambiguous_anchor(tmp_path):
         controls.apply_control(tmp_path, control)
 
 
-def test_apply_control_rejects_a_missing_file(tmp_path):
+def test_apply_control_rejects_a_missing_file(tmp_path: Path) -> None:
     """A control whose file is absent is a setup failure."""
     with pytest.raises(controls.ControlError, match="cannot read"):
         controls.apply_control(tmp_path, controls.CONTROLS[0])
 
 
-def test_results_parses_the_summary():
+def test_results_parses_the_summary() -> None:
     """The verified and error counts come from Verus's own summary."""
     output = "note: x\nverification results:: 59 verified, 0 errors\n"
-    assert controls.results(output) == (59, 0)
+    assert controls.results(output) == (59, 0), "the summary's counts must be read"
 
 
-def test_results_is_none_without_a_summary():
-    """An unrecognised output is not mistaken for a clean run."""
-    assert controls.results("killed before verification\n") is None
+def test_results_is_none_without_a_summary() -> None:
+    """An unrecognized output is not mistaken for a clean run."""
+    assert controls.results("killed before verification\n") is None, (
+        "output without a summary must not read as a pass"
+    )
 
 
-def test_require_baseline_accepts_a_clean_run():
+def test_require_baseline_accepts_a_clean_run() -> None:
     """A zero-error baseline is the precondition for every control."""
     controls.require_baseline(
         completed(0, "verification results:: 59 verified, 0 errors\n")
     )
 
 
-def test_require_baseline_rejects_an_erroring_run():
+def test_require_baseline_rejects_an_erroring_run() -> None:
     """A broken baseline would make every control meaningless."""
     with pytest.raises(controls.ControlError, match="did not verify"):
         controls.require_baseline(
-            completed(0, "verification results:: 58 verified, 1 error\n")
+            completed(0, "verification results:: 58 verified, 1 errors\n")
         )
 
 
-def test_require_baseline_rejects_a_missing_summary():
+def test_require_baseline_rejects_a_missing_summary() -> None:
     """A run that never reported a summary is not a pass."""
     with pytest.raises(controls.ControlError, match="did not verify"):
         controls.require_baseline(completed(1, "error: cannot find crate\n"))
 
 
-def test_require_rejection_accepts_a_failure_at_the_obligation():
+def test_require_rejection_accepts_a_failure_at_the_obligation() -> None:
     """A rejection naming the target obligation is the expected evidence."""
     control = controls.CONTROLS[0]
     evidence = " ".join(control.expects)
@@ -128,13 +139,15 @@ def test_require_rejection_accepts_a_failure_at_the_obligation():
         completed(
             1,
             f"error: {evidence}\n",
-            "verification results:: 58 verified, 1 error\n",
+            "verification results:: 58 verified, 1 errors\n",
         ),
     )
-    assert obligation == " + ".join(control.expects)
+    assert obligation == " + ".join(control.expects), (
+        "the evidence line names every expected obligation"
+    )
 
 
-def test_require_rejection_rejects_an_accepted_defect():
+def test_require_rejection_rejects_an_accepted_defect() -> None:
     """A verifier that accepts the defect proves nothing about sensitivity."""
     control = controls.CONTROLS[0]
     with pytest.raises(controls.ControlError, match="accepted the defect"):
@@ -143,7 +156,7 @@ def test_require_rejection_rejects_an_accepted_defect():
         )
 
 
-def test_require_rejection_rejects_an_unrelated_failure():
+def test_require_rejection_rejects_an_unrelated_failure() -> None:
     """A failure elsewhere does not show the control reached its obligation."""
     control = controls.CONTROLS[0]
     with pytest.raises(controls.ControlError, match="output lacks"):
@@ -152,20 +165,31 @@ def test_require_rejection_rejects_an_unrelated_failure():
         )
 
 
-def test_require_rejection_rejects_a_run_without_an_error():
+def test_require_rejection_rejects_a_run_without_an_error() -> None:
     """A non-zero exit with no error message is a tool failure, not a verdict."""
     control = controls.CONTROLS[0]
     with pytest.raises(controls.ControlError, match="without reporting an error"):
         controls.require_rejection(control, completed(101, "interrupted\n"))
 
 
-def test_check_runs_the_baseline_before_the_controls(tmp_path, monkeypatch):
+def test_check_runs_the_baseline_before_the_controls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Each control runs on a tree restored to the baseline text."""
-    seen: list[str] = []
+    paths = {control.path for control in controls.CONTROLS}
+    snapshots: list[dict[str, str]] = []
 
-    def fake_run(_verus, _z3, scratch):
-        seen.append("run")
-        if len(seen) == 1:
+    def fake_run(
+        _verus: Path, _z3: Path, scratch: Path
+    ) -> subprocess.CompletedProcess[str]:
+        """Record the staged files, then report the verifier's verdict."""
+        snapshots.append(
+            {
+                path.as_posix(): (scratch / path).read_text(encoding="utf-8")
+                for path in paths
+            }
+        )
+        if len(snapshots) == 1:
             return completed(0, "verification results:: 59 verified, 0 errors\n")
         evidence = " ".join(name for control in controls.CONTROLS for name in control.expects)
         return completed(
@@ -175,28 +199,46 @@ def test_check_runs_the_baseline_before_the_controls(tmp_path, monkeypatch):
 
     monkeypatch.setattr(controls, "run_verus", fake_run)
     lines = controls.check(ROOT, tmp_path / "verus", tmp_path / "z3")
-    assert len(lines) == len(controls.CONTROLS)
-    assert len(seen) == len(controls.CONTROLS) + 1
-    assert lines[0].startswith("body:")
+    assert len(lines) == len(controls.CONTROLS), "one evidence line per control"
+    assert len(snapshots) == len(controls.CONTROLS) + 1, (
+        "the baseline runs once before the controls"
+    )
+    baseline = snapshots[0]
+    for control, snapshot in zip(controls.CONTROLS, snapshots[1:], strict=True):
+        changed = {
+            path: text for path, text in snapshot.items() if text != baseline[path]
+        }
+        own = control.path.as_posix()
+        assert set(changed) == {own}, (
+            f"control {control.name} must change only {own} from the baseline"
+        )
+        assert control.replacement in changed[own], (
+            f"control {control.name} must write its replacement to {own}"
+        )
+    assert lines[0].startswith("body:"), "the first evidence line names a body control"
 
 
-def test_stage_preserves_the_relative_paths(tmp_path):
+def test_stage_preserves_the_relative_paths(tmp_path: Path) -> None:
     """The proof's relative includes resolve in the staged tree."""
     controls.stage(ROOT, tmp_path)
-    assert (tmp_path / controls.PROOF_FILE).is_file()
-    assert (tmp_path / controls.KERNEL_DIR / "mod.rs").is_file()
-    assert (tmp_path / controls.PROOF_DIR / "admission_spec.rs").is_file()
+    assert (tmp_path / controls.PROOF_FILE).is_file(), "the proof entry point is staged"
+    assert (tmp_path / controls.KERNEL_DIR / "mod.rs").is_file(), "the kernel is staged"
+    assert (tmp_path / controls.PROOF_DIR / "admission_spec.rs").is_file(), (
+        "the specification is staged"
+    )
 
 
-def test_verus_paths_reads_the_pin():
+def test_verus_paths_reads_the_pin() -> None:
     """The default binary paths follow the pin file."""
     version = (ROOT / controls.VERSION_FILE).read_text(encoding="utf-8").strip()
     verus, z3 = controls.verus_paths(ROOT)
-    assert verus == ROOT / ".verus" / version / "verus" / "verus"
-    assert z3 == ROOT / ".verus" / "z3" / "z3"
+    assert verus == ROOT / ".verus" / version / "verus" / "verus", (
+        "the Verus path follows the pin"
+    )
+    assert z3 == ROOT / ".verus" / "z3" / "z3", "the Z3 path is the install path"
 
 
-def test_pinned_version_rejects_an_empty_pin(tmp_path):
+def test_pinned_version_rejects_an_empty_pin(tmp_path: Path) -> None:
     """An empty pin cannot name a binary, so it fails closed."""
     pin = tmp_path / controls.VERSION_FILE
     pin.parent.mkdir(parents=True)
@@ -205,8 +247,12 @@ def test_pinned_version_rejects_an_empty_pin(tmp_path):
         controls.pinned_version(tmp_path)
 
 
-def test_main_reports_a_missing_verifier(tmp_path, capsys):
+def test_main_reports_a_missing_verifier(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """An absent Verus install is a setup error, not a control failure."""
     code = controls.main(["--root", str(ROOT), "--verus", str(tmp_path / "missing")])
-    assert code == 2
-    assert "make install-verus" in capsys.readouterr().err
+    assert code == 2, "a missing verifier is a setup error"
+    assert "make install-verus" in capsys.readouterr().err, (
+        "the diagnostic names the install target"
+    )

@@ -4,8 +4,7 @@
 //! a decoder that expects a string never silently accepts a number. Numbers
 //! are read two ways: [`as_number`] for the frontend's indices, which must fit
 //! a 32-bit unsigned integer, and [`as_number_text`] for literal values, which
-//! keeps the frontend's serialized spelling because no decision may re-round a
-//! number.
+//! returns `serde_json`'s normalized text, not the frontend's original spelling.
 
 use serde_json::Value as Json;
 
@@ -77,7 +76,7 @@ pub fn as_number(value: &Json) -> Result<u32, Fault> {
     })
 }
 
-/// Read a JSON number as the frontend's serialized spelling.
+/// Read a JSON number as `serde_json`'s normalized text.
 ///
 /// # Errors
 ///

@@ -337,8 +337,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     root = arguments.root.resolve()
     default_verus, default_z3 = verus_paths(root)
-    verus = arguments.verus or default_verus
-    z3 = arguments.z3 or default_z3
+    verus = (arguments.verus or default_verus).resolve()
+    z3 = (arguments.z3 or default_z3).resolve()
     if not verus.is_file():
         print(f"Verus is not installed at {verus}; run 'make install-verus'", file=sys.stderr)
         return 2

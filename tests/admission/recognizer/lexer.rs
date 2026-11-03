@@ -9,9 +9,11 @@
 //! Regorus splits a dotted reference into an identifier and a `.` per segment,
 //! and excludes a string's quotes from its token span, so a canonical token may
 //! span several lexer tokens or differ from one by its quotes. Matching
-//! therefore normalises the canonical token first and accumulates lexer text
+//! therefore normalizes the canonical token first and accumulates lexer text
 //! until it equals that form, which also catches a lexer that merges two
-//! canonical tokens.
+//! canonical tokens. Only a dotted reference may span several lexer tokens, so
+//! a lexer that splits `==` or `:=` into two symbols is refused rather than
+//! accepted on the strength of the concatenated text.
 
 use regorus::unstable::{Lexer, Source, Token, TokenKind};
 
@@ -25,6 +27,7 @@ pub fn cross_check(source: &str, tokens: &[&str]) -> Result<(), String> {
     let mut at = 0;
     for token in tokens {
         let wanted = without_quotes(token);
+        let first = at;
         let mut accumulated = String::new();
         while accumulated.len() < wanted.len() {
             let Some(text) = lexed.get(at) else {
@@ -43,6 +46,13 @@ pub fn cross_check(source: &str, tokens: &[&str]) -> Result<(), String> {
         if accumulated.as_str() != wanted {
             return Err(format!(
                 "the lexer produced `{accumulated}` where the canonical tokens have `{token}`"
+            ));
+        }
+        // Only a dotted reference may span several lexer tokens.
+        if at - first > 1 && !wanted.contains('.') {
+            return Err(format!(
+                "the lexer split the canonical token `{token}` into {} tokens",
+                at - first
             ));
         }
     }

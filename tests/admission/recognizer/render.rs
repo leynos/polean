@@ -166,19 +166,11 @@ fn quoted_end(canonical: &str, mut at: usize) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    //! Tokenisation must keep quoted strings, including spaces, intact, and the
+    //! Tokenization must keep quoted strings, including spaces, intact, and the
     //! rendered atoms must be exactly the contract's texts.
 
     use super::{canonical_tokens, split};
-    use crate::corpus;
-
-    /// The committed profile, or a panic naming the read failure.
-    fn profile() -> corpus::Profile {
-        match corpus::profile_contract() {
-            Ok(profile) => profile,
-            Err(error) => panic!("the profile must parse: {error}"),
-        }
-    }
+    use crate::support::profile;
 
     #[test]
     fn every_registered_atom_renders_its_contract_text() {

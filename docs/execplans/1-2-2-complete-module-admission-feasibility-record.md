@@ -1778,6 +1778,77 @@ The five rejected controls are `body:metadata-rule-dropped`,
 rejected at the obligation named in the control script, and the metadata
 control's anchor is `kernel/trivia.rs` after the module split.
 
+### CodeRabbit review repair (2026-11-03)
+
+CodeRabbit's review of `e76e879` raised 22 inline findings. All 22 are applied
+in one repair commit; none was rebutted. Three of them change behaviour rather
+than wording, and each tightens a check that previously accepted more than the
+contract allows:
+
+- `tests/admission/recognizer/lexer.rs`: `cross_check` now records the first
+  lexer index of each canonical token and refuses a token that spans more than
+  one lexer token unless it contains `.`. Before this, a lexer that split `==`
+  or `:=` into two symbols was accepted on the strength of the concatenated
+  text, so the cross-check could not distinguish a correct lexer from one that
+  tokenized differently. Only a dotted reference may legitimately span several
+  lexer tokens.
+- `tests/admission/corpus/mod.rs`: `ir_rules` now reads the hand-written IR
+  closed. The root must be an object whose keys are exactly `profile` and
+  `rules`, `profile` must equal the `id` in `contracts/profile.json`, and any
+  other key or a non-object root is refused. The reviewer's literal suggestion
+  was to require `rules` to be the only key; that would reject every committed
+  IR file, because each is `{"profile": ..., "rules": [...]}`, so the check
+  enforces the shape the corpus actually has. A misspelt key can no longer
+  leave part of the expected rule list silently unchecked.
+- `Makefile`: `PROVER_TOOLS_REF` is filtered and validated inside `awk`
+  (`length($$2) == 40 && $$2 !~ /[^0-9a-f]/`) and the guard tests the result
+  for emptiness, so an unvalidated value is never interpolated into a shell
+  command.
+
+The remaining findings are hardening and consistency:
+`scripts/check_verus_controls.py` resolves the selected `--verus` and `--z3`
+paths before the `is_file` check, so a relative argument still works when
+`run_verus` runs with `cwd=scratch`; `scripts/install_verus_z3.py` narrows the
+archive's `platform` group to `[A-Za-z0-9._-]+`, so a name containing `/` or
+`..` is refused before it can build a path or URL;
+`scripts/tests/test_check_verus_controls.py` gains a diagnostic message on
+every assertion, modern type hints, a `fake_run` that snapshots each control
+path so the test proves the baseline is restored before each control, and
+fixtures that exercise the non-zero error count rather than the missing-summary
+branch; `scripts/tests/test_install_verus_z3.py` checks the committed pin
+through `read_pin()` and uses an always-expired deadline.
+
+The rest are documentation corrections. `tests/admission/support.rs` is new: it
+holds the `manifest()`, `profile()`, and `source(entry)` helpers that eight
+test modules had each copied privately, and those modules now import them with
+their assertions unchanged. `tools/verus/README.md` names `Z3_SHA256SUMS` and
+the installer in its opening paragraph, and "Bumping the pin" gains a step that
+compares the new release's `source/tools/get-z3.sh` Z3 version with
+`Z3_SHA256SUMS`. The remaining edits correct spelling to Oxford `-ize` forms
+and replace "the frontend's JSON spelling" with "serde_json's normalized text"
+in the AST decoder, which is what the code actually reads.
+
+Every gate was rerun on the repair commit, in repository order. The logs are
+`/tmp/<gate>-polean-1-2-2-complete-module-admission-feasibility-record.out`.
+
+| Gate                      | Result                                                                                  |
+| :------------------------ | :-------------------------------------------------------------------------------------- |
+| `make check-fmt`          | Clean; 32 files unchanged.                                                              |
+| `make typecheck`          | No diagnostics.                                                                         |
+| `make lint`               | `cargo doc`, Clippy, and Whitaker clean.                                                |
+| `make test`               | 118 passed, 7 ignored, 0 failed.                                                        |
+| `make markdownlint`       | 33 files, 0 issues.                                                                     |
+| `make design-check`       | 5 schemas, 6 witnesses, 224 comparisons, 19 controls, 2 seams.                          |
+| `make test-scripts`       | 115 passed under Python 3.14.7 and pytest 9.1.1 via the documented `uv run` invocation. |
+| `make toolchain-smoke`    | 7 passed, 20 filtered out.                                                              |
+| `make verus`              | 89 verified, 0 errors; five controls rejected.                                          |
+| `sha256sum -c SHA256SUMS` | 39 entries, all OK.                                                                     |
+
+`make test-scripts` cannot start on this host, because neither the default
+`python3` nor the installed 3.14 interpreter has `pytest`. The substitute above
+is the invocation documented in the developer guide, and it runs the same test
+files with the same interpreter version.
+
 ## Interfaces and dependencies
 
 Everything below is private to the `tests/admission` binary. No `src/` item is

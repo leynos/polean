@@ -30,10 +30,10 @@
 //! # Verification
 //!
 //! The specification lives in `verus/admission_spec.rs` and the proofs that
-//! lift each scan step to it in `verus/admission_lemmas.rs`. `verus/
-//! admission_recognizer.rs` pulls this module into the Verus entry point with
-//! `#[path]`, so this file is the same source Cargo compiles as test code and
-//! Verus verifies. The proof establishes kernel soundness only: it says an
+//! lift each scan step to it in `verus/admission_lemmas.rs`.
+//! `verus/admission_recognizer.rs` pulls this module into the Verus entry point
+//! with `#[path]`, so this file is the same source Cargo compiles as test code
+//! and Verus verifies. The proof establishes kernel soundness only: it says an
 //! `Ok` decomposes the source as the tokens say, not that Rego assigns those
 //! tokens the same meaning.
 

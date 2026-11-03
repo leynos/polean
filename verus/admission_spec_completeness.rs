@@ -89,7 +89,7 @@ pub open spec fn has_hash_from(s: Seq<u8>, i: int) -> bool
 /// This is the completeness counterpart of [`decomposes_at`]: it pins every
 /// offset, because each gap ends at the first byte that is not whitespace.
 /// It is a sufficient condition for the recognizer to succeed, not a
-/// characterisation of its successful inputs, which may also hold comments.
+/// characterization of its successful inputs, which may also hold comments.
 ///
 /// Opaque because the recognizer's loop carries it as an assumption about a
 /// chosen witness; unfolding its quantifiers in every proof obligation is the

@@ -9,15 +9,16 @@
 use super::{
     Tokens,
     confirm,
-    tests::{one_literal, profile, same_tenant_ir, tokens_for},
+    tests::{one_literal, same_tenant_ir, tokens_for},
 };
+use crate::support::profile;
 
 /// The kernel signature the harness injects.
 type Kernel = fn(&[u8], &[&[u8]], &[bool]) -> Result<Vec<usize>, usize>;
 
 /// Run `kernel` on `source` and require the witness to refuse its offsets.
 ///
-/// A faulty kernel must still recognise the source; if it does not, it was
+/// A faulty kernel must still recognize the source; if it does not, it was
 /// never given the chance to produce a wrong witness and the test proves
 /// nothing.
 fn witness_refusal(kernel: Kernel, source: &str, tokens: &Tokens<'_>) -> String {

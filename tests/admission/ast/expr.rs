@@ -42,7 +42,7 @@ pub enum ExprKind {
     String(String),
     /// A raw string.
     RawString(String),
-    /// A number, kept as the frontend's JSON spelling.
+    /// A number, kept as `serde_json`'s normalized text.
     Number(String),
     /// A boolean.
     Bool(bool),

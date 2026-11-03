@@ -10,23 +10,8 @@ use crate::{
     admission::{self, Classification, Comparison, Decision, Frontend, Rejection},
     corpus::{self, Entry, Expected, Origin, Profile, ReasonCode, Stage},
     recognizer,
+    support::{manifest, profile},
 };
-
-/// The parsed manifest, or a panic naming the first parse failure.
-fn manifest() -> Vec<Entry> {
-    match corpus::entries() {
-        Ok(entries) => entries,
-        Err(error) => panic!("examples/admission/manifest.json must parse: {error}"),
-    }
-}
-
-/// The profile contract, or a panic naming the parse failure.
-fn profile() -> Profile {
-    match corpus::profile_contract() {
-        Ok(profile) => profile,
-        Err(error) => panic!("the profile must parse: {error}"),
-    }
-}
 
 /// The failure message for a rejection span that is not inside the source.
 fn span_problem(label: &str, rejection: &Rejection, len: usize) -> Option<String> {

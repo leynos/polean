@@ -16,15 +16,8 @@ use cap_std::fs::Dir;
 use crate::{
     corpus::{self, Entry, Expected, Origin, ReasonCode, Stage},
     inventory::NodeKind,
+    support::manifest,
 };
-
-/// The parsed manifest, or a panic naming the first parse failure.
-fn manifest() -> Vec<Entry> {
-    match corpus::entries() {
-        Ok(entries) => entries,
-        Err(error) => panic!("examples/admission/manifest.json must parse: {error}"),
-    }
-}
 
 /// The repository root as a capability handle, or a panic naming the failure.
 fn repository() -> Dir {

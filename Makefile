@@ -83,8 +83,8 @@ toolchain-smoke: tools ## Provision the pinned tools, then run the ignored smoke
 # The Verus pins are read through $(shell ...), so the path and the pin are
 # fixed with `override :=` and validated before either can be interpolated.
 override PROVER_TOOLS_REF_FILE := tools/rust-prover-tools/REF
-override PROVER_TOOLS_REF := $(shell awk '/^ref:/ { print $$2 }' $(PROVER_TOOLS_REF_FILE))
-ifeq ($(shell printf '%s' '$(PROVER_TOOLS_REF)' | grep -Ec '^[0-9a-f]{40}$$'),0)
+override PROVER_TOOLS_REF := $(shell awk '/^ref:/ && length($$2) == 40 && $$2 !~ /[^0-9a-f]/ { print $$2; exit }' $(PROVER_TOOLS_REF_FILE))
+ifeq ($(PROVER_TOOLS_REF),)
 $(error PROVER_TOOLS_REF missing or malformed; expected "ref: <40-hex>" in $(PROVER_TOOLS_REF_FILE))
 endif
 override PROVER_TOOLS_SOURCE := git+https://github.com/leynos/rust-prover-tools.git@$(PROVER_TOOLS_REF)

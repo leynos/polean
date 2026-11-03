@@ -215,7 +215,7 @@ pub open spec fn flags_hold(s: Seq<u8>, k: Seq<&[u8]>, p: Seq<usize>, flags: Seq
 /// This is the string `tests/admission/corpus/generated.rs` names
 /// `BASELINE`. The source is stated as a specification sequence, not as an
 /// exec constant: Verus refuses to coerce a byte literal to a slice
-/// reference in a constant initialiser, and a slice built that way has
+/// reference in a constant initializer, and a slice built that way has
 /// opaque contents, so the proof could not inspect its bytes.
 pub open spec fn baseline_src() -> Seq<u8> {
     seq![b'p', b'a', b'c', b'k', b'a', b'g', b'e', b' ', b'a', b'u', b't', b'h', b'z',
@@ -344,7 +344,7 @@ pub open spec fn permitted_range(s: Seq<u8>, a: int, b: int) -> bool {
 /// Whether the `#` at `q` is followed by the metadata marker on its line.
 ///
 /// The marker may start anywhere after the `#` before the next line feed, so
-/// `#METADATA`, `# METADATA`, and `#\tMETADATA` are all recognised. Such a
+/// `#METADATA`, `# METADATA`, and `#\tMETADATA` are all recognized. Such a
 /// comment is exactly what [`comment_ok`] refuses, so an accepted source has
 /// none. The line-feed exclusion is what makes this the inline and block forms
 /// OPA treats as annotations (D9).

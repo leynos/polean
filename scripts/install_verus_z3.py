@@ -53,7 +53,9 @@ REQUEST_TIMEOUT_SECONDS = 60
 DOWNLOAD_DEADLINE_SECONDS = 10 * 60
 MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 
-_ARCHIVE = re.compile(r"\A(z3-(?P<version>[0-9][0-9.]*)-(?P<platform>\S+))[.]zip\Z")
+_ARCHIVE = re.compile(
+    r"\A(z3-(?P<version>[0-9][0-9.]*)-(?P<platform>[A-Za-z0-9._-]+))[.]zip\Z"
+)
 _DIGEST = re.compile(r"\A[0-9a-f]{64}\Z")
 
 Fetcher = Callable[[str, Path], None]

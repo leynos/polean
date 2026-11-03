@@ -11,6 +11,7 @@ use crate::{
     corpus,
     frontend,
     inventory::{self, KindCounts, NodeKind},
+    support::manifest,
 };
 
 #[test]
@@ -50,14 +51,6 @@ fn a_manifest_name_resolves_to_its_kind() {
 #[test]
 fn an_unknown_manifest_name_resolves_to_nothing() {
     assert_eq!(NodeKind::from_name("ExprOr"), None);
-}
-
-/// The manifest entries the O1 test reads.
-fn manifest() -> Vec<corpus::Entry> {
-    match corpus::entries() {
-        Ok(entries) => entries,
-        Err(error) => panic!("examples/admission/manifest.json must parse: {error}"),
-    }
 }
 
 /// The typed and decoded kind counts of one fixture.

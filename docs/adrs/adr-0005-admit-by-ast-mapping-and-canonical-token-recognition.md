@@ -46,7 +46,7 @@ blocks roadmap 2.1.2.
 
 Map the decoded AST to the profile and reject anything else.
 
-Rejected: the six gaps above are invisible, so a parenthesised comparison, a
+Rejected: the six gaps above are invisible, so a parenthesized comparison, a
 `;`-separated body, or a `METADATA` annotation would be admitted silently. This
 is the outcome A5 asks about and it fails the requirement.
 

@@ -8,8 +8,9 @@
 use super::walk;
 use crate::{
     ast::{self, AssignOp, Body, Expr, ExprKind, Head, Literal, Module, Rule, Span},
-    corpus::{self, Profile, ReasonCode},
+    corpus::{self, ReasonCode},
     frontend,
+    support::profile,
 };
 
 /// The baseline module, decoded from the admitted policy.
@@ -28,14 +29,6 @@ fn baseline() -> Module {
     match ast::decode(&source, &ast_json) {
         Ok(module) => module,
         Err(fault) => panic!("the baseline policy must decode: {}", fault.describe()),
-    }
-}
-
-/// The profile the walk enforces.
-fn profile() -> Profile {
-    match corpus::profile_contract() {
-        Ok(profile) => profile,
-        Err(error) => panic!("the profile must parse: {error}"),
     }
 }
 

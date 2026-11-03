@@ -12,6 +12,7 @@ use crate::{
     admission::{self, Decision, Frontend, Rejection},
     ast_mutations::{self, Class, Mutant},
     corpus::{self, Entry, Expected, Profile, Stage},
+    support::{manifest, profile, source},
 };
 
 /// A reviewable failure message for one mutant.
@@ -20,30 +21,6 @@ fn describe(entry: &str, label: &str, expected: corpus::ReasonCode, actual: &str
         "{entry} {label}: expected decode/{} but {actual}",
         expected.as_wire()
     )
-}
-
-/// The manifest entries the sweep and the control test both read.
-fn manifest() -> Vec<Entry> {
-    match corpus::entries() {
-        Ok(entries) => entries,
-        Err(error) => panic!("examples/admission/manifest.json must parse: {error}"),
-    }
-}
-
-/// The profile both tests check against.
-fn profile() -> Profile {
-    match corpus::profile_contract() {
-        Ok(profile) => profile,
-        Err(error) => panic!("the profile must parse: {error}"),
-    }
-}
-
-/// The source of one entry, or a test failure.
-fn source(entry: &Entry) -> String {
-    match corpus::source(entry) {
-        Ok(source) => source,
-        Err(error) => panic!("{error}"),
-    }
 }
 
 /// The running totals of one sweep.

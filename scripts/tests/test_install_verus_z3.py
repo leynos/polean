@@ -12,7 +12,7 @@ The tests cover the three obligations the plan states for the installer:
 * only the archive's exact `bin/z3` member is written, so no other member can
   place a file outside the install directory; and
 * a cached solver is reused only while it matches the current pin, so a
-  changed pin or an unrecognised binary forces a fresh verified install.
+  changed pin or an unrecognized binary forces a fresh verified install.
 """
 
 from __future__ import annotations
@@ -115,6 +115,16 @@ def test_read_pin_reads_the_single_row(tmp_path: Path) -> None:
 
     assert name == ARCHIVE_NAME, "the archive name is read from the pin"
     assert digest == DIGEST, "the digest is read from the pin"
+
+
+def test_the_committed_pin_is_well_formed() -> None:
+    """The tracked Z3 pin parses and yields a release URL."""
+    name, digest = install_verus_z3.read_pin()
+
+    assert install_verus_z3.archive_url(name).startswith(
+        install_verus_z3.BASE_URL
+    ), "the committed archive name builds a release URL"
+    assert len(digest) == 64, "the committed digest is a SHA-256 hex string"
 
 
 @pytest.mark.parametrize(
@@ -420,7 +430,7 @@ def test_download_refuses_a_stream_past_the_deadline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A stream that outlives the deadline is refused."""
-    monkeypatch.setattr(install_verus_z3, "DOWNLOAD_DEADLINE_SECONDS", 0)
+    monkeypatch.setattr(install_verus_z3, "DOWNLOAD_DEADLINE_SECONDS", -1)
     replace_urlopen(monkeypatch, [b"abc", b""])
 
     with pytest.raises(ValueError) as raised:
