@@ -1687,13 +1687,16 @@ the mutation sweep records 79,181 mutants across the same ten classes. The
 observation snapshot has 106 lines and every outcome is `match`.
 
 Scope exception: applying this plan's tolerances exclusions to the rebased base
-`05edbba` leaves 91 non-fixture changed files and 12,670 net added lines
-(12,735 insertions and 65 deletions), and the corpus holds 94 `.rego` fixtures.
-The tolerances are 40 files, about 4,000 lines, and 90 fixtures, so all three
-are exceeded. The user approved the plan at revision 4 and, on 2026-11-02,
-directed the work to continue through assessment repair to merge; that
-instruction is the recorded escalation approval for these three exceedances. No
-further escalation is outstanding.
+`05edbba` and the head that carries the assessment repair leaves 96 non-fixture
+changed files and 14,072 net added lines (14,137 insertions and 65 deletions),
+and the corpus holds 94 `.rego` fixtures. At the earlier assessed head
+`1785056` the same calculation gives 91 files and 12,670 net added lines
+(12,735 insertions and 65 deletions); the repair added five files and 1,337
+lines. The tolerances are 40 files, about 4,000 lines, and 90 fixtures, so all
+three are exceeded. The user approved the plan at revision 4 and, on
+2026-11-02, directed the work to continue through assessment repair to merge;
+that instruction is the recorded escalation approval for these three
+exceedances. No further escalation is outstanding.
 
 ### ExecPlan assessment repair after `1785056` (2026-11-02)
 
@@ -1727,7 +1730,9 @@ findings against the head. All four are repaired on the candidate:
 4. The evidence record. The `nul_in_comment` row now says that the frontend
    reads the NUL as end of input and admits the prefix, with the recognizer
    refusing the submitted bytes; and the scope arithmetic above now applies
-   this plan's stated exclusions to the requested base and head.
+   this plan's stated exclusions to the requested base and head, giving 96
+   files and 14,072 net added lines at the repair head and retaining the
+   earlier 91-file, 12,670-line totals as the `1785056` measurement.
 
 `make verus` reports 89 verified obligations and no errors on this head, and
 all five negative controls are rejected at the named obligation. The count rose
