@@ -1691,7 +1691,7 @@ Scope exception: applying this plan's tolerances exclusions to the rebased base
 changed files and 14,072 net added lines (14,137 insertions and 65 deletions),
 and the corpus holds 94 `.rego` fixtures. At the earlier assessed head
 `1785056` the same calculation gives 91 files and 12,670 net added lines
-(12,735 insertions and 65 deletions); the repair added five files and 1,337
+(12,735 insertions and 65 deletions); the repair added five files and 1,402
 lines. The tolerances are 40 files, about 4,000 lines, and 90 fixtures, so all
 three are exceeded. The user approved the plan at revision 4 and, on
 2026-11-02, directed the work to continue through assessment repair to merge;
