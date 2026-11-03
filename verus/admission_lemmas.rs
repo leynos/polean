@@ -13,8 +13,12 @@
 // the child paths are spelled out.
 #[path = "admission_lemmas/baseline.rs"]
 mod baseline;
+#[path = "admission_lemmas/canonical.rs"]
+mod canonical;
 #[path = "admission_lemmas/comments.rs"]
 mod comments;
+#[path = "admission_lemmas/concrete.rs"]
+mod concrete;
 #[path = "admission_lemmas/gaps.rs"]
 mod gaps;
 #[path = "admission_lemmas/metadata.rs"]
@@ -27,7 +31,11 @@ mod records;
 #[cfg(verus_keep_ghost)]
 pub use self::baseline::*;
 #[cfg(verus_keep_ghost)]
+pub use self::canonical::*;
+#[cfg(verus_keep_ghost)]
 pub use self::comments::*;
+#[cfg(verus_keep_ghost)]
+pub use self::concrete::*;
 #[cfg(verus_keep_ghost)]
 pub use self::gaps::*;
 #[cfg(verus_keep_ghost)]

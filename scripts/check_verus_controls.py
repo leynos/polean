@@ -73,7 +73,7 @@ CONTROLS: tuple[Control, ...] = (
     Control(
         kind="body",
         name="metadata-rule-dropped",
-        path=KERNEL_DIR / "mod.rs",
+        path=KERNEL_DIR / "trivia.rs",
         anchor="""    if contains_metadata(src, start, end) {
         return Err(hash);
     }
@@ -81,13 +81,33 @@ CONTROLS: tuple[Control, ...] = (
         replacement="""    // NEGATIVE CONTROL: the metadata rule is dropped.
     let _ = contains_metadata(src, start, end);
 """,
-        expects=("postcondition not satisfied", "kernel/mod.rs"),
+        expects=("postcondition not satisfied", "kernel/trivia.rs"),
     ),
     Control(
         kind="body",
         name="empty-gap-rule-dropped",
         path=KERNEL_DIR / "mod.rs",
         anchor="""        if index > 0 && gap.end == at {
+            proof {
+                if admits_canonical(src@, toks@, needs_newline@) {
+                    lemma_ws_canonical_gap_positive(
+                        src@,
+                        toks@,
+                        needs_newline@,
+                        witness,
+                        index as int,
+                    );
+                    assert(at as int == prev_end(src@, toks@, witness, index as int));
+                    assert(witness[index as int - 1] as int + toks@[index as int - 1]@.len()
+                        < witness[index as int] as int);
+                    assert((at as int) < (gap.end as int));
+                    assert(false);
+                }
+            }
+            proof {
+                assert(!admits_canonical(src@, toks@, needs_newline@));
+                assert(at as int <= src@.len());
+            }
             return Err(at);
         }
 """,
@@ -100,6 +120,28 @@ CONTROLS: tuple[Control, ...] = (
         name="line-feed-rule-dropped",
         path=KERNEL_DIR / "mod.rs",
         anchor="""        if flag && !gap.newline {
+            proof {
+                if admits_canonical(src@, toks@, needs_newline@) {
+                    reveal(flags_prefix);
+                    lemma_ws_canonical_flags(src@, toks@, needs_newline@, witness);
+                    assert(flag == needs_newline@[index as int]);
+                    assert(flags_hold(src@, toks@, witness, needs_newline@));
+                    assert(flags_prefix(
+                        src@,
+                        toks@,
+                        witness,
+                        needs_newline@,
+                        toks@.len() as int,
+                    ));
+                    assert(gap_has_newline(
+                        src@,
+                        prev_end(src@, toks@, witness, index as int),
+                        witness[index as int] as int,
+                    ));
+                    assert(gap.newline == gap_has_newline(src@, at as int, gap.end as int));
+                    assert(false);
+                }
+            }
             return Err(gap.end);
         }
 """,
@@ -135,9 +177,9 @@ CONTROLS: tuple[Control, ...] = (
         replacement="""        && (comment_end(s, hash) == s.len() || line_end_at(s, comment_end(s, hash)))
 """,
         expects=(
-            "postcondition not satisfied",
+            "assertion failed",
             "admission_lemmas/metadata.rs",
-            "false,",
+            "false",
         ),
     ),
 )

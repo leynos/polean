@@ -144,9 +144,11 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
 - Risk: the recognizer becomes a second parser that must itself be trusted.
   Severity: medium. Likelihood: medium. Mitigation: it never produces IR.
   Admission is the conjunction of the AST mapping and the recognizer, so each
-  can only narrow acceptance. Each `Ok` returns a witness that an independent
-  checker validates, and O7 cross-checks the token stream against Regorus's own
-  lexer. ADR 0005 records this division of trust.
+  can only narrow acceptance. Each `Ok` returns a witness that a structurally
+  independent checker validates — it re-derives the offsets by direct slicing
+  and a separate gap traversal rather than reusing the kernel's loops, though
+  it shares the kernel's `has_metadata` helper — and O7 cross-checks the token
+  stream against Regorus's own lexer. ADR 0005 records this division of trust.
 - Risk: comment text that parsers ignore but editors render misleadingly.
   Examples are a byte-order mark (BOM, U+FEFF) inside a comment, which OPA
   rejects but Regorus skips; U+2028 or U+0085, which editors show as a line
@@ -204,10 +206,11 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
 - [x] (2026-10-30) EP-M3: canonical-token recognizer, witness checker, and
   properties. `tests/admission/recognizer/` renders the canonical tokens from
   `contracts/profile.json`, recognises them with the bounded kernel EP-M4 will
-  verify, confirms every accepted offset list with an independent witness, and
-  cross-checks the tokens against the pinned Regorus lexer. Four seeded kernel
-  faults (metadata rule skipped, token after a comment, empty trivia, bare
-  carriage return) are each caught by the witness.
+  verify, confirms every accepted offset list with a structurally independent
+  witness (direct slicing and a separate gap traversal; it shares the kernel's
+  `has_metadata` helper), and cross-checks the tokens against the pinned
+  Regorus lexer. Four seeded kernel faults (metadata rule skipped, token after
+  a comment, empty trivia, bare carriage return) are each caught by the witness.
   `tests/admission/properties/` checks 64 generated canonical sources across
   six trivia classes with a per-class floor, inserts 32 random strings into a
   comment, and pins four boundary shapes. `tests/admission/features/` binds
@@ -262,6 +265,18 @@ The ExecPlan file is excluded from every count below. Fixture data, meaning the
   three consequences of the repairs (`mixed_attributes_style`, `shadow_reuse`,
   `expect_used`, `manual_let_else`), all fixed. All ten gates pass; the
   evidence table is under `Artefacts and notes`.
+- [x] (2026-11-02) Repaired the ExecPlan assessment of `1785056`. T2's
+  metadata predicate now covers a marker anywhere after the hash before the
+  line ending; completeness adds `ws_canonical`, its token-sequence mirrors, and
+  `lemma_ws_canonical_unique`; and `kernel::baseline_is_recognised` is a
+  verified executable instance whose postcondition is `Ok(baseline_offsets())`,
+  with `lemma_baseline_accepts` retained as the separate decomposition
+  evidence. Each property test now persists its shrunk case to its own
+  regression file, the `nul_in_comment` divergence row matches the revised
+  fixture, and the scope arithmetic applies the plan's stated exclusions.
+  `make verus` reports 89 verified obligations with 0 errors, and all five
+  negative controls are rejected at the named obligation. Details are under
+  `Artefacts and notes`.
 
 ## Surprises & discoveries
 
@@ -981,10 +996,14 @@ about how Rego interprets the tokens; that is axiom X3.
   - Non-vacuity: the corpus contains admitted fixtures, including the new
     `locked` fixture with hand-written IR, and rejections at every stage.
 - O4, witness soundness on every execution. For each `Ok(p)` the recognizer
-  returns, in the corpus and in every property case, an independent checker
-  confirms `decomposes_at` by direct slicing and classification.
+  returns, in the corpus and in every property case, a checker independent of
+  the kernel's loop structure confirms `decomposes_at` by direct slicing and
+  classification.
   - Method: a deliberately simple checker, written without reference to the
-    kernel's loop structure.
+    kernel's loop structure. The independence is structural: the checker
+    re-derives offsets by direct slicing and a separate gap traversal, but it
+    does not duplicate the kernel's byte classification, so the shared
+    `has_metadata` helper is the one rule both sides apply.
   - Artefact: `tests/admission/recognizer/witness.rs`.
   - Non-vacuity: these seeded faults must each be caught by a named test:
     - a kernel that skips the `METADATA` check;
@@ -1013,14 +1032,23 @@ about how Rego interprets the tokens; that is axiom X3.
   (D14).
   - Method: Verus over the single-source kernel.
   - Artefact: `tests/admission/recognizer/kernel/mod.rs`, with the byte-level
-    predicates it shares in `kernel/scan.rs`, verified through the crate root
-    `verus/admission_recognizer.rs`, which contains only a `#[path]` module
-    declaration.
+    predicates in `kernel/scan.rs`, the trivia scan in `kernel/trivia.rs`, and
+    the executable baseline instance in `kernel/baseline.rs`; the specification
+    is `verus/admission_spec.rs` with the completeness contract in
+    `verus/admission_spec_completeness.rs`, and the whole is verified through
+    the crate root `verus/admission_recognizer.rs`, which contains only a
+    `#[path]` module declaration.
   - Evidence: `make verus` reports zero errors. Before the proof is complete,
     the run shows the open postcondition, which is the Red state.
-  - Non-vacuity: the antecedent is inhabited, shown by a proof that
-    `recognize` accepts one concrete baseline token sequence. T1 and T2 show
-    that the specification excludes NUL, BOM, and metadata. `grep` confirms
+  - Non-vacuity: the antecedent is inhabited. The verified executable
+    instance `kernel::baseline_is_recognised` requires its arguments to be the
+    concrete baseline source, tokens, and flags, and its postcondition
+    establishes `Ok(baseline_offsets())`, so it is the successful result the
+    specification admits rather than a fact about an unconstrained witness.
+    `lemma_baseline_is_canonical` supplies the canonical offsets that the
+    instance needs, and `lemma_baseline_accepts` remains separate evidence that
+    the decomposition into tokens and trivia is the intended one. T1 and T2
+    show that the specification excludes NUL, BOM, and metadata. `grep` confirms
     that `assume`, `admit`, and `external_body` are absent.
 - O7, lexical cross-check of axiom X3. For every source the recognizer
   accepts, Regorus's own token stream (`regorus::unstable::Lexer`) matches the
@@ -1297,9 +1325,11 @@ Quality criteria:
 
 ## Idempotence and recovery
 
-Every test is deterministic. If `proptest` ever finds a failure, its regression
-files are committed under `tests/admission/`. `make install-verus` installs
-into an untracked, version-named directory and can be rerun.
+Every test is deterministic. If `proptest` ever finds a failure, the shrunk
+case is persisted to that property's own regression file under
+`tests/admission/properties/` and is committed with the repair; a later run
+replays it before generating new cases. `make install-verus` installs into an
+untracked, version-named directory and can be rerun.
 
 If `insta` reports a changed snapshot, review it with `cargo insta review`. A
 change means the frontend or the spike changed what it exposes, and must be
@@ -1637,8 +1667,9 @@ README's token conditions (finding 2), and the solver-cache identity check
 
 Each control runs on a scratch copy, requires the unmodified copy to verify
 first, and requires its anchor to occur exactly once, so a drifted source fails
-closed rather than replacing nothing. The current proof verifies 59 functions
-with 0 errors, and all five controls are rejected at the named obligation.
+closed rather than replacing nothing. At the assessed head the proof verified
+59 functions with 0 errors, and all five controls were rejected at the named
+obligation.
 
 Both the repair and the lemma split landed as `804a0fb`, which was then rebased
 onto `05edbba`; the replay was clean, and the only replayed difference is the
@@ -1655,14 +1686,92 @@ the profile walk, and 8 at the recognizer. The frontend parses 95 fixtures, and
 the mutation sweep records 79,181 mutants across the same ten classes. The
 observation snapshot has 106 lines and every outcome is `match`.
 
-Scope exception: the comparison against the rebased base `05edbba` contains 96
-non-fixture changed files and 15,957 net added lines (16,022 insertions and 65
-deletions), and the corpus holds 94 `.rego` fixtures. The tolerances are 40
-files, about 4,000 lines, and 90 fixtures, so all three are exceeded. The user
-approved the plan at revision 4 and, on 2026-11-02, directed the work to
-continue through assessment repair to merge; that instruction is the recorded
-escalation approval for these three exceedances. No further escalation is
-outstanding.
+Scope exception: applying this plan's tolerances exclusions to the rebased base
+`05edbba` leaves 91 non-fixture changed files and 12,670 net added lines
+(12,735 insertions and 65 deletions), and the corpus holds 94 `.rego` fixtures.
+The tolerances are 40 files, about 4,000 lines, and 90 fixtures, so all three
+are exceeded. The user approved the plan at revision 4 and, on 2026-11-02,
+directed the work to continue through assessment repair to merge; that
+instruction is the recorded escalation approval for these three exceedances. No
+further escalation is outstanding.
+
+### ExecPlan assessment repair after `1785056` (2026-11-02)
+
+The ExecPlan assessment `polean-17-execplan-20261102-1785056` raised four
+findings against the head. All four are repaired on the candidate:
+
+1. T2's metadata exclusion. `annotates_metadata` recognised only the adjacent
+   `#METADATA`, so `# METADATA` and a marker later in a comment escaped the
+   theorem, even though the executable scanner and `comment_ok` exclude them.
+   The predicate is now stated over marker positions after the hash and before
+   the line ending, and the exclusion is proved for it under the same no-`#`
+   token condition. The whitespace-prefixed case is part of the specification
+   test.
+2. The executable accepting instance. `lemma_baseline_accepts` proves the
+   decomposition but no return value, and the contract is one-way, so an
+   always-refusing kernel would satisfy it. `lemma_baseline_is_canonical` now
+   proves the concrete baseline is a canonical whitespace-only decomposition,
+   and `kernel::baseline_is_recognised` is an executable function whose
+   postcondition is `Ok(baseline_offsets())`; the concrete baseline test calls
+   it. `lemma_baseline_accepts` stays as the separate decomposition evidence.
+   The completeness contract this rests on adds `ws_canonical` and
+   `admits_canonical` over slices, their `Seq<Seq<u8>>` mirrors
+   `ws_canonical_t` and `admits_canonical_t`, the extent and no-marker scans,
+   `lemma_ws_canonical_unique`, and the transport lemma
+   `lemma_ws_canonical_t_to_slices`.
+3. Property-test failure persistence. The runner set
+   `failure_persistence: None`, so a shrunk case could not outlive the run.
+   Each property now names its own regression file under
+   `tests/admission/properties/`, and `Idempotence and recovery` describes that
+   behaviour instead of a mechanism the runner lacked.
+4. The evidence record. The `nul_in_comment` row now says that the frontend
+   reads the NUL as end of input and admits the prefix, with the recognizer
+   refusing the submitted bytes; and the scope arithmetic above now applies
+   this plan's stated exclusions to the requested base and head.
+
+`make verus` reports 89 verified obligations and no errors on this head, and
+all five negative controls are rejected at the named obligation. The count rose
+from 59 because the completeness contract and the executable instance add their
+own obligations.
+
+The added proof material pushed four modules past Whitaker's 400-line limit, so
+the repair also split them along their existing seams: the completeness
+contract moved to `verus/admission_spec_completeness.rs`, the concrete scans
+and transport lemma to `verus/admission_lemmas/concrete.rs`, the kernel's
+trivia scan to `kernel/trivia.rs`, and the executable instance to
+`kernel/baseline.rs`. No proof statement changed, and the controls' anchor for
+the metadata rule moved with the function it edits. The witness description is
+now stated as structural independence: the checker re-derives offsets by direct
+slicing and a separate gap traversal, but shares the kernel's `has_metadata`
+helper, so it is not a second implementation of every classification rule. The
+proof assessment's fuel correction is accepted: the scan specifications take no
+semantic fuel parameter, their recursion terminates by `decreases`, and
+`reveal_with_fuel` controls unfolding during the concrete proof rather than
+imposing an execution bound.
+
+### Gate evidence for the assessment repair (2026-11-03)
+
+All ten commit gates pass on the candidate that carries the repair, run
+sequentially against `1785056` plus the repair changes:
+
+| Gate                      | Result                                         |
+| :------------------------ | :--------------------------------------------- |
+| `make check-fmt`          | Clean; 32 files unchanged.                     |
+| `make typecheck`          | No diagnostics.                                |
+| `make lint`               | `cargo doc`, Clippy, and Whitaker clean.       |
+| `make test`               | 118 passed, 7 ignored, 0 failed.               |
+| `make markdownlint`       | 33 files, 0 issues.                            |
+| `make design-check`       | Passed.                                        |
+| `make test-scripts`       | 114 passed.                                    |
+| `make toolchain-smoke`    | 7 passed, 20 filtered out.                     |
+| `make verus`              | 89 verified, 0 errors; five controls rejected. |
+| `sha256sum -c SHA256SUMS` | 39 entries, all OK.                            |
+
+The five rejected controls are `body:metadata-rule-dropped`,
+`body:empty-gap-rule-dropped`, `body:line-feed-rule-dropped`,
+`spec:body-byte-admits-nul`, and `spec:comment-ok-admits-metadata`. Each is
+rejected at the obligation named in the control script, and the metadata
+control's anchor is `kernel/trivia.rs` after the module split.
 
 ## Interfaces and dependencies
 

@@ -32,7 +32,7 @@ mod render;
 mod tests;
 mod witness;
 
-pub use kernel::{METADATA, has_metadata, recognize};
+pub use kernel::{METADATA, baseline_is_recognised, has_metadata, recognize};
 pub use lexer::cross_check;
 pub use render::{Tokens, canonical_tokens};
 pub use witness::confirm;

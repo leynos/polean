@@ -124,6 +124,15 @@ fn the_concrete_baseline_is_recognised_at_the_proved_offsets() {
         ],
         "recognition must return the proved offsets"
     );
+    // The verified instance runs the same kernel on the same bytes, and its
+    // postcondition fixes these offsets.
+    let instance =
+        super::baseline_is_recognised(source.as_bytes(), &tokens.bytes(), &tokens.needs_newline);
+    assert_eq!(
+        instance,
+        Ok(offsets),
+        "the verified instance must return the proved offsets"
+    );
 }
 
 #[test]

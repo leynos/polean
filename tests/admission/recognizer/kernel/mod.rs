@@ -40,20 +40,28 @@
 #[path = "../../../../verus/admission_spec.rs"]
 mod spec;
 
+#[path = "../../../../verus/admission_spec_completeness.rs"]
+mod completeness;
+
 #[path = "../../../../verus/admission_lemmas.rs"]
 mod lemmas;
 
+mod baseline;
 pub mod scan;
+mod trivia;
 
 use vstd::prelude::*;
 
+pub use self::baseline::baseline_is_recognised;
 // The specification and the lemmas are erased by plain `rustc`, so these
 // imports exist only for the verifier and would otherwise be unused.
 #[cfg(verus_keep_ghost)]
+use self::completeness::*;
+#[cfg(verus_keep_ghost)]
 use self::lemmas::*;
-use self::scan::*;
 #[cfg(verus_keep_ghost)]
 use self::spec::*;
+use self::{scan::*, trivia::*};
 
 /// The bytes a comment may not spell.
 pub const METADATA: &[u8] = b"METADATA";
@@ -70,176 +78,80 @@ pub struct Gap {
     pub newline: bool,
 }
 
-/// Whether `src` holds a carriage return and line feed at `at`.
-fn crlf_at(src: &[u8], at: usize) -> (r: bool)
-    requires
-        at < src@.len(),
-    ensures
-        r == (at + 1 < src@.len() && src@[at as int] == b'\r' && src@[at as int + 1] == b'\n'),
-{
-    proof {
-        // `src@.len()` fits in a `usize`, so the `at + 1` below cannot overflow.
-        lemma_slice_len_fits(src);
-    }
-    if byte_at(src, at) != b'\r' {
-        return false;
-    }
-    if at + 1 < src.len() {
-        return byte_at(src, at + 1) == b'\n';
-    }
-    false
-}
-
-/// Skip the comment that starts at `hash`, returning the offset of its line
-/// feed, carriage return, or the end of the source.
-fn skip_comment(src: &[u8], hash: usize) -> (r: Result<usize, usize>)
-    requires
-        hash < src@.len(),
-        src@[hash as int] == b'#',
-    ensures
-        match r {
-            Ok(end) => {
-                &&& hash < end <= src@.len()
-                &&& end == comment_end(src@, hash as int)
-                &&& comment_ok(src@, hash as int)
-            },
-            Err(stop) => stop <= src@.len(),
-        },
-{
-    proof {
-        lemma_slice_len_fits(src);
-    }
-    let start = hash + 1;
-    let mut end = start;
-    // The line ending is part of the loop condition rather than a `break`, so
-    // that the exit state records why the scan stopped.
-    while end < src.len() && !is_line_end(src, end)
-        invariant
-            start <= end <= src@.len(),
-            comment_end_from(src@, start as int) == comment_end_from(src@, end as int),
-        decreases src@.len() - end,
-    {
-        if !is_body_byte(byte_at(src, end)) {
-            return Err(end);
-        }
-        proof {
-            lemma_comment_end_step(src@, end as int);
-        }
-        end += 1;
-    }
-    if contains_metadata(src, start, end) {
-        return Err(hash);
-    }
-    proof {
-        lemma_comment_end_stops(src@, end as int);
-    }
-    Ok(end)
-}
-
-/// Skip the trivia that starts at `at`.
+/// Extend a pointwise agreement by one matching element.
 ///
-/// `last` says no token follows, which permits a comment to end at the end of
-/// the source. Without it, a comment must be followed by its line feed before
-/// the gap ends, because a token on a comment's line belongs to the comment.
-fn skip_trivia(src: &[u8], at: usize, last: bool) -> (r: Result<Gap, usize>)
+/// The recognizer's loop appends one offset per token. Stating the extension as
+/// a lemma keeps the quantified obligation out of the loop body, which is where
+/// the verifier's budget is tightest.
+pub proof fn lemma_offsets_agree_snoc(a: Seq<usize>, b: Seq<usize>, j: int, v: usize)
     requires
-        at <= src@.len(),
+        0 <= j,
+        a.len() == j,
+        j < b.len(),
+        v == b[j],
+        offsets_agree(a, b, j),
     ensures
-        match r {
-            Ok(gap) => {
-                &&& at <= gap.end <= src@.len()
-                &&& trivia(src@, at as int, gap.end as int, last)
-                &&& gap.newline == gap_has_newline(src@, at as int, gap.end as int)
-            },
-            Err(stop) => stop <= src@.len(),
-        },
+        offsets_agree(a.push(v), b, j + 1),
 {
-    proof {
-        lemma_trivia_empty(src@, at as int, last);
-        lemma_slice_len_fits(src);
-    }
-    let mut index = at;
-    let mut newline = false;
-    while index < src.len()
-        invariant
-            at <= index <= src@.len(),
-            trivia(src@, at as int, index as int, last),
-            newline == gap_has_newline(src@, at as int, index as int),
-        decreases src@.len() - index,
-    {
-        let byte = byte_at(src, index);
-        if byte == b' ' || byte == b'\t' {
-            proof {
-                lemma_trivia_item_ws(src@, at as int, index as int, last);
-                lemma_newline_unchanged(src@, at as int, index as int, index as int + 1);
-            }
-            index += 1;
-        } else if byte == b'\n' {
-            proof {
-                lemma_trivia_item_ws(src@, at as int, index as int, last);
-                lemma_newline_gained(src@, at as int, index as int, index as int + 1);
-            }
-            newline = true;
-            index += 1;
-        } else if crlf_at(src, index) {
-            proof {
-                lemma_trivia_item_ws(src@, at as int, index as int, last);
-                lemma_newline_unchanged(src@, at as int, index as int, index as int + 1);
-            }
-            index += 1;
-        } else if byte == b'#' {
-            let end = skip_comment(src, index)?;
-            if end == src.len() && !last {
-                return Err(end);
-            }
-            if end == src.len() {
-                proof {
-                    lemma_trivia_after_comment_eof(src@, at as int, index as int);
-                }
-                index = end;
-            } else if byte_at(src, end) == b'\n' {
-                proof {
-                    lemma_trivia_after_comment_lf(src@, at as int, index as int, last);
-                }
-                newline = true;
-                index = end + 1;
-            } else {
-                proof {
-                    lemma_trivia_after_comment_crlf(src@, at as int, index as int, last);
-                }
-                newline = true;
-                index = end + 2;
-            }
+    assert forall|i: int| 0 <= i < j + 1 implies #[trigger] a.push(v)[i] == b[i] by {
+        if i < j {
+            assert(a.push(v)[i] == a[i]);
         } else {
-            break;
+            assert(a.push(v)[i] == v);
         }
     }
-    Ok(Gap { end: index, newline })
 }
+
 
 /// Recognize `toks` in `src`, returning each token's start offset.
 ///
 /// # Errors
 ///
 /// Returns the offset at which recognition stopped.
+///
+/// The loop is the proof. Each `proof` block inside it discharges one clause of
+/// the contract for the branch that follows, and the invariants name exactly
+/// the state the next iteration may assume, so extracting them would separate
+/// the run from the facts that justify it. The function's length is that
+/// structure rather than incidental code.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the verified loop and its proof blocks are the unit of assurance"
+)]
+#[verifier::rlimit(120)]
 pub fn recognize(src: &[u8], toks: &[&[u8]], needs_newline: &[bool]) -> (r: Result<Vec<usize>, usize>)
     requires
         forall|j: int| 0 <= j < toks@.len() ==> #[trigger] toks@[j]@.len() > 0,
         needs_newline@.len() == toks@.len(),
     ensures
-        match r {
-            Ok(offsets) => {
-                &&& offsets@.len() == toks@.len()
-                &&& decomposes_at(src@, toks@, offsets@)
-                &&& flags_hold(src@, toks@, offsets@, needs_newline@)
-            },
-            Err(stop) => stop <= src@.len(),
+        r is Ok ==> {
+            &&& r->Ok_0@.len() == toks@.len()
+            &&& decomposes_at(src@, toks@, r->Ok_0@)
+            &&& flags_hold(src@, toks@, r->Ok_0@, needs_newline@)
+            &&& admits_canonical(src@, toks@, needs_newline@) ==> ws_canonical(
+                src@,
+                toks@,
+                needs_newline@,
+                r->Ok_0@,
+            )
+        },
+        r is Err ==> {
+            &&& r->Err_0 <= src@.len()
+            &&& admits_canonical(src@, toks@, needs_newline@) ==> false
         },
 {
     proof {
         lemma_slice_len_fits(src);
         reveal(flags_prefix);
     }
+    // The completeness argument needs one fixed decomposition to reason about.
+    // The condition and the witness are written as the specification's own
+    // predicates so the loop can prove the postcondition verbatim.
+    let ghost witness = if admits_canonical(src@, toks@, needs_newline@) {
+        choose|q: Seq<usize>| ws_canonical(src@, toks@, needs_newline@, q)
+    } else {
+        Seq::<usize>::empty()
+    };
     let mut offsets: Vec<usize> = Vec::new();
     let mut at = 0;
     let mut index = 0;
@@ -253,14 +165,80 @@ pub fn recognize(src: &[u8], toks: &[&[u8]], needs_newline: &[bool]) -> (r: Resu
             needs_newline@.len() == toks@.len(),
             prefix_decomposes(src@, toks@, offsets@, index as int),
             flags_prefix(src@, toks@, offsets@, needs_newline@, index as int),
+            admits_canonical(src@, toks@, needs_newline@) ==> ws_canonical(src@, toks@, needs_newline@, witness),
+            admits_canonical(src@, toks@, needs_newline@) ==> offsets_agree(offsets@, witness, index as int),
         decreases toks@.len() - index,
     {
+        let ghost prior: Seq<usize> = offsets@;
         let token = *vstd::slice::slice_index_get(toks, index);
         if token.is_empty() {
+            proof {
+                if admits_canonical(src@, toks@, needs_newline@) {
+                    lemma_ws_canonical_token_len(
+                        src@,
+                        toks@,
+                        needs_newline@,
+                        witness,
+                        index as int,
+                    );
+                    assert(token@ == toks@[index as int]@);
+                    assert(token@.len() == 0);
+                    assert(false);
+                }
+            }
+            proof {
+                assert(!admits_canonical(src@, toks@, needs_newline@));
+                assert(at as int <= src@.len());
+            }
             return Err(at);
         }
-        let gap = skip_trivia(src, at, false)?;
+        let gap = match skip_trivia(src, at, false) {
+            Ok(gap) => gap,
+            Err(stop) => {
+                proof {
+                    if admits_canonical(src@, toks@, needs_newline@) {
+                        lemma_ws_canonical_no_hash(src@, toks@, needs_newline@, witness);
+                        // `skip_trivia` refuses exactly when the source holds
+                        // no comment marker, which a canonical decomposition
+                        // rules out.
+                        assert(false);
+                    }
+                }
+                return Err(stop);
+            },
+        };
+        proof {
+            if admits_canonical(src@, toks@, needs_newline@) {
+                lemma_ws_canonical_no_hash(src@, toks@, needs_newline@, witness);
+                lemma_ws_canonical_lengths(src@, toks@, needs_newline@, witness);
+                assert(gap.end as int == ws_extent(src@, at as int));
+                lemma_prev_end_agree(src@, toks@, offsets@, witness, index as int);
+                assert(at as int == prev_end(src@, toks@, witness, index as int));
+                lemma_ws_canonical_gap(src@, toks@, needs_newline@, witness, index as int);
+                assert(gap.end as int == witness[index as int] as int);
+            }
+        }
         if index > 0 && gap.end == at {
+            proof {
+                if admits_canonical(src@, toks@, needs_newline@) {
+                    lemma_ws_canonical_gap_positive(
+                        src@,
+                        toks@,
+                        needs_newline@,
+                        witness,
+                        index as int,
+                    );
+                    assert(at as int == prev_end(src@, toks@, witness, index as int));
+                    assert(witness[index as int - 1] as int + toks@[index as int - 1]@.len()
+                        < witness[index as int] as int);
+                    assert((at as int) < (gap.end as int));
+                    assert(false);
+                }
+            }
+            proof {
+                assert(!admits_canonical(src@, toks@, needs_newline@));
+                assert(at as int <= src@.len());
+            }
             return Err(at);
         }
         proof {
@@ -268,6 +246,28 @@ pub fn recognize(src: &[u8], toks: &[&[u8]], needs_newline: &[bool]) -> (r: Resu
         }
         let flag = *vstd::slice::slice_index_get(needs_newline, index);
         if flag && !gap.newline {
+            proof {
+                if admits_canonical(src@, toks@, needs_newline@) {
+                    reveal(flags_prefix);
+                    lemma_ws_canonical_flags(src@, toks@, needs_newline@, witness);
+                    assert(flag == needs_newline@[index as int]);
+                    assert(flags_hold(src@, toks@, witness, needs_newline@));
+                    assert(flags_prefix(
+                        src@,
+                        toks@,
+                        witness,
+                        needs_newline@,
+                        toks@.len() as int,
+                    ));
+                    assert(gap_has_newline(
+                        src@,
+                        prev_end(src@, toks@, witness, index as int),
+                        witness[index as int] as int,
+                    ));
+                    assert(gap.newline == gap_has_newline(src@, at as int, gap.end as int));
+                    assert(false);
+                }
+            }
             return Err(gap.end);
         }
         if flag {
@@ -276,26 +276,85 @@ pub fn recognize(src: &[u8], toks: &[&[u8]], needs_newline: &[bool]) -> (r: Resu
             }
         }
         if !matches_at(src, gap.end, token) {
+            proof {
+                if admits_canonical(src@, toks@, needs_newline@) {
+                    lemma_ws_canonical_token_at(
+                        src@,
+                        toks@,
+                        needs_newline@,
+                        witness,
+                        index as int,
+                    );
+                    assert(token@ == toks@[index as int]@);
+                    assert(token_at(src@, witness[index as int] as int, toks@[index as int]));
+                    assert(gap.end as int == witness[index as int] as int);
+                    assert(false);
+                }
+            }
             return Err(gap.end);
         }
         proof {
             assert((gap.end as int + token@.len()) <= src@.len());
         }
-        let ghost prior: Seq<usize> = offsets@;
         offsets.push(gap.end);
         proof {
             lemma_flags_prefix_push(src@, toks@, prior, needs_newline@, index as int, gap.end);
+            if admits_canonical(src@, toks@, needs_newline@) {
+                assert(gap.end as int == witness[index as int] as int);
+                lemma_offsets_agree_snoc(prior, witness, index as int, gap.end);
+            }
         }
         at = gap.end + token.len();
         index += 1;
     }
-    let trailing = skip_trivia(src, at, true)?;
+    let trailing = match skip_trivia(src, at, true) {
+        Ok(trailing) => trailing,
+        Err(stop) => {
+            proof {
+                if admits_canonical(src@, toks@, needs_newline@) {
+                    lemma_ws_canonical_no_hash(src@, toks@, needs_newline@, witness);
+                    assert(false);
+                }
+            }
+            return Err(stop);
+        },
+    };
     if trailing.end == src.len() {
+        proof {
+            if admits_canonical(src@, toks@, needs_newline@) {
+                assert(offsets_agree(offsets@, witness, toks@.len() as int));
+                lemma_ws_canonical_lengths(src@, toks@, needs_newline@, witness);
+                assert(offsets@.len() == toks@.len());
+                assert(witness.len() == toks@.len());
+                assert(offsets@ =~= witness);
+                assert(at as int == prev_end(src@, toks@, witness, toks@.len() as int));
+                lemma_ws_canonical_no_hash(src@, toks@, needs_newline@, witness);
+                lemma_ws_canonical_trailing(src@, toks@, needs_newline@, witness);
+                assert(ws_extent(src@, at as int) == src@.len() as int);
+                assert(trailing.end as int == ws_extent(src@, at as int));
+                assert(ws_canonical(src@, toks@, needs_newline@, offsets@));
+            }
+        }
         Ok(offsets)
     } else {
+        proof {
+            if admits_canonical(src@, toks@, needs_newline@) {
+                assert(offsets_agree(offsets@, witness, toks@.len() as int));
+                lemma_ws_canonical_lengths(src@, toks@, needs_newline@, witness);
+                assert(offsets@.len() == toks@.len());
+                assert(witness.len() == toks@.len());
+                assert(offsets@ =~= witness);
+                lemma_ws_canonical_no_hash(src@, toks@, needs_newline@, witness);
+                lemma_ws_canonical_trailing(src@, toks@, needs_newline@, witness);
+                assert(ws_extent(src@, at as int) == src@.len() as int);
+                assert(trailing.end as int == ws_extent(src@, at as int));
+                assert(false);
+            }
+        }
         Err(trailing.end)
     }
 }
+
 
 } // verus!
 

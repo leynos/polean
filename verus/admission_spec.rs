@@ -341,17 +341,16 @@ pub open spec fn permitted_range(s: Seq<u8>, a: int, b: int) -> bool {
     forall|i: int| a <= i < b ==> #[trigger] permitted_byte(s, i)
 }
 
-/// Whether the `#` at `q` begins a comment that spells the metadata marker on
-/// its own line.
+/// Whether the `#` at `q` is followed by the metadata marker on its line.
 ///
-/// Such a comment is exactly what [`comment_ok`] refuses, so an accepted source
-/// has none. The marker must start immediately after the `#` and must not
-/// contain a line feed, which is the inline and block forms OPA treats as
-/// annotations (D9).
+/// The marker may start anywhere after the `#` before the next line feed, so
+/// `#METADATA`, `# METADATA`, and `#\tMETADATA` are all recognised. Such a
+/// comment is exactly what [`comment_ok`] refuses, so an accepted source has
+/// none. The line-feed exclusion is what makes this the inline and block forms
+/// OPA treats as annotations (D9).
 pub open spec fn annotates_metadata(s: Seq<u8>, q: int) -> bool {
-    0 <= q < s.len() && s[q] == b'#'
-        && metadata_at(s, q + 1)
-        && !gap_has_newline(s, q + 1, q + 1 + metadata_bytes().len())
+    0 <= q < s.len() && s[q] == b'#' && exists|at: int|
+        q + 1 <= at && #[trigger] metadata_at(s, at) && !gap_has_newline(s, q + 1, at)
 }
 
 /// Whether no byte of `s` begins a metadata annotation.

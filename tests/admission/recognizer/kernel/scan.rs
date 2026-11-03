@@ -154,6 +154,27 @@ pub(super) fn is_line_end(src: &[u8], at: usize) -> (r: bool)
     }
 }
 
+/// Whether the byte at `at` can begin a trivia item.
+///
+/// The kernel's gap scan tests this before reading the byte's meaning, so the
+/// loop exits at the first byte that is neither whitespace nor a comment
+/// marker. That exit state is what makes a gap's end maximal.
+pub(super) fn is_trivia_start(src: &[u8], at: usize) -> (r: bool)
+    requires
+        at < src@.len(),
+    ensures
+        r == (ws_at(src@, at as int) || src@[at as int] == b'#'),
+{
+    let byte = byte_at(src, at);
+    if matches!(byte, b' ' | b'\t' | b'\n' | b'#') {
+        true
+    } else {
+        // A carriage return is whitespace only as the first half of a line
+        // ending, which is exactly the line-end test.
+        is_line_end(src, at)
+    }
+}
+
 /// Whether a byte may appear in a comment body.
 pub const fn is_body_byte(byte: u8) -> (r: bool)
     ensures

@@ -7,7 +7,15 @@ use proptest::{
     collection::vec as strategy_vec,
     prop_assert_eq,
     sample::select,
-    test_runner::{Config, RngAlgorithm, TestCaseError, TestCaseResult, TestRng, TestRunner},
+    test_runner::{
+        Config,
+        FileFailurePersistence,
+        RngAlgorithm,
+        TestCaseError,
+        TestCaseResult,
+        TestRng,
+        TestRunner,
+    },
 };
 use rstest::rstest;
 
@@ -35,15 +43,18 @@ fn profile() -> Profile {
     }
 }
 
-/// A shrinking runner with a fixed seed and no on-disk failure persistence.
+/// A shrinking runner with a fixed seed and explicit regression persistence.
 ///
 /// The deterministic seed keeps the run reproducible; `run` still shrinks a
 /// failing case and reports the smallest one it finds, and a failing run is
-/// raised as a panic naming that case.
-fn runner(cases: u32) -> TestRunner {
+/// raised as a panic naming that case. `regressions` is the file a shrunk case
+/// is written to, so a later run replays it before generating new cases. Each
+/// property owns its own file because a persisted case only type-checks
+/// against the strategy that produced it.
+fn runner(cases: u32, regressions: &'static str) -> TestRunner {
     let config = Config {
         cases,
-        failure_persistence: None,
+        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(regressions))),
         ..Config::default()
     };
     TestRunner::new_with_rng(config, TestRng::deterministic_rng(RngAlgorithm::ChaCha))
@@ -54,7 +65,11 @@ fn every_generated_canonical_source_is_admitted() {
     let profile = profile();
     let strategy = case::strategy(&profile);
     let counts: RefCell<BTreeMap<&'static str, usize>> = RefCell::new(BTreeMap::new());
-    let outcome = runner(CASES).run(&strategy, |generated| {
+    let outcome = runner(
+        CASES,
+        "tests/admission/properties/regressions-generated-source.txt",
+    )
+    .run(&strategy, |generated| {
         let (_, emitted) = case::render(&profile, &generated);
         for gap in &emitted {
             *counts.borrow_mut().entry(gap.name()).or_default() += 1;
@@ -134,7 +149,11 @@ fn a_swapped_renderer_is_refused_for_every_generated_source() {
     let profile = profile();
     let faulty = profile.with_swapped_lock_atoms();
     let strategy = case::strategy(&profile);
-    let outcome = runner(CASES).run(&strategy, |generated| {
+    let outcome = runner(
+        CASES,
+        "tests/admission/properties/regressions-renderer-fault.txt",
+    )
+    .run(&strategy, |generated| {
         let source = case::source(&profile, &generated);
         let names_lock = generated
             .ir
@@ -160,7 +179,11 @@ fn a_swapped_renderer_is_refused_for_every_generated_source() {
 fn inserting_text_into_a_comment_does_not_change_the_outcome() {
     let profile = profile();
     let strategy = strategy_vec(select(vec!['a', 'b', 'c', '1', ' ']), 0..12);
-    let outcome = runner(INSERTIONS).run(&strategy, |inserted: Vec<char>| {
+    let outcome = runner(
+        INSERTIONS,
+        "tests/admission/properties/regressions-comment-insertion.txt",
+    )
+    .run(&strategy, |inserted: Vec<char>| {
         let inserted_text: String = inserted.into_iter().collect();
         let generated = Case::rectangular(&profile, 1, 1);
         let source = case::source(&profile, &generated);

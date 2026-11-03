@@ -178,18 +178,21 @@ holds a line feed; and escaped spellings are refused. These are narrowings of
 
 ## 7. Frontend divergences
 
-These are fail-closed differences between the pinned frontend and OPA 1.21.2.
-They are recorded for 2.1.1 and 2.3.2; they do not weaken admission, because
-each refuses a source that OPA might accept.
+These are differences between the pinned frontend and OPA 1.21.2, recorded for
+2.1.1 and 2.3.2. Most are fail-closed: Regorus refuses a source that OPA
+accepts. The embedded-NUL row is the exception. The frontend reads the NUL as
+the end of its input and admits the prefix, so admission rests on the
+recognizer, which reads the submitted bytes and refuses them. None of these
+differences widens admission.
 
-| Shape                              | Regorus 0.13.0                                                 | OPA 1.21.2        | Evidence                         |
-| ---------------------------------- | -------------------------------------------------------------- | ----------------- | -------------------------------- |
-| Leading byte-order mark            | Parse error                                                    | Accepted          | `generated/leading_bom`          |
-| Bare carriage return               | Parse error unless followed by a line feed                     | Accepted          | `generated/bare_carriage_return` |
-| Line over 1,024 columns            | Parse error on a token that wide; comment width is not checked | Accepted          | `generated/over_long_line`       |
-| Embedded NUL in a comment          | Truncates the module; the package is reported missing          | Rejected          | `generated/nul_in_comment`       |
-| CRLF line endings                  | Accepted; treated as trivia                                    | Accepted          | `generated/crlf`                 |
-| Number beyond the frontend's range | Rejected inside `add_policy`                                   | Accepted at parse | `limits/number-overflow.rego`    |
+| Shape                              | Regorus 0.13.0                                                   | OPA 1.21.2        | Evidence                         |
+| ---------------------------------- | ---------------------------------------------------------------- | ----------------- | -------------------------------- |
+| Leading byte-order mark            | Parse error                                                      | Accepted          | `generated/leading_bom`          |
+| Bare carriage return               | Parse error unless followed by a line feed                       | Accepted          | `generated/bare_carriage_return` |
+| Line over 1,024 columns            | Parse error on a token that wide; comment width is not checked   | Accepted          | `generated/over_long_line`       |
+| Embedded NUL in a comment          | Reads the NUL as end of input; the prefix parses and is admitted | Rejected          | `generated/nul_in_comment`       |
+| CRLF line endings                  | Accepted; treated as trivia                                      | Accepted          | `generated/crlf`                 |
+| Number beyond the frontend's range | Rejected inside `add_policy`                                     | Accepted at parse | `limits/number-overflow.rego`    |
 
 OPA was not executed by the spike (D6); the OPA column comes from reading the
 pinned sources at the cited points, as the plan requires. OPA legality belongs
@@ -201,22 +204,37 @@ The recognizer kernel is verified in Verus. The kernel is compiled twice — by
 Cargo as test code and by Verus through `#[path]` — so the proved function is
 the one the spike calls.
 
-| Property        | Statement                                                                                                                           | Where                                      |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Decomposition   | An `Ok` from `recognize` places each token's exact bytes at its offset, with permitted trivia in every gap and after the last token | `verus/admission_spec.rs`, `decomposes_at` |
-| Line-feed flags | Every token whose flag is set follows a gap containing a line feed                                                                  | `flags_hold`                               |
-| Metadata        | A comment body containing `METADATA` is never accepted                                                                              | `comment_ok`, `metadata_in`                |
-| Refusal         | An `Err` offset is never past the end of the source                                                                                 | `recognize`'s postcondition                |
-| Scope           | The property holds for sources of any length; no bound on token count                                                               | O6                                         |
+| Property        | Statement                                                                                                                           | Where                                       |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Decomposition   | An `Ok` from `recognize` places each token's exact bytes at its offset, with permitted trivia in every gap and after the last token | `verus/admission_spec.rs`, `decomposes_at`  |
+| Line-feed flags | Every token whose flag is set follows a gap containing a line feed                                                                  | `flags_hold`                                |
+| Metadata        | A comment body containing `METADATA` is never accepted                                                                              | `comment_ok`, `metadata_in`                 |
+| Refusal         | An `Err` offset is never past the end of the source                                                                                 | `recognize`'s postcondition                 |
+| Scope           | The property holds for sources of any length; no bound on token count                                                               | O6                                          |
+| Completeness    | A whitespace-only decomposition makes the kernel succeed, and its offsets are the only list it can return                           | `ws_canonical`; `lemma_ws_canonical_unique` |
+| Baseline        | A verified executable run over the 146-byte baseline returns exactly `baseline_offsets()`                                           | `kernel::baseline_is_recognised`            |
 
-`make verus` reports 59 verified obligations and no errors on the current head.
-The count was 41 before O6's T1, T2, and concrete-baseline proofs were added,
-and 40 at commit `14d29d9`, when splitting the carriage-return test into its own
-`crlf_at` function in `kernel/mod.rs` added one obligation. The proof contains
-no `assume`, `admit`, or `external_body`. The Red transcript in the ExecPlan
-shows the same contracts and invariants with the proof steps removed: Verus
-then reports 34 verified and 6 errors, the arithmetic obligations and the
+`make verus` reports 89 verified obligations and no errors on the current head.
+The count was 59 before the completeness contract and the executable baseline
+instance were added, 41 before O6's T1, T2, and concrete-baseline proofs were
+added, and 40 at commit `14d29d9`, when splitting the carriage-return test into
+its own `crlf_at` function in `kernel/mod.rs` added one obligation. The proof
+contains no `assume`, `admit`, or `external_body`. The Red transcript in the
+ExecPlan shows the same contracts and invariants with the proof steps removed:
+Verus then reports 34 verified and 6 errors, the arithmetic obligations and the
 invariants that carry the postcondition.
+
+Completeness is separate evidence from decomposition, and the baseline instance
+keeps both. `ws_canonical` says that a source whose tokens sit at offsets
+separated by maximal whitespace runs is accepted, and
+`lemma_ws_canonical_unique` shows such a decomposition admits exactly one
+offset list. `lemma_baseline_accepts` remains the decomposition lemma that the
+specification admits the baseline's own bytes; `lemma_baseline_is_canonical`
+proves those bytes are a canonical whitespace-only decomposition; and
+`baseline_is_recognised` is an executable function whose postcondition is that
+it returns `Ok(baseline_offsets())`. The executable test calls it with the
+concrete baseline, so the postcondition establishes the successful result
+rather than only the absence of a refusal.
 
 `make verus` also runs the negative controls, which show the proof responds to
 defects rather than merely passing. Three body controls remove one kernel rule
