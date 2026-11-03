@@ -26,6 +26,13 @@ pub enum Expected {
     Admitted {
         /// Repository-relative path of the hand-written IR file.
         ir: String,
+        /// The IR file's rule list, read once by the corpus loader.
+        ///
+        /// Parsing happens at the manifest boundary rather than inside
+        /// [`super::super::admission::compare`], so that a comparison is a
+        /// pure function of its arguments and an unreadable fixture is
+        /// reported as a fixture fault rather than a mismatch.
+        rules: Vec<Vec<String>>,
     },
     /// The fixture is rejected at the named stage with the named reason code.
     Rejected {
@@ -324,6 +331,9 @@ fn admitted_expected(expected: &Map<String, Json>) -> Result<Expected, String> {
         .ok_or_else(|| "an admitted entry needs an `ir` path".to_owned())?;
     Ok(Expected::Admitted {
         ir: string(ir, "ir")?.to_owned(),
+        // The manifest parser sees only the manifest text; the corpus loader
+        // reads each named IR file and fills this in.
+        rules: Vec::new(),
     })
 }
 

@@ -83,6 +83,29 @@ fn the_baseline_walks_to_the_profile_ir() {
 }
 
 #[test]
+fn comparison_reads_no_file_and_uses_the_loaded_rules() {
+    let source = match corpus::read_text("examples/tenant-write/policy.rego") {
+        Ok(source) => source,
+        Err(error) => panic!("the baseline policy must be readable: {error}"),
+    };
+    let classification = super::classify(&profile(), &source);
+    let Some(super::Decision::Admitted(ir)) = &classification.decision else {
+        panic!("the baseline must be admitted");
+    };
+    // The path is deliberately unusable: a comparison that still read the IR
+    // would report a mismatch here instead of matching the loaded rules.
+    let expected = crate::corpus::Expected::Admitted {
+        ir: "no/such/ir.json".to_owned(),
+        rules: ir.clone(),
+    };
+    assert_eq!(
+        super::compare(&expected, &classification),
+        super::Comparison::Match,
+        "a comparison must use the pre-loaded rules and touch no file"
+    );
+}
+
+#[test]
 fn the_package_is_checked_before_the_import() {
     let mut module = baseline();
     module.package.refr = var("other");

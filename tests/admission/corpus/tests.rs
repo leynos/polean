@@ -164,7 +164,7 @@ fn every_manifest_file_exists() {
         if let Origin::File(path) = &entry.origin {
             assert!(root.is_file(path), "`{path}` does not exist");
         }
-        if let Expected::Admitted { ir } = &entry.expected {
+        if let Expected::Admitted { ir, .. } = &entry.expected {
             assert!(root.is_file(ir), "`{ir}` does not exist");
         }
     }
@@ -259,12 +259,8 @@ fn every_admitted_ir_uses_registered_atoms() {
         Err(error) => panic!("the profile must list its atoms: {error}"),
     };
     for entry in manifest() {
-        let Expected::Admitted { ir } = &entry.expected else {
+        let Expected::Admitted { ir, rules } = &entry.expected else {
             continue;
-        };
-        let rules = match corpus::ir_rules(ir) {
-            Ok(rules) => rules,
-            Err(error) => panic!("{error}"),
         };
         for (index, rule) in rules.iter().enumerate() {
             assert!(

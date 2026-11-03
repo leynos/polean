@@ -1836,7 +1836,7 @@ Every gate was rerun on the repair commit, in repository order. The logs are
 | `make check-fmt`          | Clean; 32 files unchanged.                                                              |
 | `make typecheck`          | No diagnostics.                                                                         |
 | `make lint`               | `cargo doc`, Clippy, and Whitaker clean.                                                |
-| `make test`               | 118 passed, 7 ignored, 0 failed.                                                        |
+| `make test`               | 119 passed, 7 ignored, 0 failed.                                                        |
 | `make markdownlint`       | 33 files, 0 issues.                                                                     |
 | `make design-check`       | 5 schemas, 6 witnesses, 224 comparisons, 19 controls, 2 seams.                          |
 | `make test-scripts`       | 115 passed under Python 3.14.7 and pytest 9.1.1 via the documented `uv run` invocation. |
@@ -1848,6 +1848,36 @@ Every gate was rerun on the repair commit, in repository order. The logs are
 `python3` nor the installed 3.14 interpreter has `pytest`. The substitute above
 is the invocation documented in the developer guide, and it runs the same test
 files with the same interpreter version.
+
+### Pre-merge check reconciliation (2026-11-03)
+
+CodeRabbit's pre-merge table for `7691f0e` reports two errors and one warning.
+One row was accurate about the code and is repaired here; the other two ask for
+test coverage that this plan does not add.
+
+- **Unit Architecture** was correct. `admission::compare` is typed as a pure
+  comparison, but its admitted branch called `corpus::ir_rules`, which reads
+  and parses the fixture IR; an unreadable fixture therefore surfaced as a
+  comparison mismatch. `Expected::Admitted` now carries the parsed `rules`,
+  filled once by `corpus::entries()` at the boundary that already owns corpus
+  I/O, and `compare_admitted` only compares slices. A regression test builds an
+  `Expected` whose `ir` path does not exist and asserts a `Match`, so a
+  reintroduced read fails the suite.
+- **Testing (Unit And Behavioural)** names no uncovered scenario. All four
+  installer scenarios it lists (successful install, malformed pin, download or
+  digest failure, cached reuse) already run through `install()`, the documented
+  entry point that `main()` wraps, and `test_check_verus_controls.py` calls
+  `controls.main([...])` for the missing-verifier path. What the row adds is a
+  process-level HTTP fixture and Makefile target tests; that is a new test
+  harness, not a defect in this change, and is proposed as a follow-up issue.
+- **Testing (Compile-Time / Ui)** asks for a `trybuild` harness. The exhaustive
+  matches in `tests/admission/inventory/walk.rs` and
+  `tests/admission/ast/count.rs` are real and load-bearing, but `trybuild` is
+  not in the pinned dependency set, and adding a dev-dependency to satisfy a
+  warning would widen this plan's supply-chain surface. The harness is proposed
+  as a follow-up issue.
+
+Every gate was rerun on the follow-up commit. The table above records that run.
 
 ## Interfaces and dependencies
 

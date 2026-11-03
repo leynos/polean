@@ -260,8 +260,8 @@ fn compare_decision(expected: &Expected, classification: &Classification) -> Com
         (_, None) => Comparison::Mismatch(
             "the frontend parsed the source but no decision was recorded".to_owned(),
         ),
-        (Expected::Admitted { ir }, Some(Decision::Admitted(actual))) => {
-            compare_admitted(ir, actual)
+        (Expected::Admitted { rules, .. }, Some(Decision::Admitted(actual))) => {
+            compare_admitted(rules, actual)
         }
         (Expected::Admitted { .. }, Some(Decision::Rejected(rejection))) => {
             Comparison::Mismatch(format!(
@@ -282,14 +282,18 @@ fn compare_decision(expected: &Expected, classification: &Classification) -> Com
     }
 }
 
-/// Compare an admitted decision with the entry's declared IR.
-fn compare_admitted(ir: &str, actual: &[Vec<String>]) -> Comparison {
-    match crate::corpus::ir_rules(ir) {
-        Ok(want) if want.as_slice() == actual => Comparison::Match,
-        Ok(want) => Comparison::Mismatch(format!(
+/// Compare an admitted decision with the entry's pre-loaded IR rules.
+///
+/// The rules arrive already parsed from [`crate::corpus::entries`], so this
+/// comparison performs no I/O and cannot turn a fixture fault into a
+/// mismatch.
+fn compare_admitted(want: &[Vec<String>], actual: &[Vec<String>]) -> Comparison {
+    if want == actual {
+        Comparison::Match
+    } else {
+        Comparison::Mismatch(format!(
             "expected IR {want:?} but the walk admitted {actual:?}"
-        )),
-        Err(error) => Comparison::Mismatch(error),
+        ))
     }
 }
 

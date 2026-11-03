@@ -34,8 +34,25 @@ pub use generated::BASELINE;
 /// The profile contract, as committed.
 const PROFILE: &str = include_str!("../../../contracts/profile.json");
 
-/// Parse the committed manifest.
-pub fn entries() -> Result<Vec<Entry>, String> { manifest::parse(MANIFEST) }
+/// Parse the committed manifest and load every admitted entry's IR rules.
+///
+/// The IR read happens here, at the boundary that already owns corpus I/O, so
+/// [`crate::admission::compare`] stays a pure comparison: a missing or
+/// malformed IR file surfaces as a fixture fault from this loader rather than
+/// as a comparison mismatch during a test.
+///
+/// # Errors
+///
+/// Returns a description of the first manifest or IR failure.
+pub fn entries() -> Result<Vec<Entry>, String> {
+    let mut entries = manifest::parse(MANIFEST)?;
+    for entry in &mut entries {
+        if let Expected::Admitted { ir, rules } = &mut entry.expected {
+            *rules = ir_rules(ir)?;
+        }
+    }
+    Ok(entries)
+}
 
 /// The source bytes of one entry.
 pub fn source(entry: &Entry) -> Result<String, String> {

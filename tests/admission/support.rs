@@ -10,7 +10,7 @@ use crate::corpus::{self, Entry, Profile};
 pub fn manifest() -> Vec<Entry> {
     match corpus::entries() {
         Ok(entries) => entries,
-        Err(error) => panic!("examples/admission/manifest.json must parse: {error}"),
+        Err(error) => panic!("the admission corpus must load: {error}"),
     }
 }
 
