@@ -1995,6 +1995,22 @@ were rerun on the final tree.
 | `make verus`              | 89 verified, 0 errors; five controls rejected.                                          |
 | `sha256sum -c SHA256SUMS` | 39 entries, all OK.                                                                     |
 
+### Fresh pre-merge assessment request (2026-11-04)
+
+The `CodeRabbit` check run for `0e8ca3e` reports `Review paused`, so that head
+has no review coverage and the pre-merge table still describes `5c47b57`. A
+focused reconciliation comment for `0e8ca3e` was posted through the manual
+comment route (comment `6638773196`), giving an evidence-backed disposition for
+each of the four rows and for the issue-status correction, and asking for a
+fresh assessment. It does not queue a full review on its own.
+
+A single `@coderabbitai resume` request was queued afterwards, because the head
+is ready and its review was skipped rather than rate-limited. The queue
+accepted it as `ff67e4a3` with a posting estimate of roughly six hours; posting
+the comment is not completion of the review, and the review decision, thread
+state, and required checks remain separate facts until the review runs on
+`0e8ca3e`.
+
 ## Interfaces and dependencies
 
 Everything below is private to the `tests/admission` binary. No `src/` item is
