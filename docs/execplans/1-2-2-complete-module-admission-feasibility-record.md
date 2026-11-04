@@ -1961,8 +1961,10 @@ repaired here; none claimed that a recipe currently misbehaves.
   `test_non_executable_verus_is_a_named_setup_error` is parameterised over
   `verus-proof` and `verus-controls`, places the pinned verifier with mode
   `0o644`, and requires the installation diagnostic and an empty call log. A
-  regression from `test -x` to `test -f` would run the stand-in and fail that
-  log assertion.
+  regression from `test -x` to `test -f` would let the shell attempt execution
+  and receive a permission error, so the stand-in would not run and the call
+  log would stay empty. The empty log alone therefore does not separate the two
+  recipes; the named installation diagnostic is the assertion that does.
 - **Complete launcher arguments.** `test_install_verus_calls_both_installers`
   now asserts the whole `uv` argument list: `tool run --from` over the
   prover-tools source at the committed ref, then `prover-tools verus install`
@@ -2008,8 +2010,19 @@ A single `@coderabbitai resume` request was queued afterwards, because the head
 is ready and its review was skipped rather than rate-limited. The queue
 accepted it as `ff67e4a3` with a posting estimate of roughly six hours; posting
 the comment is not completion of the review, and the review decision, thread
-state, and required checks remain separate facts until the review runs on
-`0e8ca3e`.
+state, and required checks remain separate facts until the review runs.
+
+CodeRabbit answered the reconciliation request in comment `6638796124` while
+the check run still read `Review paused`. It accepted all four rows by source
+inspection at `0e8ca3e` and asked for one documentation correction: the
+non-executable-verifier paragraph above originally said a `test -x` to
+`test -f` regression would run the stand-in and fail the call-log assertion.
+With mode `0o644` the stand-in never runs, so the log stays empty either way;
+the named installation diagnostic is the assertion that separates the two
+recipes. That paragraph is corrected, and the tests and issue-status wording
+are unchanged. The assessment states that it does not update the saved
+pre-merge results or the provider approval status, so a refreshed assessment of
+the current head is still outstanding.
 
 ## Interfaces and dependencies
 
