@@ -36,6 +36,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     process::{Command, Output},
+    str::Chars,
     sync::atomic::{AtomicU32, Ordering},
 };
 
@@ -169,6 +170,10 @@ fn copy_tree(source: &Dir, destination: &Dir) -> io::Result<()> {
 }
 
 /// Compile the copy's `admission` test binary without running it.
+///
+/// Colour is turned off explicitly: the enclosing environment may ask for it,
+/// and a coloured diagnostic is read by [`e0004_sites`] only because that
+/// parser also strips escapes.
 fn compile(root: &Path, target: &Path) -> io::Result<Output> {
     Command::new(env!("CARGO"))
         .args([
@@ -178,6 +183,7 @@ fn compile(root: &Path, target: &Path) -> io::Result<Output> {
             "admission",
             "--all-features",
             "--offline",
+            "--color=never",
         ])
         .current_dir(root)
         .env("CARGO_TARGET_DIR", target)
@@ -209,23 +215,61 @@ fn restore(source: &Dir, copy: &Dir, relative: &str) -> io::Result<()> {
 /// A Rust diagnostic puts the location on the line after its heading. Only the
 /// heading form `error[E0004]` is read, so an unrelated error cannot satisfy an
 /// assertion meant for the exhaustiveness check.
+///
+/// Colour is stripped first: `rustc` colours diagnostics when the environment
+/// asks for it, and CI sets `CARGO_TERM_COLOR`, so the heading and the location
+/// arrow would otherwise never appear at the start of a line.
 fn e0004_sites(stderr: &str) -> Vec<String> {
     let mut sites = Vec::new();
     let mut awaiting_location = false;
     for line in stderr.lines() {
-        if line.starts_with("error[E0004]") {
+        let plain = uncoloured(line);
+        if plain.starts_with("error[E0004]") {
             awaiting_location = true;
         } else if awaiting_location {
-            if let Some(location) = line.trim_start().strip_prefix("--> ") {
+            if let Some(location) = plain.trim_start().strip_prefix("--> ") {
                 let file = location.split(':').next().unwrap_or(location);
                 sites.push(file.to_owned());
                 awaiting_location = false;
-            } else if line.starts_with("error") {
+            } else if plain.starts_with("error") {
                 awaiting_location = false;
             }
         }
     }
     sites
+}
+
+/// `line` with its ANSI escape sequences removed.
+///
+/// A sequence is the escape character, its `[` introducer, any parameter and
+/// intermediate bytes, and the final byte that ends it. An escape that does
+/// not introduce a sequence drops only the character after it, so an
+/// unfamiliar escape cannot swallow the rest of the line.
+fn uncoloured(line: &str) -> String {
+    let mut plain = String::with_capacity(line.len());
+    let mut characters = line.chars();
+    while let Some(character) = characters.next() {
+        if character == '\u{1b}' {
+            skip_escape(&mut characters);
+        } else {
+            plain.push(character);
+        }
+    }
+    plain
+}
+
+/// Discard the escape sequence that follows an escape character.
+///
+/// The caller has already consumed the escape character itself.
+fn skip_escape(characters: &mut Chars<'_>) {
+    if characters.next() != Some('[') {
+        return;
+    }
+    for byte in characters.by_ref() {
+        if matches!(byte, '@'..='~') {
+            break;
+        }
+    }
 }
 
 /// The tail of the compiler's diagnostics, for an assertion message.

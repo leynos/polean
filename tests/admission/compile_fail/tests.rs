@@ -22,6 +22,7 @@ use super::{
     restore,
     substitute,
     target_dir,
+    uncoloured,
 };
 
 /// A diagnostic shaped like the one `rustc` prints for an unhandled variant.
@@ -47,6 +48,35 @@ fn unrelated_errors_are_not_read_as_exhaustiveness_failures() {
     assert!(
         e0004_sites(stderr).is_empty(),
         "only the exhaustiveness heading may satisfy the guard"
+    );
+}
+
+#[test]
+fn a_coloured_diagnostic_is_still_read() {
+    // The shape CI produces when `CARGO_TERM_COLOR` asks rustc for colour:
+    // both the heading and the location arrow are preceded by escapes.
+    let stderr = "\u{1b}[1m\u{1b}[91merror[E0004]\u{1b}[0m\u{1b}[1m: non-exhaustive patterns: \
+                  `&ExprKind::Null` not covered\u{1b}[0m\n   \u{1b}[1m\u{1b}[94m--> \
+                  \u{1b}[0mtests/admission/ast/count.rs:168:11\n";
+
+    assert_eq!(
+        e0004_sites(stderr),
+        ["tests/admission/ast/count.rs"],
+        "colour must not hide the report the guard exists to detect"
+    );
+}
+
+#[test]
+fn colour_sequences_are_removed_without_eating_the_text() {
+    assert_eq!(
+        uncoloured("\u{1b}[1mbold\u{1b}[0m and plain"),
+        "bold and plain",
+        "only the escape sequences are discarded"
+    );
+    assert_eq!(
+        uncoloured("before \u{1b}Z after"),
+        "before  after",
+        "an unfamiliar escape does not swallow the rest of the line"
     );
 }
 

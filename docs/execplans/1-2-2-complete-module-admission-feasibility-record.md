@@ -2024,6 +2024,39 @@ are unchanged. The assessment states that it does not update the saved
 pre-merge results or the provider approval status, so a refreshed assessment of
 the current head is still outstanding.
 
+### Coloured diagnostics in the compile-fail guard (2026-11-04)
+
+The hosted `rust-and-docs` job failed at `Test Rust` on `5c47b57`, `0e8ca3e`,
+and `0daec48`, always in
+`compile_fail::tests::the_protected_matches_stop_the_build_when_a_variant_is_unhandled`
+and always with the assertion that the build must report a non-exhaustive
+match in `tests/admission/inventory/walk.rs`, while the compiler's own excerpt
+in the same panic showed both `E0004` errors. The failure is deterministic
+rather than a flake: jobs 126759039118 and 126774831834 report it identically.
+
+The workflow exports `CARGO_TERM_COLOR: always`. The guard's nested
+`cargo test --no-run` inherits that environment, so rustc prefixes both the
+`error[E0004]` heading and the `-->` location arrow with ANSI escapes.
+`e0004_sites` read plain lines, found no heading, and returned an empty list;
+the local gates had never reproduced it because the local environment leaves
+colour unset. A test that parses compiler output must not assume plain output
+merely because the invocation did not ask for colour.
+
+Two changes close the defect:
+
+- the nested build passes `--color=never`, so the guard controls its input;
+  and
+- `e0004_sites` strips ANSI escape sequences before parsing, so colour in the
+  environment cannot hide a report the guard exists to detect.
+
+Regression tests `a_coloured_diagnostic_is_still_read` (the exact CI shape,
+with escapes before the heading and before the arrow) and
+`colour_sequences_are_removed_without_eating_the_text` (a sequence is removed,
+and an unfamiliar escape drops only its next character) pin the parser. The
+focused suite was rerun with `CARGO_TERM_COLOR=always`; all five compile-fail
+tests passed, including the three-compilation guard, which exercises the nested
+build under the same environment CI uses.
+
 ## Interfaces and dependencies
 
 Everything below is private to the `tests/admission` binary. No `src/` item is
