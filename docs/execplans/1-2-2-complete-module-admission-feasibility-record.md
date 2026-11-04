@@ -1885,13 +1885,18 @@ deferred, and no repair weakens a test or a trust boundary.
   successful install, malformed pin, download failure, digest failure, and
   cached-reuse scenarios; `scripts/tests/test_check_verus_controls_cli.py` runs
   the controls CLI against a stand-in verifier for clean orchestration, missing
-  tools, a broken baseline, an accepted mutation, and an unrelated rejection;
-  `scripts/tests/test_verus_make_targets.py` checks the `install-verus`,
-  `verus-proof`, `verus-controls`, and aggregate `verus` recipes in an isolated
-  repository layout. Together they cover `main()` error conversion and exit
-  status, successful CLI orchestration, and Makefile argument forwarding, which
-  are the three gaps the row named. The synthetic release fixtures they share
-  live in `scripts/tests/z3_archive.py`.
+  tools, a broken baseline, an accepted mutation, and an unrelated rejection,
+  and it asserts the working directory each verifier run receives, so the
+  staged root is shown to be the script's own scratch tree rather than the
+  source repository; `scripts/tests/test_verus_make_targets.py` checks the
+  `install-verus`, `verus-proof`, `verus-controls`, and aggregate `verus`
+  recipes in an isolated repository layout, including the complete pinned
+  launcher: `uv tool run --from` over the prover-tools source at the committed
+  ref, the setup diagnostic for an absent and for a non-executable verifier,
+  and the malformed-pin diagnostic. Together they cover `main()` error
+  conversion and exit status, successful CLI orchestration, and Makefile
+  argument forwarding, which are the three gaps the row named. The synthetic
+  release fixtures they share live in `scripts/tests/z3_archive.py`.
 - **Testing (Compile-Time / Ui).** `tests/admission/compile_fail/` adds a
   compiler harness with no new dependency. It copies the repository beside the
   build's target directory and compiles the copy's `admission` test binary
@@ -1909,7 +1914,10 @@ deferred, and no repair weakens a test or a trust boundary.
   directory, because Whitaker's `no_std_fs_operations` denies `std::fs` in test
   modules as well as in `src/`.
 - **Issues.** #30 and #31 record the same two coverage gaps as non-blocking
-  follow-ups. This change closes both; no duplicate issue is created.
+  follow-ups. The coverage the issues describe is implemented here, but neither
+  issue is closed by this change: both remain open while the delivery is
+  unreviewed, and are closed through the issues workflow only after the pull
+  request lands. No duplicate issue is created.
 
 All ten gates were rerun on this repair head, sequentially and in repository
 order. The logs are
@@ -1935,6 +1943,57 @@ The guard's first version called `std::fs` and was rejected by Whitaker's
 disallows, and left four Clippy diagnostics. The committed version derives the
 target directory from `current_exe` and `CACHEDIR.TAG` and touches the
 filesystem only through `cap_std::fs::Dir`.
+
+### Pre-merge check reconciliation, second round (2026-11-04)
+
+CodeRabbit's source-level assessment of `5c47b57` accepted Testing (Unit And
+Behavioural), Unit Architecture, and Testing (Compile-Time / Ui) by inspection,
+and kept Testing (Overall) partly unresolved. Every remaining objection is
+repaired here; none claimed that a recipe currently misbehaves.
+
+- **Malformed pin.** `test_malformed_pin_stops_every_target` replaces the
+  isolated layout's `tools/rust-prover-tools/REF` with `ref: not-a-commit`,
+  runs the aggregate `verus` target, and requires a non-zero result, the
+  `PROVER_TOOLS_REF missing or malformed` diagnostic naming that file, and an
+  empty call log. The installer's malformed-checksum test protects a different
+  boundary and is not offered in its place.
+- **Non-executable verifier.**
+  `test_non_executable_verus_is_a_named_setup_error` is parameterised over
+  `verus-proof` and `verus-controls`, places the pinned verifier with mode
+  `0o644`, and requires the installation diagnostic and an empty call log. A
+  regression from `test -x` to `test -f` would run the stand-in and fail that
+  log assertion.
+- **Complete launcher arguments.** `test_install_verus_calls_both_installers`
+  now asserts the whole `uv` argument list: `tool run --from` over the
+  prover-tools source at the committed ref, then `prover-tools verus install`
+  with `--repo-root .`, so an unpinned or installed-copy launcher is caught.
+- **Working directory.** The controls CLI stand-in records `Path.cwd()`. The
+  orchestration test requires every baseline and control run to share one root,
+  that root to be the script's `polean-verus-controls-` scratch tree, and that
+  it lies outside the source repository.
+- **Issue status.** #30 and #31 are open and stay open until the delivery is
+  accepted; neither the ExecPlan nor the PR description says this change closes
+  them.
+
+All ten gates were rerun on this repair head, sequentially and in repository
+order, with the logs at
+`/tmp/<gate>-polean-1-2-2-complete-module-admission-feasibility-record.out`.
+The first pass failed `make check-fmt` because the new prose was reformatted
+after the gate had read it; the reflow was corrected and both Markdown gates
+were rerun on the final tree.
+
+| Gate                      | Result                                                                                  |
+| :------------------------ | :-------------------------------------------------------------------------------------- |
+| `make check-fmt`          | Clean; 32 files unchanged.                                                              |
+| `make typecheck`          | No diagnostics.                                                                         |
+| `make lint`               | `cargo doc`, Clippy, and Whitaker clean.                                                |
+| `make test`               | 122 passed, 7 ignored, 0 failed; the admission binary contributes 72 of the passes.     |
+| `make markdownlint`       | 33 files, 0 issues.                                                                     |
+| `make design-check`       | 5 schemas, 6 witnesses, 224 comparisons, 19 controls, 2 seams.                          |
+| `make test-scripts`       | 137 passed under Python 3.14.7 and pytest 9.1.1 via the documented `uv run` invocation. |
+| `make toolchain-smoke`    | 7 passed, 20 filtered out.                                                              |
+| `make verus`              | 89 verified, 0 errors; five controls rejected.                                          |
+| `sha256sum -c SHA256SUMS` | 39 entries, all OK.                                                                     |
 
 ## Interfaces and dependencies
 

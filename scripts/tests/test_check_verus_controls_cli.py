@@ -8,7 +8,9 @@ evidence; the real proof and its controls are the `make verus` gate's business.
 
 Covered at this boundary: successful orchestration, missing tools, a broken
 baseline, a mutation the verifier accepts, and a rejection attributed to an
-unrelated obligation. Each test asserts the exit status and the diagnostic.
+unrelated obligation. Each test asserts the exit status and the diagnostic; the
+orchestration test also asserts the working directory, so the staged root, not
+the source repository, is what the verifier edits.
 """
 
 from __future__ import annotations
@@ -38,7 +40,11 @@ from pathlib import Path
 here = Path(__file__).resolve().parent
 manifest = json.loads((here / "controls.json").read_text(encoding="utf-8"))
 mode = os.environ.get("FAKE_VERUS_MODE", "success")
-record = {{"argv": sys.argv[1:], "z3": os.environ.get("VERUS_Z3_PATH")}}
+record = {{
+    "argv": sys.argv[1:],
+    "cwd": str(Path.cwd()),
+    "z3": os.environ.get("VERUS_Z3_PATH"),
+}}
 with (here / "calls.log").open("a", encoding="utf-8") as log:
     log.write(json.dumps(record) + "\\n")
 
@@ -150,6 +156,16 @@ def test_runs_the_baseline_and_every_control(fake_tools: Path) -> None:
     )
     assert recorded[0]["argv"] == [controls.PROOF_FILE.as_posix()], (
         "the runner names the staged proof entry point"
+    )
+    staged = Path(recorded[0]["cwd"])
+    assert all(Path(call["cwd"]) == staged for call in recorded), (
+        "every run uses the same staged root, so each control edits one tree"
+    )
+    assert staged.name.startswith("polean-verus-controls-"), (
+        "the working directory is the script's own scratch tree"
+    )
+    assert not staged.is_relative_to(ROOT), (
+        "the verifier runs on the staged copy, leaving the source unchanged"
     )
 
 
