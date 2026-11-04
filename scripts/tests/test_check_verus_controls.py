@@ -172,9 +172,7 @@ def test_require_rejection_rejects_a_run_without_an_error() -> None:
         controls.require_rejection(control, completed(101, "interrupted\n"))
 
 
-def test_check_runs_the_baseline_before_the_controls(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_runs_the_baseline_before_the_controls(tmp_path: Path) -> None:
     """Each control runs on a tree restored to the baseline text."""
     paths = {control.path for control in controls.CONTROLS}
     snapshots: list[dict[str, str]] = []
@@ -197,8 +195,9 @@ def test_check_runs_the_baseline_before_the_controls(
             f"error: rejected {evidence}\nverification results:: 58 verified, 1 errors\n",
         )
 
-    monkeypatch.setattr(controls, "run_verus", fake_run)
-    lines = controls.check(ROOT, tmp_path / "verus", tmp_path / "z3")
+    lines = controls.check(
+        ROOT, tmp_path / "verus", tmp_path / "z3", runner=fake_run
+    )
     assert len(lines) == len(controls.CONTROLS), "one evidence line per control"
     assert len(snapshots) == len(controls.CONTROLS) + 1, (
         "the baseline runs once before the controls"

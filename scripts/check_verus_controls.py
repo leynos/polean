@@ -24,6 +24,10 @@ replacing nothing.
 
 The controls never edit the working tree, and this script runs no Cargo or
 repository gate. ``make verus`` invokes it after the ordinary proof run.
+
+The verifier invocation is a dependency of :func:`check`, composed from
+:func:`run_verus` at the command boundary, so a test observes the staged tree
+without replacing a module global.
 """
 
 from __future__ import annotations
@@ -35,9 +39,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+#: Runs the verifier on a staged proof tree and returns its completed process.
+Runner = Callable[[Path, Path, Path], subprocess.CompletedProcess[str]]
 
 ROOT = Path(__file__).resolve().parents[1]
 KERNEL_DIR = Path("tests/admission/recognizer/kernel")
@@ -302,8 +309,12 @@ def require_rejection(
     return " + ".join(control.expects)
 
 
-def check(root: Path, verus: Path, z3: Path) -> list[str]:
+def check(root: Path, verus: Path, z3: Path, *, runner: Runner) -> list[str]:
     """Run the baseline and every control in a fresh scratch tree.
+
+    `runner` is the dependency that invokes the verifier, so a test can observe
+    the staged tree without replacing a module global. :func:`main` supplies
+    :func:`run_verus`.
 
     Returns one evidence line per control. Raises :class:`ControlError` on the
     first control that does not behave as required.
@@ -312,7 +323,7 @@ def check(root: Path, verus: Path, z3: Path) -> list[str]:
     with tempfile.TemporaryDirectory(prefix="polean-verus-controls-") as directory:
         scratch = Path(directory)
         stage(root, scratch)
-        require_baseline(run_verus(verus, z3, scratch))
+        require_baseline(runner(verus, z3, scratch))
         staged_baseline = {
             path: (scratch / path).read_text(encoding="utf-8")
             for path in {control.path for control in CONTROLS}
@@ -323,7 +334,7 @@ def check(root: Path, verus: Path, z3: Path) -> list[str]:
             (scratch / control.path).write_text(
                 apply_control(root, control), encoding="utf-8"
             )
-            obligation = require_rejection(control, run_verus(verus, z3, scratch))
+            obligation = require_rejection(control, runner(verus, z3, scratch))
             lines.append(f"{control.kind}:{control.name}: rejected at {obligation}")
     return lines
 
@@ -346,7 +357,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Z3 is not installed at {z3}; run 'make install-verus'", file=sys.stderr)
         return 2
     try:
-        for line in check(root, verus, z3):
+        for line in check(root, verus, z3, runner=run_verus):
             print(line)
     except ControlError as error:
         print(f"negative control failed: {error}", file=sys.stderr)

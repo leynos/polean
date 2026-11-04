@@ -9,12 +9,14 @@
 //!
 //! EP-M1 commits the fixture corpus, its manifest, and the observation of what
 //! Regorus itself does with every fixture. EP-M2 adds the closed decoder and the
-//! profile walk; EP-M3 adds the canonical-token recognizer.
+//! profile walk; EP-M3 adds the canonical-token recognizer. `compile_fail`
+//! guards the completeness promise those walks are built on.
 
 mod admission;
 mod ast;
 mod ast_mutations;
 mod bdd;
+mod compile_fail;
 mod corpus;
 mod frontend;
 mod inventory;

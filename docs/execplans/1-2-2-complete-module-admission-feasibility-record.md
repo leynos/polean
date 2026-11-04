@@ -1851,33 +1851,90 @@ files with the same interpreter version.
 
 ### Pre-merge check reconciliation (2026-11-03)
 
-CodeRabbit's pre-merge table for `7691f0e` reports two errors and one warning.
-One row was accurate about the code and is repaired here; the other two ask for
-test coverage that this plan does not add.
+CodeRabbit's assessment of `01d422b` reports two errors and one warning, and
+separates five findings across them. All five are repaired here; none is
+deferred, and no repair weakens a test or a trust boundary.
 
-- **Unit Architecture** was correct. `admission::compare` is typed as a pure
-  comparison, but its admitted branch called `corpus::ir_rules`, which reads
-  and parses the fixture IR; an unreadable fixture therefore surfaced as a
-  comparison mismatch. `Expected::Admitted` now carries the parsed `rules`,
-  filled once by `corpus::entries()` at the boundary that already owns corpus
-  I/O, and `compare_admitted` only compares slices. A regression test builds an
-  `Expected` whose `ir` path does not exist and asserts a `Match`, so a
-  reintroduced read fails the suite.
-- **Testing (Unit And Behavioural)** names no uncovered scenario. All four
-  installer scenarios it lists (successful install, malformed pin, download or
-  digest failure, cached reuse) already run through `install()`, the documented
-  entry point that `main()` wraps, and `test_check_verus_controls.py` calls
-  `controls.main([...])` for the missing-verifier path. What the row adds is a
-  process-level HTTP fixture and Makefile target tests; that is a new test
-  harness, not a defect in this change, and is proposed as a follow-up issue.
-- **Testing (Compile-Time / Ui)** asks for a `trybuild` harness. The exhaustive
-  matches in `tests/admission/inventory/walk.rs` and
-  `tests/admission/ast/count.rs` are real and load-bearing, but `trybuild` is
-  not in the pinned dependency set, and adding a dev-dependency to satisfy a
-  warning would widen this plan's supply-chain surface. The harness is proposed
-  as a follow-up issue.
+- **Unit Architecture, the Rust comparison** was correct and its repair is
+  retained. `admission::compare` is typed as a pure comparison, but its
+  admitted branch called `corpus::ir_rules`, which reads and parses the fixture
+  IR; an unreadable fixture therefore surfaced as a comparison mismatch.
+  `Expected::Admitted` carries the parsed `rules`, filled once by
+  `corpus::entries()` at the boundary that already owns corpus I/O, and
+  `compare_admitted` only compares slices. The regression test that supplies an
+  unusable IR path and still requires a match remains.
+- **Unit Architecture, the controls runner.**
+  `scripts/check_verus_controls.py` called the module-level `run_verus`, and
+  its orchestration test replaced that global with `monkeypatch`. `check()` now
+  takes a `runner` argument typed as
+  `Runner = Callable[[Path, Path, Path], subprocess.CompletedProcess[str]]`, and
+  `main()` supplies the production `run_verus`. The orchestration test passes
+  its recorder instead of patching anything, so it exercises the real control
+  sequence while observing every verifier call.
+- **Unit Architecture, the installer's transport and clock.**
+  `scripts/install_verus_z3.py` called `urllib.request.urlopen` and
+  `time.monotonic` directly, so the size bound and the deadline could only be
+  exercised by patching the standard library. `download()` now takes an
+  `opener: Opener` and a `clock: Clock`; `fetch_from_release()` composes
+  `open_release` with `time.monotonic`, and `install()` keeps `fetch`
+  defaulting to it. The download tests inject a prepared response stream and a
+  stepping clock, so a size or deadline failure is asserted directly.
+- **Testing (Unit And Behavioural).** New command-boundary tests, with no change
+  to the behaviour they observe: `scripts/tests/test_install_verus_z3_cli.py`
+  runs the installer's `main` against a loopback HTTP release server for the
+  successful install, malformed pin, download failure, digest failure, and
+  cached-reuse scenarios; `scripts/tests/test_check_verus_controls_cli.py` runs
+  the controls CLI against a stand-in verifier for clean orchestration, missing
+  tools, a broken baseline, an accepted mutation, and an unrelated rejection;
+  `scripts/tests/test_verus_make_targets.py` checks the `install-verus`,
+  `verus-proof`, `verus-controls`, and aggregate `verus` recipes in an isolated
+  repository layout. Together they cover `main()` error conversion and exit
+  status, successful CLI orchestration, and Makefile argument forwarding, which
+  are the three gaps the row named. The synthetic release fixtures they share
+  live in `scripts/tests/z3_archive.py`.
+- **Testing (Compile-Time / Ui).** `tests/admission/compile_fail/` adds a
+  compiler harness with no new dependency. It copies the repository beside the
+  build's target directory and compiles the copy's `admission` test binary
+  three times: unmodified, which must compile and is the control against an
+  environment failure; with the `Expr::Null` arm removed from
+  `inventory/walk.rs` and the `ExprKind::Null` arm removed from `ast/count.rs`,
+  which must stop the build with `E0004` naming both files; and with each arm
+  replaced by a catch-all, which must compile and so shows the failure came
+  from exhaustiveness checking alone. Removing an arm is the diagnostic a new,
+  unhandled variant produces, and the protected matches are the real ones
+  rather than a toy enum. A wildcard left in either match makes the second
+  phase compile, so the guard fails for exactly the weakening it exists to
+  detect. Every filesystem operation goes through `cap_std::fs::Dir` handles
+  opened from an ambient authority at the repository and at the target
+  directory, because Whitaker's `no_std_fs_operations` denies `std::fs` in test
+  modules as well as in `src/`.
+- **Issues.** #30 and #31 record the same two coverage gaps as non-blocking
+  follow-ups. This change closes both; no duplicate issue is created.
 
-Every gate was rerun on the follow-up commit. The table above records that run.
+All ten gates were rerun on this repair head, sequentially and in repository
+order. The logs are
+`/tmp/<gate>-polean-1-2-2-complete-module-admission-feasibility-record.out`.
+
+| Gate                      | Result                                                                                  |
+| :------------------------ | :-------------------------------------------------------------------------------------- |
+| `make check-fmt`          | Clean; 32 files unchanged.                                                              |
+| `make typecheck`          | No diagnostics.                                                                         |
+| `make lint`               | `cargo doc`, Clippy, and Whitaker clean.                                                |
+| `make test`               | 122 passed, 7 ignored, 0 failed; the admission binary contributes 72 of the passes.     |
+| `make markdownlint`       | 33 files, 0 issues.                                                                     |
+| `make design-check`       | 5 schemas, 6 witnesses, 224 comparisons, 19 controls, 2 seams.                          |
+| `make test-scripts`       | 134 passed under Python 3.14.7 and pytest 9.1.1 via the documented `uv run` invocation. |
+| `make toolchain-smoke`    | 7 passed, 20 filtered out.                                                              |
+| `make verus`              | 89 verified, 0 errors; five controls rejected.                                          |
+| `sha256sum -c SHA256SUMS` | 39 entries, all OK.                                                                     |
+
+`make test` now includes the compile-fail guard, which builds a copy of the
+repository three times and accounts for most of the admission binary's 129 s.
+The guard's first version called `std::fs` and was rejected by Whitaker's
+`no_std_fs_operations`; its second read `CARGO_TARGET_DIR`, which `clippy.toml`
+disallows, and left four Clippy diagnostics. The committed version derives the
+target directory from `current_exe` and `CACHEDIR.TAG` and touches the
+filesystem only through `cap_std::fs::Dir`.
 
 ## Interfaces and dependencies
 

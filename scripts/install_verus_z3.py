@@ -23,13 +23,16 @@ digest; a changed pin, a missing or malformed stamp, or a modified binary makes
 the installer fetch and verify the archive again. Cached state therefore cannot
 outlive the pin that justified it.
 
-Downloading is a parameter rather than a module global, so the tests can inject
-a fetcher without patching. The script launches no subprocess and uses the
-standard library only.
+Downloading is a parameter rather than a module global. The production fetcher
+composes the standard library's opener and monotonic clock at the command
+boundary (:func:`fetch_from_release`), so the download loop itself takes both as
+dependencies and the tests inject controlled ones instead of patching module
+globals. The script launches no subprocess and uses the standard library only.
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -39,8 +42,9 @@ import tempfile
 import time
 import urllib.request
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Protocol, Self
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS_PATH = ROOT / "tools" / "verus" / "Z3_SHA256SUMS"
@@ -58,6 +62,29 @@ _ARCHIVE = re.compile(
 )
 _DIGEST = re.compile(r"\A[0-9a-f]{64}\Z")
 
+class Response(Protocol):
+    """The slice of an HTTP response the download loop uses."""
+
+    def read(self, amount: int = -1) -> bytes:
+        """Return up to `amount` bytes, or `b""` at the end of the stream."""
+        ...
+
+    def __enter__(self) -> Self:
+        """Enter the response's context."""
+        ...
+
+    def __exit__(self, *exception: object) -> bool:
+        """Leave the response's context."""
+        ...
+
+
+#: Opens a request with a bound on how long the transfer may take to start.
+Opener = Callable[[urllib.request.Request, int], Response]
+
+#: Reads the monotonic clock the deadline is measured against.
+Clock = Callable[[], float]
+
+#: Writes one URL's bytes to one destination.
 Fetcher = Callable[[str, Path], None]
 
 
@@ -98,27 +125,42 @@ def read_pin(path: Path = PINS_PATH) -> tuple[str, str]:
     return name, digest
 
 
-def archive_url(name: str) -> str:
-    """Return the release URL for the pinned Z3 archive."""
+def archive_url(name: str, base_url: str = BASE_URL) -> str:
+    """Return the release URL for the pinned Z3 archive under `base_url`."""
     match = _ARCHIVE.fullmatch(name)
     if match is None:
         raise ValueError(f"cannot build a Z3 release URL from {name}")
-    return f"{BASE_URL}/z3-{match.group('version')}/{name}"
+    return f"{base_url}/z3-{match.group('version')}/{name}"
 
 
-def download(url: str, destination: Path) -> None:
+def open_release(request: urllib.request.Request, timeout: int) -> Response:
+    """Open `request` with the standard library's URL opener."""
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
+def download(
+    url: str,
+    destination: Path,
+    *,
+    opener: Opener,
+    clock: Clock,
+) -> None:
     """Fetch `url` into `destination`, bounded in time and size.
+
+    The opener and the monotonic clock are dependencies so that the bounds can
+    be exercised deterministically. :func:`fetch_from_release` supplies the
+    production pair.
 
     Raises
     ------
     ValueError
-        If the transfer exceeds the size bound.
+        If the transfer exceeds the size bound or the deadline.
     OSError
         If the request fails.
     """
     request = urllib.request.Request(url, headers={"User-Agent": "polean-z3-install"})
-    expires_at = time.monotonic() + DOWNLOAD_DEADLINE_SECONDS
-    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+    expires_at = clock() + DOWNLOAD_DEADLINE_SECONDS
+    with opener(request, REQUEST_TIMEOUT_SECONDS) as response:
         written = 0
         with destination.open("wb") as sink:
             while True:
@@ -128,9 +170,14 @@ def download(url: str, destination: Path) -> None:
                 written += len(chunk)
                 if written > MAX_ARCHIVE_BYTES:
                     raise ValueError(f"{url} is larger than the size bound")
-                if time.monotonic() > expires_at:
+                if clock() > expires_at:
                     raise ValueError(f"{url} did not finish within the deadline")
                 sink.write(chunk)
+
+
+def fetch_from_release(url: str, destination: Path) -> None:
+    """Fetch `url` with the production opener and monotonic clock."""
+    download(url, destination, opener=open_release, clock=time.monotonic)
 
 
 def file_digest(path: Path) -> str:
@@ -219,7 +266,8 @@ def install(
     *,
     pins: Path = PINS_PATH,
     install_dir: Path = INSTALL_DIR,
-    fetch: Fetcher = download,
+    base_url: str = BASE_URL,
+    fetch: Fetcher = fetch_from_release,
 ) -> Path:
     """Install the pinned solver and return the path to the binary.
 
@@ -242,7 +290,7 @@ def install(
     install_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=install_dir) as temporary:
         archive = Path(temporary) / name
-        fetch(archive_url(name), archive)
+        fetch(archive_url(name, base_url), archive)
         verify_digest(archive, digest)
         staged = Path(temporary) / "z3"
         extract_solver(archive, name, staged)
@@ -256,13 +304,42 @@ def install(
     return binary
 
 
-def main() -> None:
+def parse_arguments(argv: Sequence[str] | None) -> argparse.Namespace:
+    """Parse the installer's command line.
+
+    The defaults are the repository layout and the pinned release host, so
+    ``make install-verus`` passes no arguments. The overrides exist so a test
+    can run the script as a process against an isolated layout and a loopback
+    server without touching the real install directory or public release
+    services.
+    """
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--pins", type=Path, default=PINS_PATH, help="checksum file")
+    parser.add_argument(
+        "--install-dir", type=Path, default=INSTALL_DIR, help="install directory"
+    )
+    parser.add_argument(
+        "--base-url",
+        default=BASE_URL,
+        help="release base URL; only a hermetic test should override it",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     """Install the solver, naming the result."""
+    arguments = parse_arguments(argv)
     try:
-        binary = install()
+        binary = install(
+            pins=arguments.pins,
+            install_dir=arguments.install_dir,
+            base_url=arguments.base_url,
+        )
     except (OSError, ValueError) as error:
-        raise SystemExit(f"cannot install Z3 for Verus: {error}") from error
+        print(f"cannot install Z3 for Verus: {error}", file=sys.stderr)
+        return 1
     print(f"Installed Z3 at {binary}")
+    return 0
 
 
 if __name__ == "__main__":

@@ -2,8 +2,9 @@
 
 Every test stays off the network. The install tests inject a fetcher and point
 the installer at temporary directories, so no test touches `.verus/z3` or the
-pinned release. The download tests replace `urllib.request.urlopen` so the size
-bound and the deadline can be exercised without a transfer.
+pinned release. The download tests inject the opener and the monotonic clock,
+so the size bound and the deadline are exercised without a transfer and without
+depending on how long the test host takes.
 
 The tests cover the three obligations the plan states for the installer:
 
@@ -27,33 +28,15 @@ from pathlib import Path
 import pytest
 
 import install_verus_z3
-
-VERSION = "4.16.0"
-ROOT_NAME = f"z3-{VERSION}-x64-glibc-2.39"
-ARCHIVE_NAME = f"{ROOT_NAME}.zip"
-SOLVER_BYTES = b"\x7fELF-z3-placeholder"
-DIGEST = hashlib.sha256(b"archive-bytes").hexdigest()
-
-
-def write_pin(directory: Path, digest: str = DIGEST, name: str = ARCHIVE_NAME) -> Path:
-    """Write a one-row checksum file in the pinned format."""
-    path = directory / "Z3_SHA256SUMS"
-    path.write_text(f"{digest}  {name}\n", encoding="utf-8")
-    return path
-
-
-def archive_bytes(
-    root: str = ROOT_NAME,
-    extra: dict[str, bytes] | None = None,
-    solver: bytes = SOLVER_BYTES,
-) -> bytes:
-    """Build a zip holding `solver` under `root`, plus any extra members."""
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, mode="w") as bundle:
-        bundle.writestr(f"{root}/bin/z3", solver)
-        for member, payload in (extra or {}).items():
-            bundle.writestr(member, payload)
-    return buffer.getvalue()
+from z3_archive import (
+    ARCHIVE_NAME,
+    DIGEST,
+    ROOT_NAME,
+    SOLVER_BYTES,
+    VERSION,
+    archive_bytes,
+    write_pin,
+)
 
 
 def serving(payload: bytes) -> install_verus_z3.Fetcher:
@@ -96,17 +79,38 @@ class FakeResponse:
         return False
 
 
-def replace_urlopen(monkeypatch: pytest.MonkeyPatch, chunks: list[bytes]) -> None:
-    """Make `urllib.request.urlopen` serve `chunks` from a fresh response."""
+def opening(chunks: list[bytes]) -> install_verus_z3.Opener:
+    """Return an opener serving `chunks` from a fresh response."""
 
-    def urlopen(request: urllib.request.Request, *, timeout: int) -> FakeResponse:
+    def opener(request: urllib.request.Request, timeout: int) -> FakeResponse:
         """Return a response over the prepared chunks."""
+        assert request.full_url.startswith("https://"), "the download names its URL"
         assert timeout == install_verus_z3.REQUEST_TIMEOUT_SECONDS, (
             "the installer bounds the request timeout"
         )
         return FakeResponse(chunks)
 
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    return opener
+
+
+class SteppingClock:
+    """A monotonic clock that reports prepared instants, then repeats the last.
+
+    The download reads the clock once before the transfer and once after every
+    chunk, so a prepared sequence makes the deadline deterministic instead of
+    dependent on how long the test host takes.
+    """
+
+    def __init__(self, *instants: float) -> None:
+        """Start at `instants[0]` and advance one instant per reading."""
+        assert instants, "a clock needs at least one instant"
+        self._instants = iter(instants)
+        self._last = instants[0]
+
+    def __call__(self) -> float:
+        """Return the next instant, repeating the last once they run out."""
+        self._last = next(self._instants, self._last)
+        return self._last
 
 
 def test_read_pin_reads_the_single_row(tmp_path: Path) -> None:
@@ -401,12 +405,16 @@ def test_install_rejects_a_digest_mismatch_and_leaves_no_binary(tmp_path: Path) 
     assert list(install_dir.iterdir()) == [], "the temporary directory is removed"
 
 
-def test_download_writes_the_stream(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_download_writes_the_stream(tmp_path: Path) -> None:
     """A stream inside both bounds is written to the destination."""
-    replace_urlopen(monkeypatch, [b"first", b"second", b""])
     destination = tmp_path / "archive.zip"
 
-    install_verus_z3.download(install_verus_z3.archive_url(ARCHIVE_NAME), destination)
+    install_verus_z3.download(
+        install_verus_z3.archive_url(ARCHIVE_NAME),
+        destination,
+        opener=opening([b"first", b"second", b""]),
+        clock=SteppingClock(0.0),
+    )
 
     assert destination.read_bytes() == b"firstsecond", "every chunk is written"
 
@@ -416,26 +424,51 @@ def test_download_refuses_a_stream_past_the_size_bound(
 ) -> None:
     """A stream larger than the size bound is refused."""
     monkeypatch.setattr(install_verus_z3, "MAX_ARCHIVE_BYTES", 4)
-    replace_urlopen(monkeypatch, [b"abc", b"def", b""])
 
     with pytest.raises(ValueError) as raised:
         install_verus_z3.download(
-            install_verus_z3.archive_url(ARCHIVE_NAME), tmp_path / "archive.zip"
+            install_verus_z3.archive_url(ARCHIVE_NAME),
+            tmp_path / "archive.zip",
+            opener=opening([b"abc", b"def", b""]),
+            clock=SteppingClock(0.0),
         )
 
     assert "size bound" in str(raised.value), "the diagnostic names the bound"
 
 
-def test_download_refuses_a_stream_past_the_deadline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A stream that outlives the deadline is refused."""
-    monkeypatch.setattr(install_verus_z3, "DOWNLOAD_DEADLINE_SECONDS", -1)
-    replace_urlopen(monkeypatch, [b"abc", b""])
+def test_download_refuses_a_stream_past_the_deadline(tmp_path: Path) -> None:
+    """A stream that outlives the deadline is refused, without patching time."""
+    late = install_verus_z3.DOWNLOAD_DEADLINE_SECONDS + 1
 
     with pytest.raises(ValueError) as raised:
         install_verus_z3.download(
-            install_verus_z3.archive_url(ARCHIVE_NAME), tmp_path / "archive.zip"
+            install_verus_z3.archive_url(ARCHIVE_NAME),
+            tmp_path / "archive.zip",
+            opener=opening([b"abc", b"def", b""]),
+            clock=SteppingClock(0.0, 0.0, late),
         )
 
     assert "deadline" in str(raised.value), "the diagnostic names the deadline"
+
+
+def test_fetch_from_release_composes_the_standard_opener_and_clock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The production fetcher injects the standard library pair, not a fake."""
+    seen: list[urllib.request.Request] = []
+
+    def urlopen(request: urllib.request.Request, *, timeout: int) -> FakeResponse:
+        """Serve one chunk from the production opener's request."""
+        seen.append(request)
+        assert timeout == install_verus_z3.REQUEST_TIMEOUT_SECONDS
+        return FakeResponse([b"payload", b""])
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    destination = tmp_path / "archive.zip"
+
+    install_verus_z3.fetch_from_release(
+        install_verus_z3.archive_url(ARCHIVE_NAME), destination
+    )
+
+    assert destination.read_bytes() == b"payload", "the production fetch writes"
+    assert len(seen) == 1, "the production opener is used exactly once"
