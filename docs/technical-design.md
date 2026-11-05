@@ -153,12 +153,32 @@ Only these expression forms are admitted:
 | `input.resource.locked == true`                 | `locked`        |
 | `input.resource.locked == false`                | `unlocked`      |
 
-Compare parsed token/operator and decoded literal identity, not source
-substrings. The listed operand orientation and dot-reference paths are part of
-v0; reverse operands, bracket references, alternate heads, aliases, or other
-literal values remain unsupported even when logically equivalent. This
-deliberately limits the frontend proof obligation rather than implying that
-those forms are invalid Rego.
+Compare the parsed token kind and the exact canonical spelling, not source
+substrings and not only the decoded literal value. The listed operand
+orientation and dot-reference paths are part of v0; reverse operands, bracket
+references, alternate heads, aliases, or other literal values remain
+unsupported even when logically equivalent. This deliberately limits the
+frontend proof obligation rather than implying that those forms are invalid
+Rego.
+
+The feasibility spike (1.2.2) fixed the following narrowings, recorded in the
+[admission feasibility record](admission-feasibility-record.md) and
+[ADR 0005](adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md):
+
+- Raw strings are rejected; only quoted strings are admitted.
+- Comment bodies may contain only tab and bytes `0x20`–`0x7E`. A comment whose
+  text contains `METADATA`, in any column, is refused rather than ignored.
+- Trivia is a space, a tab, a line feed, a carriage return immediately before a
+  line feed, or a permitted comment. Every pair of adjacent tokens is separated
+  by non-empty trivia.
+- Rule bodies must be braced and contain one literal per line, with no `;`
+  separators. The `if` keyword is required.
+- Canonical order is package, import, default, then rules; a default after a
+  rule is rejected.
+
+These rules narrow §4.1 where it was silent; they do not admit a form it
+excludes. Admission is not proved: the frontend remains trusted in the sense
+ADR 0002 describes.
 
 Reject variables, unification, `not`, `else`, `with`, quantifiers, additional
 imports or modules, other rule names, function and built-in calls, `data`
@@ -318,6 +338,17 @@ If AST inspection loses a property needed for admission, use a bounded source
 check or a documented upstream API rather than assert completeness. Metadata
 rejection, for example, may need a lexical check. If the adapter cannot enforce
 complete admission, block the milestone; do not quietly widen the trust claim.
+
+The 1.2.2 spike answered this for the pinned tuple. Admission is the
+conjunction of a closed decode of the AST JSON, a profile walk, and a
+canonical-token recognizer that checks the source bytes against tokens rendered
+from the profile. The recognizer's kernel is verified in Verus; its theorem
+concerns byte-level decomposition only, not what Rego means by those bytes. The
+[feasibility record](admission-feasibility-record.md)
+gives the evidence for each construct class, and
+[ADR 0005](adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md)
+records the design and the trust it removes and retains. Production admission
+(2.1.2) must carry both forward.
 
 Polean's semantic IR contains only the profile ID and arrays of six ASCII atom
 names. Keep diagnostic byte spans in a separate sidecar so they cannot change
@@ -683,18 +714,18 @@ only with the foundational axioms (2.2.4). The roadmap tasks named in the last
 column track each item's state. Do not invent an upstream API or silently
 weaken a prerequisite when a spike fails.
 
-| Prerequisite            | Role                   | E0 needs                                                                                                                                                  | Public release needs                                                                            | Roadmap             |
-| ----------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------- |
-| Toolchain tuple         | maintainer             | Met by ADR-003 and `make toolchain-smoke`                                                                                                                 | Lockfiles, Regorus features, and OPA digest pinned and replayed cleanly                         | 1.2.1, 4.3.2        |
-| Admission coverage      | maintainer             | 1.2.2 records what the AST exposes; the E0 command admits through 2.1.2, which fails closed on anything unmapped                                          | Hostile-source coverage of the same fail-closed admission                                       | 1.2.2, 2.1.2, 4.2.3 |
-| Axiom audit             | maintainer             | 1.2.3 investigates the audit interface; 2.2.4 accepts the E0 theorem only with the foundational axioms, rejecting `sorryAx` and native-computation axioms | The same audit applied by `verify` to untrusted evidence                                        | 1.2.3, 2.2.4, 4.1.3 |
-| Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                                                                                       | Enforced offline sandbox with memory and output limits, process-group kill, and private storage | 1.2.4, 4.3.1        |
-| Resource budgets        | maintainer             | Not needed; measurement is E2 evidence                                                                                                                    | Measured limits on an agreed machine                                                            | 4.3.2               |
-| Assurance statement     | sponsor                | ADR 0002 accepted                                                                                                                                         | Release wording no stronger than ADR 0002                                                       | 1.1.1               |
-| Dependency distribution | sponsor                | Not needed                                                                                                                                                | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR 0001)   | 5.2.2               |
-| First user review       | sponsor, policy author | Not needed                                                                                                                                                | SC8 proceed, revise, or stop decision                                                           | 5.1.1               |
-| Attribute provenance    | application owner      | Outside the theorem                                                                                                                                       | Still outside the theorem; integrator documents ingress (OQ3); not a release blocker            | 5.1.1               |
-| Design transcript (OQ7) | sponsor                | Not needed                                                                                                                                                | Not a blocker; the transcript is already excluded from acceptance evidence (ToR §8.3)           | none                |
+| Prerequisite            | Role                   | E0 needs                                                                                                                                                                                                                             | Public release needs                                                                            | Roadmap             |
+| ----------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------- |
+| Toolchain tuple         | maintainer             | Met by ADR-003 and `make toolchain-smoke`                                                                                                                                                                                            | Lockfiles, Regorus features, and OPA digest pinned and replayed cleanly                         | 1.2.1, 4.3.2        |
+| Admission coverage      | maintainer             | Met by 1.2.2 and the [feasibility record](admission-feasibility-record.md): a closed decode, a profile walk, and a verified canonical-token recognizer; the E0 command admits through 2.1.2, which fails closed on anything unmapped | Hostile-source coverage of the same fail-closed admission                                       | 1.2.2, 2.1.2, 4.2.3 |
+| Axiom audit             | maintainer             | 1.2.3 investigates the audit interface; 2.2.4 accepts the E0 theorem only with the foundational axioms, rejecting `sorryAx` and native-computation axioms                                                                            | The same audit applied by `verify` to untrusted evidence                                        | 1.2.3, 2.2.4, 4.1.3 |
+| Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                                                                                                                                                                  | Enforced offline sandbox with memory and output limits, process-group kill, and private storage | 1.2.4, 4.3.1        |
+| Resource budgets        | maintainer             | Not needed; measurement is E2 evidence                                                                                                                                                                                               | Measured limits on an agreed machine                                                            | 4.3.2               |
+| Assurance statement     | sponsor                | ADR 0002 accepted                                                                                                                                                                                                                    | Release wording no stronger than ADR 0002                                                       | 1.1.1               |
+| Dependency distribution | sponsor                | Not needed                                                                                                                                                                                                                           | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR 0001)   | 5.2.2               |
+| First user review       | sponsor, policy author | Not needed                                                                                                                                                                                                                           | SC8 proceed, revise, or stop decision                                                           | 5.1.1               |
+| Attribute provenance    | application owner      | Outside the theorem                                                                                                                                                                                                                  | Still outside the theorem; integrator documents ingress (OQ3); not a release blocker            | 5.1.1               |
+| Design transcript (OQ7) | sponsor                | Not needed                                                                                                                                                                                                                           | Not a blocker; the transcript is already excluded from acceptance evidence (ToR §8.3)           | none                |
 
 ## 14. Draft artefacts and provenance
 
@@ -718,8 +749,9 @@ of reference remain the upstream authority for scope. [T1–T3]
 ## References
 
 Sources were inspected on 2026-10-04, except R3, R12, and R13, which were
-inspected on 2026-10-21. Moving documentation URLs describe the inspected API,
-not a substitute for release pins.
+inspected on 2026-10-21, and R14 and R15, which were inspected on 2026-10-31.
+Moving documentation URLs describe the inspected API, not a substitute for
+release pins.
 
 - **R1.**
   [OPA policy language](https://www.openpolicyagent.org/docs/policy-language).
@@ -767,3 +799,9 @@ not a substitute for release pins.
   [Lean 4.35.0 release notes](https://lean-lang.org/doc/reference/latest/releases/v4.35.0/):
   the `lake check` facilities, their sandbox requirement, and the removal of
   `Lean.trustCompiler`.
+- **R14.**
+  [OPA v1.21.2 AST parser](https://github.com/open-policy-agent/opa/blob/v1.21.2/v1/ast/parser.go):
+  metadata recognition and the parser's source limits.
+- **R15.**
+  [OPA v1.21.2 scanner](https://github.com/open-policy-agent/opa/blob/v1.21.2/v1/ast/internal/scanner/scanner.go):
+  lexical rules and byte handling compared against Regorus.

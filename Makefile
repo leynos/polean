@@ -6,7 +6,7 @@ CARGO ?= cargo
 WHITAKER ?= whitaker
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke
+.PHONY: help all build clean test typecheck lint lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke install-verus verus verus-proof verus-controls
 
 SHELL := bash
 
@@ -79,6 +79,48 @@ test-scripts: ## Test the provisioning script with pytest
 
 toolchain-smoke: tools ## Provision the pinned tools, then run the ignored smoke tests
 	$(CARGO) test --locked --all-features --test toolchain -- --ignored smoke::
+
+# The Verus pins are read through $(shell ...), so the path and the pins are
+# fixed with `override :=` and validated before either can be interpolated.
+override PROVER_TOOLS_REF_FILE := tools/rust-prover-tools/REF
+override PROVER_TOOLS_REF := $(shell awk '/^ref:/ && length($$2) == 40 && $$2 !~ /[^0-9a-f]/ { print $$2; exit }' $(PROVER_TOOLS_REF_FILE))
+ifeq ($(PROVER_TOOLS_REF),)
+$(error PROVER_TOOLS_REF missing or malformed; expected "ref: <40-hex>" in $(PROVER_TOOLS_REF_FILE))
+endif
+override PROVER_TOOLS_SOURCE := git+https://github.com/leynos/rust-prover-tools.git@$(PROVER_TOOLS_REF)
+override PROVER_TOOLS := uv tool run --from "$(PROVER_TOOLS_SOURCE)" prover-tools
+VERUS_PROOF_FILE ?= verus/admission_recognizer.rs
+VERUS_FLAGS ?=
+VERUS_Z3_PATH := $(CURDIR)/.verus/z3/z3
+override VERUS_VERSION := $(shell awk 'NR == 1 && /^[0-9A-Za-z.]+$$/ { print; exit }' tools/verus/VERSION 2>/dev/null)
+ifeq ($(VERUS_VERSION),)
+$(error VERUS_VERSION missing or malformed in tools/verus/VERSION; expected a release such as 0.2026.09.06.8dea4a2)
+endif
+# `prover-tools verus run` cannot read the pinned release's `--version` output,
+# which indents its `Toolchain:` line, so the target runs the binary that
+# `install-verus` has already installed and digest-checked.
+override VERUS_BIN := $(CURDIR)/.verus/$(VERUS_VERSION)/verus/verus
+
+install-verus: ## Install the pinned Verus release and its pinned Z3 solver
+	$(PROVER_TOOLS) verus install --repo-root .
+	$(PYTHON) scripts/install_verus_z3.py
+
+verus: verus-proof verus-controls ## Run the Verus proof and its negative controls
+
+verus-proof: ## Run the Verus proof entry point
+	@test -x "$(VERUS_BIN)" || { \
+		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
+		exit 1; \
+	}
+	VERUS_Z3_PATH="$(VERUS_Z3_PATH)" "$(VERUS_BIN)" "$(VERUS_PROOF_FILE)" $(VERUS_FLAGS)
+
+verus-controls: ## Show the proof rejects mutated kernel bodies and weakened specs
+	@test -x "$(VERUS_BIN)" || { \
+		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
+		exit 1; \
+	}
+	$(PYTHON) scripts/check_verus_controls.py \
+		--verus "$(VERUS_BIN)" --z3 "$(VERUS_Z3_PATH)"
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

@@ -1,0 +1,16 @@
+---
+source: tests/admission/ast_mutations/tests.rs
+expression: self.rendered()
+---
+fixtures  parsed=95
+unknown-tag        mutants=4852
+unknown-operator   mutants=325
+unknown-key        mutants=9562
+missing-key        mutants=26429
+wrong-type         mutants=28858
+wrong-arity        mutants=623
+span               mutants=7514
+optional-present   mutants=828
+module-count       mutants=95
+source-mismatch    mutants=95
+total     mutants=79181
