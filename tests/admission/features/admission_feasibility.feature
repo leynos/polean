@@ -17,7 +17,7 @@ Feature: Complete-module admission for polean.tenant-write.v0
     Then the AST walk alone admits it
     And it is rejected by the recognizer with code trivia.metadata
 
-  Scenario: A parenthesised comparison is caught by the bounded source check
+  Scenario: A parenthesized comparison is caught by the bounded source check
     Given the polean.tenant-write.v0 profile contract
     And the baseline source with one comparison wrapped in parentheses
     When the admission spike classifies it

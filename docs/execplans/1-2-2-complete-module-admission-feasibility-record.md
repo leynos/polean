@@ -1311,8 +1311,12 @@ Feature: Complete-module admission feasibility for polean.tenant-write.v0
     And it is rejected by the recognizer with code token.mismatch
 ```
 
-No end-to-end test is added. The task introduces no command, persisted format,
-or network boundary.
+No end-to-end test is added. The task adds no production admission command, no
+persisted production format, and no production network boundary. It does add
+development tooling: the on-demand `make install-verus`, `make verus`,
+`make verus-proof`, and `make verus-controls` targets, and the network
+provisioning that `make install-verus` performs when it fetches the pinned
+prover inputs.
 
 Quality criteria:
 
@@ -2056,6 +2060,52 @@ and an unfamiliar escape drops only its next character) pin the parser. The
 focused suite was rerun with `CARGO_TERM_COLOR=always`; all five compile-fail
 tests passed, including the three-compilation guard, which exercises the nested
 build under the same environment CI uses.
+
+### Post-repair review round (2026-11-05)
+
+The queued `@coderabbitai resume` posted, and CodeRabbit reviewed `a668d8e`. It
+raised six inline findings and one pre-merge warning. All seven were valid
+against the current tree and all seven are repaired here.
+
+- `docs/admission-feasibility-record.md`: the `default.shape` row read "Extra
+  or duplicated default", although the fixtures it cites are a missing default
+  and a duplicated one; it now reads "Missing or duplicated default". The
+  `parse.syntax` row listed "duplicate imports", but `import/two-imports.rego`
+  is refused at the profile walk with `import.shape`, not by the parser; the
+  phrase is removed and the row cites only the fixtures the parser refuses.
+- ADR 0005: the heading "Decision Drivers" is now "Decision drivers", matching
+  the sentence-case style of the other headings.
+- `tests/admission/bdd.rs` and its feature file: the scenario name and the
+  constant's doc comment now spell "parenthesized". The feature file and the
+  `#[scenario]` name change together so the scenario still binds.
+- `tests/admission/frontend/mod.rs` and
+  `tests/admission/properties/case.rs`: "normalises" and "recognise" are now
+  "normalizes" and "recognize", following the repository's Oxford spelling.
+
+The pre-merge row warned that the acceptance text claimed the task introduces
+"no command, persisted format, or network boundary", while the branch adds the
+Verus Makefile targets and the installer's network provisioning. That contrast
+is real: the claim concerned production admission, and the added commands are
+development tooling. The acceptance text now says so explicitly, naming the
+four targets and the provisioning, and continuing to state that no production
+admission command, persisted production format, or production network boundary
+is added.
+
+The review also reported "incomplete coverage: 1 file could not be fully
+reviewed". The file is `examples/admission/manifest.json`, which is JSON Lines
+by design: one JSON object per line, so the corpus can grow without rewriting a
+single array and so a malformed entry fails at a known line. The reviewer's
+parser expects a single JSON document and cannot read it. The manifest is not
+invalid; the coverage limit is the tool's.
+
+The gate rerun also exposed an environment precondition that the candidate does
+not control. The compile-fail guard locates Cargo's target root by walking up
+from the test executable to the nearest `CACHEDIR.TAG`. Cargo writes that tag
+when it creates a target directory, but it does not add one to a target
+directory that already exists, so a worktree whose `target/` predates Cargo
+fails the guard with "cannot find the build's target directory". Restoring the
+tag with Cargo's canonical content and rerunning `make test` cleared it; no
+tracked file changed in the repair.
 
 ## Interfaces and dependencies
 

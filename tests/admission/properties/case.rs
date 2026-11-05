@@ -8,7 +8,7 @@
 //! The assembler reads its atoms from `contracts/profile.json` and restates the
 //! line-feed rule itself. It never calls [`crate::recognizer::canonical_tokens`],
 //! so a renderer fault cannot also be a fault in the source the renderer is
-//! asked to recognise.
+//! asked to recognize.
 
 use proptest::{collection::vec as strategy_vec, prelude::Strategy, sample::select};
 

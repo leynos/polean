@@ -31,7 +31,7 @@ identical to an AST-only adapter. The feasibility spike (roadmap 1.2.2) had to
 either close them, widen the accepted language, or record an E0 finding that
 blocks roadmap 2.1.2.
 
-## Decision Drivers
+## Decision drivers
 
 - Admission must fail closed on every source the profile does not admit.
 - Polean must not become a second Rego parser that must be trusted as a whole.

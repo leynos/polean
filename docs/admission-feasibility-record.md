@@ -104,27 +104,27 @@ outside printable ASCII and tab is refused (`trivia/unicode-comment.rego`).
 Each row gives the rejecting stage and the reason code that stage reports, as
 the wire values the manifest records.
 
-| Construct class                                            | Stage        | Code                                         | Evidence                                                                        |
-| ---------------------------------------------------------- | ------------ | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| Other packages, imports, rule names                        | `profile`    | `package.shape`, `import.shape`, `rule.head` | `package/other.rego`, `import/other.rego`, `head/other-name.rego`               |
-| Extra or duplicated default                                | `profile`    | `default.shape`                              | `default/{missing,two-defaults}.rego`                                           |
-| More than one body, `else`                                 | `profile`    | `rule.body`                                  | `body/{two-bodies,else}.rego`                                                   |
-| `with` modifier                                            | `profile`    | `with.modifier`                              | `body/with.rego`                                                                |
-| Variables, unification, negation, `some`, `every`          | `profile`    | `literal.kind` or `expr.kind`                | `literal/{some-vars,some-in,not-expr,every}.rego`, `operator/assign-eq.rego`    |
-| Calls, unary, arithmetic, membership, assignment           | `profile`    | `expr.kind`                                  | `expr/{call,unary,membership,assign}.rego`, `operator/arith-*.rego`             |
-| Comparisons other than `==`                                | `profile`    | `operator.kind`                              | `operator/bool-{lt,le,ge,gt,ne}.rego`                                           |
-| Collections and comprehensions                             | `profile`    | `atom.unknown`                               | `expr/{array,set,object,*-compr}.rego`                                          |
-| Bracketed and otherwise unmatched references               | `profile`    | `atom.unknown`                               | `atom/bracket-reference.rego`, `expr/ref-brack.rego`                            |
-| Other literal values and operand orientations              | `profile`    | `atom.unknown`                               | `atom/{other-literal,reversed-operands,swapped-locked,unknown-attribute}.rego`  |
-| Reversed rule and default order                            | `profile`    | `order.shape`                                | `order/default-after-rule.rego`                                                 |
-| `__target__`                                               | `profile`    | `module.target`                              | `module/target.rego`                                                            |
-| Metadata annotation                                        | `recognizer` | `trivia.metadata`                            | `trivia/{metadata-block,metadata-inline}.rego`                                  |
-| Redundant parentheses                                      | `recognizer` | `token.mismatch`                             | `trivia/parentheses.rego`                                                       |
-| Non-canonical comment bytes                                | `recognizer` | `trivia.byte`                                | `trivia/unicode-comment.rego`                                                   |
-| Rego v0 syntax in an unreachable rule                      | `parse`      | `parse.syntax`                               | `unreachable/{v0-body,v0-partial-set}.rego`                                     |
-| Malformed modules, imports after a rule, duplicate imports | `parse`      | `parse.syntax`                               | `module/{empty,two-packages,target-after-rules}.rego`, `import/after-rule.rego` |
-| Number outside the frontend's range                        | `parse`      | `parse.number`                               | `limits/number-overflow.rego`                                                   |
-| Unknown or malformed AST JSON                              | `decode`     | `ast.*`                                      | The mutation sweep and `ast/tests.rs`                                           |
+| Construct class                                   | Stage        | Code                                         | Evidence                                                                        |
+| ------------------------------------------------- | ------------ | -------------------------------------------- | ------------------------------------------------------------------------------- |
+| Other packages, imports, rule names               | `profile`    | `package.shape`, `import.shape`, `rule.head` | `package/other.rego`, `import/other.rego`, `head/other-name.rego`               |
+| Missing or duplicated default                     | `profile`    | `default.shape`                              | `default/{missing,two-defaults}.rego`                                           |
+| More than one body, `else`                        | `profile`    | `rule.body`                                  | `body/{two-bodies,else}.rego`                                                   |
+| `with` modifier                                   | `profile`    | `with.modifier`                              | `body/with.rego`                                                                |
+| Variables, unification, negation, `some`, `every` | `profile`    | `literal.kind` or `expr.kind`                | `literal/{some-vars,some-in,not-expr,every}.rego`, `operator/assign-eq.rego`    |
+| Calls, unary, arithmetic, membership, assignment  | `profile`    | `expr.kind`                                  | `expr/{call,unary,membership,assign}.rego`, `operator/arith-*.rego`             |
+| Comparisons other than `==`                       | `profile`    | `operator.kind`                              | `operator/bool-{lt,le,ge,gt,ne}.rego`                                           |
+| Collections and comprehensions                    | `profile`    | `atom.unknown`                               | `expr/{array,set,object,*-compr}.rego`                                          |
+| Bracketed and otherwise unmatched references      | `profile`    | `atom.unknown`                               | `atom/bracket-reference.rego`, `expr/ref-brack.rego`                            |
+| Other literal values and operand orientations     | `profile`    | `atom.unknown`                               | `atom/{other-literal,reversed-operands,swapped-locked,unknown-attribute}.rego`  |
+| Reversed rule and default order                   | `profile`    | `order.shape`                                | `order/default-after-rule.rego`                                                 |
+| `__target__`                                      | `profile`    | `module.target`                              | `module/target.rego`                                                            |
+| Metadata annotation                               | `recognizer` | `trivia.metadata`                            | `trivia/{metadata-block,metadata-inline}.rego`                                  |
+| Redundant parentheses                             | `recognizer` | `token.mismatch`                             | `trivia/parentheses.rego`                                                       |
+| Non-canonical comment bytes                       | `recognizer` | `trivia.byte`                                | `trivia/unicode-comment.rego`                                                   |
+| Rego v0 syntax in an unreachable rule             | `parse`      | `parse.syntax`                               | `unreachable/{v0-body,v0-partial-set}.rego`                                     |
+| Malformed modules, imports after a rule           | `parse`      | `parse.syntax`                               | `module/{empty,two-packages,target-after-rules}.rego`, `import/after-rule.rego` |
+| Number outside the frontend's range               | `parse`      | `parse.number`                               | `limits/number-overflow.rego`                                                   |
+| Unknown or malformed AST JSON                     | `decode`     | `ast.*`                                      | The mutation sweep and `ast/tests.rs`                                           |
 
 ## 5. The profile's excluded entries
 

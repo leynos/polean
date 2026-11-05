@@ -4,7 +4,7 @@
 //! and every mutation is made against the same configuration: a fresh engine per
 //! source, with Rego v0 disabled because the profile is Rego v1. The frontend is
 //! trusted input (axiom X1 in the plan); this module only fixes its settings and
-//! normalises its diagnostics to strings.
+//! normalizes its diagnostics to strings.
 
 use regorus::Engine;
 

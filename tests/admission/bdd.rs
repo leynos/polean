@@ -52,7 +52,7 @@ const _: [&str; 1] = [include_str!("features/admission_feasibility.feature")];
 const BASELINE: &str = "examples/tenant-write/policy.rego";
 const BASELINE_IR: &str = "examples/tenant-write/policy.json";
 
-/// The comparison the parenthesised scenario wraps.
+/// The comparison the parenthesized scenario wraps.
 const COMPARISON: &str = "input.subject.tenant == input.resource.tenant";
 
 /// The state one scenario accumulates.
@@ -218,6 +218,6 @@ fn metadata_annotation_is_rejected(#[from(state)] _state: AdmissionState) {}
 /// A redundant parenthesis is refused at the recognizer stage.
 #[scenario(
     path = "tests/admission/features/admission_feasibility.feature",
-    name = "A parenthesised comparison is caught by the bounded source check"
+    name = "A parenthesized comparison is caught by the bounded source check"
 )]
 fn parenthesised_comparison_is_refused(#[from(state)] _state: AdmissionState) {}
