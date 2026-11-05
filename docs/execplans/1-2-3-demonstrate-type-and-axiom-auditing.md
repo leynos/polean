@@ -5,9 +5,9 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 2). Implementation must not begin until the user
-explicitly approves this plan. Approval also accepts the design amendments
-listed under `Deviations for approval`.
+Status: DRAFT (revision 3). The user accepted the design decisions in
+`Accepted design deviations` and D10 on 2026-11-05 (D13). Implementation must
+not begin until the user explicitly approves this plan.
 
 Roadmap item: [1.2.3](../roadmap.md). Branch:
 `1-2-3-demonstrate-type-and-axiom-auditing`.
@@ -133,10 +133,10 @@ Exclude this ExecPlan from every count below.
 - Ambiguity: stop and present options when a choice materially changes what a
   settlement means.
 
-## Deviations for approval
+## Accepted design deviations
 
-Approving this plan accepts these changes to the current design. EP-M4 records
-them upstream, and nothing is amended before approval.
+The user accepted these changes to the current design on 2026-11-05 (D13).
+EP-M4 records them upstream, and no upstream document is amended before then.
 
 1. Technical design §6 reserves `lean/Polean/Audit.lean`. The worker moves to
    `lean/PoleanAudit.lean`, because it imports `Lean`, and a future umbrella
@@ -222,8 +222,10 @@ them upstream, and nothing is amended before approval.
 - [x] (2026-11-05) Reproduced the two attacks that defeated revision 1,
       prototyped the
   fix, and revised this plan (revision 2).
-- [ ] Publish the draft pull request.
-- [ ] User approval. Implementation must not start before this.
+- [x] (2026-11-05) Published draft pull request #35.
+- [x] (2026-11-05) The user accepted the three design deviations and keeping the
+  Verus milestone (D13).
+- [ ] User approval of the plan. Implementation must not start before this.
 - [ ] EP-M1: contracts, corpus manifest, and settlement.
 - [ ] EP-M2: Verus proof of settlement.
 - [ ] EP-M3: Lean worker and end-to-end corpus run.
@@ -356,8 +358,8 @@ them upstream, and nothing is amended before approval.
   deferring EP-M2, because the roadmap does not require it and the worker stays
   unproved. This plan keeps it: the task instructs Verus for selected
   contractual logic, settlement survives into 2.2.4 and 4.1.3, and after D1 the
-  theorem covers the roadmap's named checks. It is removable at approval
-  without affecting other milestones. Date/Author: 2026-11-05, plan author.
+  theorem covers the roadmap's named checks. The user accepted this (D13).
+  Date/Author: 2026-11-05, plan author.
 - D11. Decision: panel suggestions not adopted. A settlement-table `insta`
   snapshot duplicates the manifest, so only canonical reports are snapshotted.
   A property oracle for settlement duplicates S1, so it is removed. `lean4lean`
@@ -371,6 +373,13 @@ them upstream, and nothing is amended before approval.
   worker only as replay text, and fail closed as `kernel_rejected`. ADR 0006
   proposes that 2.2.4 maps deadline kills to `unknown` (exit 3) under technical
   design §8. Date/Author: 2026-11-05, plan author.
+- D13. Decision: accept the plan's recommendations on four decisions: the worker
+  moves to `lean/PoleanAudit.lean`, statements take the ground tree form that
+  constrains 2.2.1 and 2.2.3, toolchain `.olean` files are trusted rather than
+  replayed, and EP-M2 stays in scope. Rationale: the user accepted these
+  recommendations in conversation when reviewing revision 2. This records those
+  decisions only. It is not approval to begin implementation. Date/Author:
+  2026-11-05, `leynos`.
 
 ## Outcomes & retrospective
 
@@ -1444,3 +1453,7 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   `ForgeInit` replacing `import Lean` fixtures. The forged-foundation finding
   and several report fields were removed. Remaining work is unchanged in order,
   and larger in EP-M2's control list.
+- Revision 3 (2026-11-05): recorded the user's acceptance of the three design
+  deviations and of keeping the Verus milestone (D13), and renamed the section
+  that lists the deviations. The design and remaining work are unchanged, and
+  the plan still awaits approval before implementation.
