@@ -30,9 +30,9 @@ verus! {
 /// answered with any other list could satisfy it. The proof needs the inputs'
 /// views, which a byte-literal slice does not expose on its own.
 ///
-/// The premise [`admits_canonical_t`] is established by
-/// `lemma_baseline_admits_canonical`, and transferred to these slices by
-/// `lemma_ws_canonical_t_to_slices`.
+/// The canonical decomposition `ws_canonical_t` is established for the
+/// baseline by `lemma_baseline_is_canonical`, and transferred to these slices
+/// by `lemma_ws_canonical_t_to_slices`.
 pub fn baseline_is_recognised(
     src: &[u8],
     toks: &[&[u8]],

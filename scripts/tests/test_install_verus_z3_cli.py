@@ -141,8 +141,12 @@ def test_installs_from_a_loopback_release(release: Release, tmp_path: Path) -> N
     ], "the staging directory is removed"
     recorded = stamp(install_dir)
     assert recorded["archive"] == ARCHIVE_NAME, "the stamp names the pinned archive"
-    assert recorded["archive_sha256"] == digest(payload)
-    assert recorded["solver_sha256"] == digest(SOLVER_BYTES)
+    assert recorded["archive_sha256"] == digest(payload), (
+        "the stamp records the archive digest"
+    )
+    assert recorded["solver_sha256"] == digest(SOLVER_BYTES), (
+        "the stamp records the solver digest"
+    )
     assert release.requests == [ARCHIVE_PATH], "exactly one archive request"
 
 
@@ -223,4 +227,6 @@ def test_reuses_a_cached_solver_without_downloading(
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
     assert release.requests == [ARCHIVE_PATH], "the cached solver is reused"
-    assert (install_dir / "z3").read_bytes() == SOLVER_BYTES
+    assert (install_dir / "z3").read_bytes() == SOLVER_BYTES, (
+        "the cached solver is intact"
+    )

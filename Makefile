@@ -80,7 +80,7 @@ test-scripts: ## Test the provisioning script with pytest
 toolchain-smoke: tools ## Provision the pinned tools, then run the ignored smoke tests
 	$(CARGO) test --locked --all-features --test toolchain -- --ignored smoke::
 
-# The Verus pins are read through $(shell ...), so the path and the pin are
+# The Verus pins are read through $(shell ...), so the path and the pins are
 # fixed with `override :=` and validated before either can be interpolated.
 override PROVER_TOOLS_REF_FILE := tools/rust-prover-tools/REF
 override PROVER_TOOLS_REF := $(shell awk '/^ref:/ && length($$2) == 40 && $$2 !~ /[^0-9a-f]/ { print $$2; exit }' $(PROVER_TOOLS_REF_FILE))
@@ -92,7 +92,10 @@ override PROVER_TOOLS := uv tool run --from "$(PROVER_TOOLS_SOURCE)" prover-tool
 VERUS_PROOF_FILE ?= verus/admission_recognizer.rs
 VERUS_FLAGS ?=
 VERUS_Z3_PATH := $(CURDIR)/.verus/z3/z3
-override VERUS_VERSION := $(shell cat tools/verus/VERSION 2>/dev/null)
+override VERUS_VERSION := $(shell awk 'NR == 1 && /^[0-9A-Za-z.]+$$/ { print; exit }' tools/verus/VERSION 2>/dev/null)
+ifeq ($(VERUS_VERSION),)
+$(error VERUS_VERSION missing or malformed in tools/verus/VERSION; expected a release such as 0.2026.09.06.8dea4a2)
+endif
 # `prover-tools verus run` cannot read the pinned release's `--version` output,
 # which indents its `Toolchain:` line, so the target runs the binary that
 # `install-verus` has already installed and digest-checked.

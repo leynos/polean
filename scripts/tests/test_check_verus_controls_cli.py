@@ -205,7 +205,9 @@ def test_reports_a_baseline_failure(fake_tools: Path) -> None:
     )
 
     assert result.returncode == 1, "a broken baseline is a failure"
-    assert "unmodified staged proof did not verify" in result.stderr
+    assert "unmodified staged proof did not verify" in result.stderr, (
+        "the diagnostic names the broken baseline"
+    )
     assert len(calls(fake_tools)) == 1, "only the baseline ran"
 
 
@@ -222,7 +224,9 @@ def test_reports_an_accepted_mutation(fake_tools: Path) -> None:
     )
 
     assert result.returncode == 1, "an accepted defect is a failure"
-    assert "Verus accepted the defect" in result.stderr
+    assert "Verus accepted the defect" in result.stderr, (
+        "the diagnostic names the accepted defect"
+    )
 
 
 def test_reports_an_unrelated_rejection(fake_tools: Path) -> None:

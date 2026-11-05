@@ -2107,6 +2107,41 @@ fails the guard with "cannot find the build's target directory". Restoring the
 tag with Cargo's canonical content and rerunning `make test` cleared it; no
 tracked file changed in the repair.
 
+### Second post-repair review round (2026-11-05)
+
+CodeRabbit reviewed `e6f1a95` and raised six findings. All six were valid
+against the current tree and all six are repaired here.
+
+- `Makefile`: `VERUS_VERSION` was read with a bare `cat`, although the comment
+  above the pins claimed both were validated. An empty file produced
+  `.verus//verus/verus`, and a value containing a quote or `$(...)` could break
+  out of the double-quoted recipes. The value is now filtered by `awk` to
+  `^[0-9A-Za-z.]+$` and an empty result stops the Makefile with an error naming
+  the file, matching the `PROVER_TOOLS_REF` pattern. The new
+  `test_malformed_version_stops_every_target` writes `../escape` into the
+  version file and asserts the diagnostic and that no tool ran.
+- `scripts/install_verus_z3.py`: `read_stamp` decomposed the stamp with
+  `isinstance` checks. It now uses a mapping pattern that states the three
+  required string fields in one place, still ignoring extra keys and rejecting
+  missing or non-string fields.
+- `scripts/tests/test_check_verus_controls_cli.py`,
+  `scripts/tests/test_install_verus_z3_cli.py`, and
+  `scripts/tests/test_verus_make_targets.py`: the remaining bare asserts now
+  carry a message naming the property they check, as their neighbours already
+  did.
+- `tests/admission/recognizer/kernel/baseline.rs`: the doc comment named
+  `admits_canonical_t` as a premise and `lemma_baseline_admits_canonical` as
+  its proof, but no such lemma exists and the function requires only the slice
+  views. It now names `ws_canonical_t`, established by
+  `lemma_baseline_is_canonical` and transferred by
+  `lemma_ws_canonical_t_to_slices`, which is what the body calls.
+
+Nine gates were rerun on the repaired tree: `make check-fmt`, `make typecheck`,
+`make lint`, `make test` (124 passed, 7 ignored), `make markdownlint`,
+`make design-check`, the `uv run` test-scripts substitute (138 passed),
+`make toolchain-smoke` (7 passed), and `make verus` (89 verified, five controls
+rejected).
+
 ## Interfaces and dependencies
 
 Everything below is private to the `tests/admission` binary. No `src/` item is

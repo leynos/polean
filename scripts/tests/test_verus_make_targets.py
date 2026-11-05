@@ -5,7 +5,8 @@ aggregate `verus` target in an isolated temporary repository layout, with
 controlled stand-ins for `uv`, Python, and the pinned verifier. They check
 argument forwarding, the complete pinned `uv` launcher, `VERUS_Z3_PATH`
 propagation, the setup-error diagnostics for an absent and a non-executable
-verifier, the malformed-pin diagnostic, and failure propagation.
+verifier, the malformed-pin and malformed-version diagnostics, and failure
+propagation.
 
 They establish no proof evidence. The real proof and its controls are the
 `make verus` gate's business; a passing wiring test says only that the recipes
@@ -28,9 +29,11 @@ VERSION = (REPO / "tools" / "verus" / "VERSION").read_text(encoding="utf-8").str
 VERUS_BIN = Path(".verus") / VERSION / "verus" / "verus"
 Z3_BIN = Path(".verus") / "z3" / "z3"
 REF_FILE = Path("tools") / "rust-prover-tools" / "REF"
+VERSION_FILE = Path("tools") / "verus" / "VERSION"
 PIN = (REPO / REF_FILE).read_text(encoding="utf-8").split()[1]
 PINNED_SOURCE = f"git+https://github.com/leynos/rust-prover-tools.git@{PIN}"
 MALFORMED_PIN = "PROVER_TOOLS_REF missing or malformed"
+MALFORMED_VERSION = "VERUS_VERSION missing or malformed"
 
 RECORDER = '''#!{python}
 """Record one tool invocation, then exit with the configured status."""
@@ -199,7 +202,9 @@ def test_missing_verus_is_a_named_setup_error(layout: Layout, target: str) -> No
     result = layout.make(target)
 
     assert result.returncode != 0, "an absent verifier is a failure"
-    assert f"Verus is not installed at {layout.root / VERUS_BIN}" in result.stderr
+    assert f"Verus is not installed at {layout.root / VERUS_BIN}" in result.stderr, (
+        "the diagnostic names the expected verifier path"
+    )
     assert "make install-verus" in result.stderr, (
         "the diagnostic names the install target"
     )
@@ -219,7 +224,9 @@ def test_non_executable_verus_is_a_named_setup_error(
     result = layout.make(target)
 
     assert result.returncode != 0, "a non-executable verifier is a failure"
-    assert f"Verus is not installed at {layout.root / VERUS_BIN}" in result.stderr
+    assert f"Verus is not installed at {layout.root / VERUS_BIN}" in result.stderr, (
+        "the diagnostic names the expected verifier path"
+    )
     assert "make install-verus" in result.stderr, (
         "the diagnostic names the install target"
     )
@@ -244,6 +251,22 @@ def test_malformed_pin_stops_every_target(layout: Layout) -> None:
     assert layout.calls() == [], "the pin is validated before any tool runs"
 
 
+def test_malformed_version_stops_every_target(layout: Layout) -> None:
+    """A VERSION that is not a release name is rejected before any tool runs."""
+    (layout.root / VERSION_FILE).write_text("../escape\n", encoding="utf-8")
+    layout.extractor("uv")
+    layout.installed_verus()
+
+    result = layout.make("verus")
+
+    assert result.returncode != 0, "a malformed version is a failure"
+    assert MALFORMED_VERSION in result.stderr, (
+        "the diagnostic names the malformed version rather than failing obscurely"
+    )
+    assert str(VERSION_FILE) in result.stderr, "the diagnostic names the version file"
+    assert layout.calls() == [], "the version is validated before any tool runs"
+
+
 def test_verus_proof_propagates_a_verifier_failure(layout: Layout) -> None:
     """A failing proof run makes the target fail."""
     layout.installed_verus()
@@ -265,4 +288,6 @@ def test_verus_runs_the_proof_before_the_controls(layout: Layout) -> None:
     assert programs == ["verus", "fake-python"], (
         "the proof runs before the controls"
     )
-    assert layout.calls()[1]["argv"][0] == "scripts/check_verus_controls.py"
+    assert layout.calls()[1]["argv"][0] == "scripts/check_verus_controls.py", (
+        "the controls script runs second"
+    )

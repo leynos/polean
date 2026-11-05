@@ -205,12 +205,19 @@ def read_stamp(path: Path) -> dict[str, str] | None:
         recorded = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
-    if not isinstance(recorded, dict):
-        return None
-    fields = ("archive", "archive_sha256", "solver_sha256")
-    if any(not isinstance(recorded.get(field), str) for field in fields):
-        return None
-    return {field: recorded[field] for field in fields}
+    match recorded:
+        case {
+            "archive": str(archive),
+            "archive_sha256": str(archive_digest),
+            "solver_sha256": str(solver_digest),
+        }:
+            return {
+                "archive": archive,
+                "archive_sha256": archive_digest,
+                "solver_sha256": solver_digest,
+            }
+        case _:
+            return None
 
 
 def write_stamp(path: Path, archive: str, archive_digest: str, solver_digest: str) -> None:
