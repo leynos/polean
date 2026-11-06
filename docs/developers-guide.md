@@ -10,6 +10,8 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - the Rust toolchain pinned by `rust-toolchain.toml`, with its
   `rustc-codegen-cranelift-preview` component;
 - the `mold` linker on Linux (`.cargo/config.toml` selects it);
+- `cargo-nextest`, which `make test` runs (`.config/nextest.toml` serialises
+  the tests that start a child cargo and bounds each test's run time);
 - Python 3.11 or later for the design harness;
 - `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
   checks;
