@@ -44,7 +44,7 @@ lint-whitaker: ## Run the Whitaker Dylint suite with clean driver inputs and war
 	env -u CARGO_ENCODED_RUSTFLAGS -u CARGO_BUILD_TARGET -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS -u CFLAGS -u LDFLAGS RUSTFLAGS="-D warnings" CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm CARGO_UNSTABLE_CODEGEN_BACKEND=true DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
 test: ## Run Rust unit, integration, and documentation tests
-	$(CARGO) test --all-targets --all-features
+	$(CARGO) nextest run --all-targets --all-features
 	RUSTDOCFLAGS="-D warnings" $(CARGO) test --doc --all-features
 
 typecheck: ## Type-check every Rust target with warnings denied

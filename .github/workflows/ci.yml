@@ -44,5 +44,9 @@ jobs:
         run: make typecheck
       - name: Lint Rust
         run: make lint
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@848136c5ba4ea848a76ce75b8babe954359c4381
+        with:
+          tool: cargo-nextest
       - name: Test Rust
         run: make test
