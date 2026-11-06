@@ -12,6 +12,7 @@ verification workflow for a closed Rego profile.
 - [ADR 0001](adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md)
 - [ADR 0002](adrs/adr-0002-first-profile-assurance-boundary.md)
 - [ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md)
+- [ADR 0006](adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
 - [Contracts](../contracts/profile.json)
 - [Draft-pack validation](../validation/README.md)
 
@@ -66,18 +67,49 @@ native libraries, plug-ins, or compiled proof modules. A job contains bounded
 data, not executable project configuration. Treat generated and submitted proof
 files differently: the verifier regenerates its own modules from admitted data.
 
-| Boundary                    | First-slice guarantee                                                                                              | Remaining trust or limitation                                                                                         |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Rego bytes to Polean IR     | Closed profile check, source spans, deterministic mapping, round-trip checks, and independent runtime comparisons. | Regorus parser and Rust mapping remain trusted. No formal source-preservation theorem.                                |
-| IR to checked model theorem | Pinned semantics, exact expected proposition, literal policy data, kernel acceptance, and axiom audit.             | Lean kernel, approved logical foundations, trusted proof-package identity, and integrity of the checking environment. |
-| Model to OPA/Regorus        | Replay original source against independent requests and compare typed results.                                     | Testing is not a production-runtime refinement proof.                                                                 |
-| Evidence to reported result | Fresh reconstruction, binding checks, semantic result validation, and non-zero failure outcomes.                   | Rust orchestrator, serialization, filesystem/process isolation, and hashing assumptions.                              |
-| Application to request      | Explicit typed ingress contract.                                                                                   | Attribute authenticity, application enforcement, and later changes of state are outside the theorem.                  |
+| Boundary                    | First-slice guarantee                                                                                              | Remaining trust or limitation                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rego bytes to Polean IR     | Closed profile check, source spans, deterministic mapping, round-trip checks, and independent runtime comparisons. | Regorus parser and Rust mapping remain trusted. No formal source-preservation theorem.                                                                  |
+| IR to checked model theorem | Pinned semantics, exact expected proposition, literal policy data, kernel replay, and axiom audit.                 | Lean kernel, approved logical foundations, the §2.1 input model until 4.3.2, trusted proof-package identity, and integrity of the checking environment. |
+| Model to OPA/Regorus        | Replay original source against independent requests and compare typed results.                                     | Testing is not a production-runtime refinement proof.                                                                                                   |
+| Evidence to reported result | Fresh reconstruction, binding checks, semantic result validation, and non-zero failure outcomes.                   | Rust orchestrator, serialization, filesystem/process isolation, and hashing assumptions.                                                                |
+| Application to request      | Explicit typed ingress contract.                                                                                   | Attribute authenticity, application enforcement, and later changes of state are outside the theorem.                                                    |
 
 Trust changes with the claim. A correct Lean theorem can survive a faulty
 source translator while saying nothing useful about the submitted source. A
 faulty reporter can misdescribe even a correct theorem. Both boundaries remain
 visible.
+
+### 2.1 Proof integrity and operational integrity
+
+Two questions about a Lean result have different answers and different owners,
+and
+[ADR 0006](adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
+separates them.
+
+**Proof integrity** asks whether Lean's kernel checked exactly the requested
+proposition, with complete theorem-root coverage and only approved transitive
+axioms. **Operational integrity** asks whether the Lean environment that
+answered is the one the evidence names, with no shadowed module, forged
+privileged name, or altered trusted proof package.
+
+Proof integrity is meaningful under this **generated-module input model**:
+
+1. Every audited module is compiled freshly by the pinned Lean from a fixed
+   trusted template and constrained policy data. It contains no `prelude`,
+   option, metaprogram, or user-supplied declaration.
+2. The trusted proof package is repository-owned, and built by the pinned Lake.
+3. Toolchain files come from the digest-checked archive, and are not replayed.
+4. Polean controls the search path, and no compiled proof artefact is accepted.
+
+Roadmap 1.2.3 and 2.2.4 establish proof integrity under this model. They do not
+detect its violation: outside it, a module can derive `False` with no axiom at
+all, as the
+[environment integrity findings](lean-environment-integrity-findings.md)
+record. Development reports from E0 and E1 therefore name the model. Roadmap
+4.3.2 removes the dependence on items 2 and 4 before public `prove` or `verify`
+make the ADR 0002 statement, and decides how far to go on item 3. Item 1 stays
+a property of the fixed templates, because Polean never accepts Lean as input.
 
 ## 3. Validation policy and independent requirements
 
@@ -305,7 +337,8 @@ separately published crates:
 
 ```text
 src/{cli,profile,frontend,ir,lean,oracle,evidence,process}.rs
-lean/Polean/{Syntax,Semantics,Abstract,Claims,Check,Audit}.lean
+lean/Polean/{Syntax,Semantics,Abstract,Claims,Check}.lean
+lean/PoleanAudit.lean
 examples/tenant-write/
 contracts/
 ```
@@ -313,8 +346,10 @@ contracts/
 The Rust package owns process supervision, bounded ingestion, Regorus
 adaptation, source maps, serialization, OPA invocation, and evidence packaging.
 The Lean package owns semantic definitions, claims, abstraction lemmas, finite
-checker soundness, and theorem audits. A Python script in this draft validates
-the design fixtures; Python is not part of the proposed production checker.
+checker soundness, and theorem audits. The audit worker has its own root
+because it imports Lean's library, which policy modules must not load. A Python
+script in this draft validates the design fixtures; Python is not part of the
+proposed production checker.
 
 ### 6.1 Frontend
 
@@ -361,17 +396,34 @@ module template. Source comments, user names, imports, and code never enter a
 Lean executable position. The worker checks all requested roots against the
 exact policy literal and fixed claim definitions.
 
-Audit transitive axioms for the theorem roots and their semantic dependencies.
-Allow only an explicit pinned foundational set, initially `propext`,
-`Quot.sound`, and `Classical.choice`; minimize actual use where possible. Reject
-`sorryAx`, native-computation trust axioms, and every undeclared assumption.
-Lean documents the difference between these foundations and additional axioms
-introduced by proof shortcuts. [R6]
+State each claim as a named predicate applied to the policy literal, so the
+theorem's statement is a ground tree of constants and applications. The
+predicate's definition may quantify over requests. Represent non-empty rule
+bodies structurally, with no proof term inside the literal.
+
+Audit the theorem roots through a repository-owned worker, `polean-audit`. It
+replays every module outside the toolchain through the kernel, then reports
+each root's kind, statement tree, and transitive axioms. It never sees the
+expected proposition and reports no verdict: Rust settlement is the only
+acceptance authority, so a report cannot choose its own outcome.
+
+Settlement allows only an explicit pinned foundational set, initially `propext`,
+`Quot.sound`, and `Classical.choice`; minimize actual use where possible. A
+request may narrow that set but never widen it. Reject `sorryAx`,
+native-computation trust axioms, and every undeclared assumption. Native
+computation has no single trust axiom in the pinned Lean: each use asserts its
+own axiom with a `_native` name component, so acceptance rests on the
+allowlist. Lean documents the difference between these foundations and
+additional axioms introduced by proof shortcuts. [R6]
 
 A process exit code or the presence of a theorem name is not acceptance.
 Require the expected declaration type, exact requested claim coverage,
 successful checking, and a machine-readable audit. Missing, malformed, or
 contradictory worker output is a tool failure.
+
+This establishes proof integrity under the §2.1 input model. Identifying a
+foundation by name suffices only because that model excludes shadowing; roadmap
+4.3.2 adds module provenance and a pinned replay base. [R16–R18]
 
 ### 6.3 Runtime oracles
 
@@ -590,18 +642,20 @@ conformance suite.
 
 These are release obligations, not accomplished results.
 
-| ID  | Property                                                                          | Method and scope                                                               | What remains unchecked                                    |
-| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| V1  | Every admitted atom has the specified request meaning.                            | Lean atom-case lemmas; complete profile-adapter fixtures.                      | Rust parsing and source mapping remain trusted.           |
-| V2  | `evalRequest p r = evalFacts p (α r)`.                                            | Lean structural induction over every admitted IR policy.                       | Full Rego semantics and actual runtimes.                  |
-| V3  | Every fact vector occurs in `allFacts`; `α(γ(f)) = f`.                            | Lean Boolean case analysis.                                                    | JSON decoder correctness and actual attribute provenance. |
-| V4  | Finite checking implies each universal model claim.                               | Lean soundness theorem and per-policy kernel-reduced certificate.              | Runtime refinement.                                       |
-| V5  | A reported model counterexample violates the named claim.                         | Lean witness proof plus concrete JSON replay in OPA and Regorus.               | General runtime equivalence beyond observations.          |
-| V6  | All six baseline requirements hold; deny-all fails availability.                  | Checked model claims and independent truth-table acceptance fixtures.          | Application-level availability or system state changes.   |
-| V7  | Evidence names exactly the policy, domain, requirements, and environment checked. | Negative substitution fixtures and clean regeneration against explicit inputs. | Hash collision assumptions and host compromise.           |
-| V8  | Unsupported, malformed, incomplete, or timed-out work never passes.               | Adversarial state/result matrix; process-kill and corrupt-output injection.    | General absence of implementation defects.                |
-| V9  | Rendering and re-import preserve admitted IR.                                     | Property generation within profile bounds and exact structural comparison.     | Formal parser/printer proof.                              |
-| V10 | Original and canonical source agree with model on required cases.                 | Independent OPA/Regorus conformance observations.                              | Universal source-runtime correspondence.                  |
+| ID  | Property                                                                                                                              | Method and scope                                                                             | What remains unchecked                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| V1  | Every admitted atom has the specified request meaning.                                                                                | Lean atom-case lemmas; complete profile-adapter fixtures.                                    | Rust parsing and source mapping remain trusted.              |
+| V2  | `evalRequest p r = evalFacts p (α r)`.                                                                                                | Lean structural induction over every admitted IR policy.                                     | Full Rego semantics and actual runtimes.                     |
+| V3  | Every fact vector occurs in `allFacts`; `α(γ(f)) = f`.                                                                                | Lean Boolean case analysis.                                                                  | JSON decoder correctness and actual attribute provenance.    |
+| V4  | Finite checking implies each universal model claim.                                                                                   | Lean soundness theorem and per-policy kernel-reduced certificate.                            | Runtime refinement.                                          |
+| V5  | A reported model counterexample violates the named claim.                                                                             | Lean witness proof plus concrete JSON replay in OPA and Regorus.                             | General runtime equivalence beyond observations.             |
+| V6  | All six baseline requirements hold; deny-all fails availability.                                                                      | Checked model claims and independent truth-table acceptance fixtures.                        | Application-level availability or system state changes.      |
+| V7  | Evidence names exactly the policy, domain, requirements, and environment checked.                                                     | Negative substitution fixtures and clean regeneration against explicit inputs.               | Hash collision assumptions and host compromise.              |
+| V8  | Unsupported, malformed, incomplete, or timed-out work never passes.                                                                   | Adversarial state/result matrix; process-kill and corrupt-output injection.                  | General absence of implementation defects.                   |
+| V9  | Rendering and re-import preserve admitted IR.                                                                                         | Property generation within profile bounds and exact structural comparison.                   | Formal parser/printer proof.                                 |
+| V10 | Original and canonical source agree with model on required cases.                                                                     | Independent OPA/Regorus conformance observations.                                            | Universal source-runtime correspondence.                     |
+| V11 | Acceptance implies kernel replay, the exact statement, exact root coverage, and only approved axioms.                                 | Verus proof of settlement; corpus at the real worker.                                        | The report's truthfulness; environment integrity (V12).      |
+| V12 | The answering Lean environment is the one the evidence names: no shadowed module, forged privileged name, or altered trusted package. | Regression fixtures from the findings record; identity comparison against the 4.1.1 binding. | Crafted `.olean` files, host compromise, and kernel defects. |
 
 The trust ledger must describe these boundaries even when every test passes.
 Test success never upgrades `trusted_frontend` to `proved_translation`.
@@ -680,12 +734,12 @@ A standalone syntax library or proof notebook is not an exit gate. Each
 experiment adds an observable user workflow. These are scope boundaries, not a
 separate full project roadmap.
 
-| Experiment                   | Hypothesis                                                                                    | Demonstrable slice                                                                                                                    | Evidence and stop condition                                                                                                                                                           |
-| ---------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E0: first source-bound claim | A tiny exact frontend and finite model are sufficient for a meaningful source-first workflow. | One development command reads baseline source, proves tenant isolation, and produces a checked witness for the cross-tenant mutation. | Pin a working toolchain tuple; document source trust; inspect full AST coverage. Stop rather than generalize if the frontend cannot enforce admission. E0 is not a public v0 release. |
-| E1: complete policy contract | Useful safety and positive requirements fit the same small proof method.                      | The same workflow checks all six claims, all mutations, exact abstraction, and typed request boundaries.                              | V1–V6 and required finite-domain lemmas pass Lean checking. No manual edits to per-policy proof scripts. Keep this scope closed until it works.                                       |
-| E2: reviewer replay          | Evidence can remain bound and reproducible across an untrusted artefact boundary.             | A clean invocation verifies explicit source and claim files, reconstructs evidence, and replays OPA/Regorus observations.             | V7–V10, hostile-input matrix, sandbox limits, and measured budgets pass. All ToR success criteria except sponsor adoption have concrete evidence.                                     |
-| First user review            | The workflow improves an actual policy review.                                                | Sponsor and reviewer inspect one meaningful change and its assurance ledger.                                                          | Record a proceed/revise/stop decision under SC8. No new language features merely to avoid a negative result.                                                                          |
+| Experiment                   | Hypothesis                                                                                    | Demonstrable slice                                                                                                                    | Evidence and stop condition                                                                                                                                                                                                 |
+| ---------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E0: first source-bound claim | A tiny exact frontend and finite model are sufficient for a meaningful source-first workflow. | One development command reads baseline source, proves tenant isolation, and produces a checked witness for the cross-tenant mutation. | Pin a working toolchain tuple; document source trust; inspect full AST coverage; V11 holds under the §2.1 input model. Stop rather than generalize if the frontend cannot enforce admission. E0 is not a public v0 release. |
+| E1: complete policy contract | Useful safety and positive requirements fit the same small proof method.                      | The same workflow checks all six claims, all mutations, exact abstraction, and typed request boundaries.                              | V1–V6 and required finite-domain lemmas pass Lean checking. No manual edits to per-policy proof scripts. Keep this scope closed until it works.                                                                             |
+| E2: reviewer replay          | Evidence can remain bound and reproducible across an untrusted artefact boundary.             | A clean invocation verifies explicit source and claim files, reconstructs evidence, and replays OPA/Regorus observations.             | V7–V10, V12, hostile-input matrix, sandbox limits, and measured budgets pass. All ToR success criteria except sponsor adoption have concrete evidence.                                                                      |
+| First user review            | The workflow improves an actual policy review.                                                | Sponsor and reviewer inspect one meaningful change and its assurance ledger.                                                          | Record a proceed/revise/stop decision under SC8. No new language features merely to avoid a negative result.                                                                                                                |
 
 A subsequent profile requires a named second policy and independently stated
 property. A likely experiment may add another role or bounded membership, but
@@ -716,11 +770,12 @@ weaken a prerequisite when a spike fails.
 
 | Prerequisite            | Role                   | E0 needs                                                                                                                                                                                                                             | Public release needs                                                                            | Roadmap             |
 | ----------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------- |
-| Toolchain tuple         | maintainer             | Met by ADR-003 and `make toolchain-smoke`                                                                                                                                                                                            | Lockfiles, Regorus features, and OPA digest pinned and replayed cleanly                         | 1.2.1, 4.3.2        |
+| Toolchain tuple         | maintainer             | Met by ADR-003 and `make toolchain-smoke`                                                                                                                                                                                            | Lockfiles, Regorus features, and OPA digest pinned and replayed cleanly                         | 1.2.1, 4.3.3        |
 | Admission coverage      | maintainer             | Met by 1.2.2 and the [feasibility record](admission-feasibility-record.md): a closed decode, a profile walk, and a verified canonical-token recognizer; the E0 command admits through 2.1.2, which fails closed on anything unmapped | Hostile-source coverage of the same fail-closed admission                                       | 1.2.2, 2.1.2, 4.2.3 |
-| Axiom audit             | maintainer             | 1.2.3 investigates the audit interface; 2.2.4 accepts the E0 theorem only with the foundational axioms, rejecting `sorryAx` and native-computation axioms                                                                            | The same audit applied by `verify` to untrusted evidence                                        | 1.2.3, 2.2.4, 4.1.3 |
+| Axiom audit             | maintainer             | 1.2.3 demonstrates the audit interface under the §2.1 input model; 2.2.4 accepts the E0 theorem only with the foundational axioms, rejecting `sorryAx` and native-computation axioms                                                 | The same audit applied by `verify` to freshly regenerated jobs                                  | 1.2.3, 2.2.4, 4.1.3 |
+| Environment integrity   | maintainer             | Not needed; generated modules stay inside the §2.1 input model, and reports name it                                                                                                                                                  | Module provenance, a pinned replay base, and trusted-package identity enforced                  | 4.3.2               |
 | Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                                                                                                                                                                  | Enforced offline sandbox with memory and output limits, process-group kill, and private storage | 1.2.4, 4.3.1        |
-| Resource budgets        | maintainer             | Not needed; measurement is E2 evidence                                                                                                                                                                                               | Measured limits on an agreed machine                                                            | 4.3.2               |
+| Resource budgets        | maintainer             | Not needed; measurement is E2 evidence                                                                                                                                                                                               | Measured limits on an agreed machine                                                            | 4.3.3               |
 | Assurance statement     | sponsor                | ADR 0002 accepted                                                                                                                                                                                                                    | Release wording no stronger than ADR 0002                                                       | 1.1.1               |
 | Dependency distribution | sponsor                | Not needed                                                                                                                                                                                                                           | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR 0001)   | 5.2.2               |
 | First user review       | sponsor, policy author | Not needed                                                                                                                                                                                                                           | SC8 proceed, revise, or stop decision                                                           | 5.1.1               |
@@ -749,9 +804,9 @@ of reference remain the upstream authority for scope. [T1–T3]
 ## References
 
 Sources were inspected on 2026-10-04, except R3, R12, and R13, which were
-inspected on 2026-10-21, and R14 and R15, which were inspected on 2026-10-31.
-Moving documentation URLs describe the inspected API, not a substitute for
-release pins.
+inspected on 2026-10-21, R14 and R15, which were inspected on 2026-10-31, and
+R16–R18, which were inspected on 2026-11-05. Moving documentation URLs describe
+the inspected API, not a substitute for release pins.
 
 - **R1.**
   [OPA policy language](https://www.openpolicyagent.org/docs/policy-language).
@@ -805,3 +860,13 @@ release pins.
 - **R15.**
   [OPA v1.21.2 scanner](https://github.com/open-policy-agent/opa/blob/v1.21.2/v1/ast/internal/scanner/scanner.go):
   lexical rules and byte handling compared against Regorus.
+- **R16.**
+  [Validating a Lean proof](https://lean-lang.org/doc/reference/latest/ValidatingProofs/):
+  the escalating checks, `_native` axiom names, and the `.olean` attack
+  surface.
+- **R17.**
+  [leanprover/comparator](https://github.com/leanprover/comparator): statement
+  comparison across environments, merged into core as `lake comparator`.
+- **R18.**
+  [SafeVerify](https://github.com/GasStationManager/SafeVerify): replay
+  followed by checks on the replayed environment, with JSON output.
