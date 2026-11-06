@@ -148,11 +148,11 @@ and sets `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to displace the Cranelift
 default (with `CARGO_UNSTABLE_CODEGEN_BACKEND=true`, which opts in the
 temporary Cargo project where Dylint builds its driver), so its
 installer-managed toolchain builds without repository development flags.
-`scripts/tests/test_build_standard.py` holds each of these properties
-(`make test-scripts`). CI installs `mold` through `install-mold` on
-`setup-rust`, and the Cranelift component for the Whitaker toolchain through
-`cranelift: 'true'` on `install-whitaker`, the CI equivalent of
-`whitaker-installer --cranelift`.
+`scripts/tests/test_build_standard.py` holds the other build-standard properties
+(`make test-scripts`); the Concordat rule is the check for the Whitaker route.
+CI installs `mold` through `install-mold` on `setup-rust`, and the Cranelift
+component for the Whitaker toolchain through `cranelift: 'true'` on
+`install-whitaker`, the CI equivalent of `whitaker-installer --cranelift`.
 
 ## Changing a toolchain pin
 

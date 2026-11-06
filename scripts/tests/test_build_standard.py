@@ -10,7 +10,6 @@ quietly break, so each is held here.
 from __future__ import annotations
 
 import re
-import shlex
 import tomllib
 from pathlib import Path
 
@@ -63,26 +62,6 @@ def test_typecheck_restates_the_fast_flags() -> None:
     makefile = (ROOT / "Makefile").read_text("utf-8")
     assert f"-Zthreads=8$(if $(filter Linux,$(BUILD_HOST_OS)), {MOLD})" in makefile
     assert "$(STANDARD_RUSTFLAGS)" in _recipe("typecheck"), "typecheck must restate them"
-
-
-def test_the_whitaker_route_is_isolated() -> None:
-    """The route clears inherited sources and assigns its own flags and backend."""
-    recipe = _recipe("lint-whitaker")
-    assert "STANDARD_RUSTFLAGS" not in recipe, "the Whitaker route must not inherit mold"
-    words = shlex.split(recipe)
-    removed = {words[i + 1] for i, word in enumerate(words[:-1]) if word == "-u"}
-    assert "CARGO_ENCODED_RUSTFLAGS" in removed, "the route must clear encoded flags"
-    assigned = dict(word.split("=", 1) for word in words if re.match(r"[A-Z_]+=", word))
-    assert assigned.get("RUSTFLAGS") == "-D warnings", (
-        "the route must assign RUSTFLAGS the warning policy alone"
-    )
-    assert assigned.get("CARGO_PROFILE_DEV_CODEGEN_BACKEND") == "llvm", (
-        "the route must displace the Cranelift development backend"
-    )
-    assert assigned.get("CARGO_UNSTABLE_CODEGEN_BACKEND") == "true", (
-        "the route must opt Dylint's temporary driver project into the backend key"
-    )
-    assert "CARGO_ENCODED_RUSTFLAGS" not in assigned, "the route must assign no encoded flags"
 
 
 def test_ci_installs_mold_and_the_whitaker_cranelift_component() -> None:
