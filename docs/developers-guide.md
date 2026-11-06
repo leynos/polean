@@ -66,14 +66,15 @@ targets are:
 set it up locally, install `whitaker-installer` 0.2.11 or later (for example
 with `cargo binstall whitaker-installer`) and run
 `whitaker-installer --cranelift` once. The flag also installs
-`rustc-codegen-cranelift` for Whitaker's own toolchain. The `make lint-whitaker`
-route selects LLVM for the development profile, so the suite itself does not
-need the component; it stays so that a bare `cargo` command under that
-toolchain, which still meets the repository's Cranelift default, can build.
-The repository's `rust-toolchain.toml` component does not cover it. The installer installs the lint libraries and writes the
-`whitaker` and `whitaker-ls` wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`);
-add that directory to `PATH`. Run lints through the `whitaker` wrapper, which
-points Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
+`rustc-codegen-cranelift` for Whitaker's own toolchain. The
+`make lint-whitaker` route selects LLVM for the development profile, so the
+suite itself does not need the component; it stays so that a bare `cargo`
+command under that toolchain, which still meets the repository's Cranelift
+default, can build. The repository's `rust-toolchain.toml` component does not
+cover it. The installer installs the lint libraries and writes the `whitaker`
+and `whitaker-ls` wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`); add that
+directory to `PATH`. Run lints through the `whitaker` wrapper, which points
+Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
 unsupported. The first run builds the Dylint driver once. Whitaker's driver
 uses its own pinned toolchain, so it coexists with the repository's.
 
