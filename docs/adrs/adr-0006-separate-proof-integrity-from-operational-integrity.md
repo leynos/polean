@@ -2,8 +2,9 @@
 
 ## Status
 
-Proposed. Awaiting acceptance with the revised
-[1.2.3 ExecPlan](../execplans/1-2-3-demonstrate-type-and-axiom-auditing.md).
+Accepted. Accepted with the revised
+[1.2.3 ExecPlan](../execplans/1-2-3-demonstrate-type-and-axiom-auditing.md) on
+2026-11-06.
 
 ## Date
 
@@ -125,4 +126,8 @@ checker.
 
 ## Acceptance
 
-Not yet accepted.
+Accepted by the project sponsor on 2026-11-06, together with approval of
+revision 4 of the
+[1.2.3 ExecPlan](../execplans/1-2-3-demonstrate-type-and-axiom-auditing.md).
+The measured results are recorded in that plan's `Outcomes & retrospective`
+section as implementation completes.

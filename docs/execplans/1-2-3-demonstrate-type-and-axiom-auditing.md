@@ -5,8 +5,9 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 4). Implementation must not begin until the user
-explicitly approves this plan.
+Status: APPROVED (revision 4). The user approved this plan and accepted
+[ADR 0006](../adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
+on 2026-11-06, and implementation is under way.
 
 Roadmap item: [1.2.3](../roadmap.md). Branch:
 `1-2-3-demonstrate-type-and-axiom-auditing`.
@@ -259,8 +260,8 @@ revision has applied them to the technical design.
       design, the
   vocabulary, and ADR 0002 and ADR 0003, and proposed ADR 0006. Added the
   findings record.
-- [ ] User review of this revision, and acceptance of ADR 0006.
-- [ ] User approval of the plan. Implementation must not start before this.
+- [x] (2026-11-06) User review of this revision, and acceptance of ADR 0006.
+- [x] (2026-11-06) User approval of the plan.
 - [ ] EP-M1: contracts, corpus manifest, and settlement.
 - [ ] EP-M2: Verus proof of settlement.
 - [ ] EP-M3: Lean worker and end-to-end corpus run.
