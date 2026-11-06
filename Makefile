@@ -32,13 +32,16 @@ lint: lint-whitaker ## Build documentation, run Clippy and the Whitaker suite wi
 	RUSTDOCFLAGS="-D warnings" $(CARGO) doc --no-deps --all-features
 	$(CARGO) clippy --all-targets --all-features -- -D warnings
 
-WHITAKER_CLEAN_ENV = env -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS \
-	-u CARGO_PROFILE_DEV_CODEGEN_BACKEND -u CARGO_BUILD_TARGET \
-	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
-	-u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS -u CFLAGS -u LDFLAGS
-
+# Whitaker builds on its installer-managed toolchain, which must not inherit the
+# repository's development flags. The route clears the encoded flags and the
+# target settings, assigns the warning policy as its own `RUSTFLAGS` (an unset
+# value would leave Cargo reading the configuration's rustflags), and selects
+# LLVM for the development profile, whose Cranelift default the configuration
+# would otherwise apply (CARGO_UNSTABLE_CODEGEN_BACKEND opts in the temporary
+# Cargo project where Dylint builds its driver, which cannot discover the root
+# `.cargo/config.toml` that enables the unstable profile key). Dylint reads the warning policy from DYLINT_RUSTFLAGS.
 lint-whitaker: ## Run the Whitaker Dylint suite with clean driver inputs and warnings denied
-	$(WHITAKER_CLEAN_ENV) DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
+	env -u CARGO_ENCODED_RUSTFLAGS -u CARGO_BUILD_TARGET -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS -u CFLAGS -u LDFLAGS RUSTFLAGS="-D warnings" CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm CARGO_UNSTABLE_CODEGEN_BACKEND=true DYLINT_RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
 test: ## Run Rust unit, integration, and documentation tests
 	$(CARGO) test --all-targets --all-features

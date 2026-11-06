@@ -64,18 +64,6 @@ def test_typecheck_restates_the_fast_flags() -> None:
     assert "$(STANDARD_RUSTFLAGS)" in _recipe("typecheck"), "typecheck must restate them"
 
 
-def test_the_whitaker_route_is_isolated() -> None:
-    """The route clears inherited flags and backend overrides, and takes none."""
-    makefile = (ROOT / "Makefile").read_text("utf-8")
-    clean = re.search(r"^WHITAKER_CLEAN_ENV = (?:[^\n]*\\\n)*[^\n]*", makefile, re.MULTILINE)
-    assert clean, "the Makefile must define WHITAKER_CLEAN_ENV"
-    for variable in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_PROFILE_DEV_CODEGEN_BACKEND"):
-        assert f"-u {variable}" in clean.group(0), f"the Whitaker route must clear {variable}"
-    recipe = _recipe("lint-whitaker")
-    assert "$(WHITAKER_CLEAN_ENV)" in recipe, "lint-whitaker must run in the clean environment"
-    assert "STANDARD_RUSTFLAGS" not in recipe, "the Whitaker route must not inherit mold"
-
-
 def test_ci_installs_mold_and_the_whitaker_cranelift_component() -> None:
     """Hosted jobs that build with the Linux table need mold; Whitaker needs Cranelift."""
     for workflow in ("ci.yml", "toolchain.yml"):

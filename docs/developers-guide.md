@@ -66,12 +66,15 @@ targets are:
 set it up locally, install `whitaker-installer` 0.2.11 or later (for example
 with `cargo binstall whitaker-installer`) and run
 `whitaker-installer --cranelift` once. The flag also installs
-`rustc-codegen-cranelift` for Whitaker's own toolchain, which the repository's
-Cranelift default needs; the repository's `rust-toolchain.toml` component does
-not cover it. The installer installs the lint libraries and writes the
-`whitaker` and `whitaker-ls` wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`);
-add that directory to `PATH`. Run lints through the `whitaker` wrapper, which
-points Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
+`rustc-codegen-cranelift` for Whitaker's own toolchain. The
+`make lint-whitaker` route selects LLVM for the development profile, so the
+suite itself does not need the component; it stays so that a bare `cargo`
+command under that toolchain, which still meets the repository's Cranelift
+default, can build. The repository's `rust-toolchain.toml` component does not
+cover it. The installer installs the lint libraries and writes the `whitaker`
+and `whitaker-ls` wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`); add that
+directory to `PATH`. Run lints through the `whitaker` wrapper, which points
+Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
 unsupported. The first run builds the Dylint driver once. Whitaker's driver
 uses its own pinned toolchain, so it coexists with the repository's.
 
@@ -138,13 +141,18 @@ every commit. It is not in `make all` for that reason.
 
 Assigning `RUSTFLAGS` replaces every `rustflags` source, so the `typecheck`
 recipe restates the flags through `STANDARD_RUSTFLAGS`. The Whitaker route
-takes none of them: `WHITAKER_CLEAN_ENV` clears inherited flags and backend
-overrides so its installer-managed toolchain builds without repository
-development flags. `scripts/tests/test_build_standard.py` holds each of these
-properties (`make test-scripts`). CI installs `mold` through `install-mold` on
-`setup-rust`, and the Cranelift component for the Whitaker toolchain through
-`cranelift: 'true'` on `install-whitaker`, the CI equivalent of
-`whitaker-installer --cranelift`.
+takes none of them: an `env` prefix on the Whitaker command clears the
+inherited encoded flags and target settings, assigns `RUSTFLAGS` the warning
+policy alone (unset, Cargo would still read the configuration's `rustflags`),
+and sets `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to displace the Cranelift
+default (with `CARGO_UNSTABLE_CODEGEN_BACKEND=true`, which opts in the
+temporary Cargo project where Dylint builds its driver), so its
+installer-managed toolchain builds without repository development flags.
+`scripts/tests/test_build_standard.py` holds the other build-standard properties
+(`make test-scripts`); the Concordat rule is the check for the Whitaker route.
+CI installs `mold` through `install-mold` on `setup-rust`, and the Cranelift
+component for the Whitaker toolchain through `cranelift: 'true'` on
+`install-whitaker`, the CI equivalent of `whitaker-installer --cranelift`.
 
 ## Changing a toolchain pin
 
