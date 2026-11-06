@@ -1,0 +1,1319 @@
+# Demonstrate declaration-type and transitive-axiom auditing
+
+This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
+`Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
+current as work proceeds.
+
+Status: DRAFT (revision 4). Implementation must not begin until the user
+explicitly approves this plan.
+
+Roadmap item: [1.2.3](../roadmap.md). Branch:
+`1-2-3-demonstrate-type-and-axiom-auditing`.
+
+## Purpose / big picture
+
+Polean's first claim is that Lean checked a model theorem. A compiled Lean file
+does not establish that. A build succeeds with `sorry`, with `native_decide`,
+or with an invented `axiom`, and a declaration may have the requested name and
+prove something else. Technical design §6.2 therefore requires the expected
+declaration type, exact requested claim coverage, successful checking, and a
+machine-readable audit.
+
+This task establishes **proof integrity**: Polean can determine whether Lean's
+kernel checked exactly the requested proposition, with complete theorem-root
+coverage and only approved transitive axioms. It does so under the
+**generated-module input model** in technical design §2.1: Polean generates
+Lean modules from trusted templates and constrained policy data, and accepts no
+arbitrary Lean source or compiled proof artefact.
+
+When the work is done, a contributor runs `make toolchain-smoke` and watches a
+small trusted Lean program, `polean-audit`, inspect a committed corpus of
+fixtures. It replays the modules through the kernel and returns one JSON report
+of each root's kind, statement, and transitive axioms. A test-only Rust
+settlement function compares that report with an audit request holding the
+exact expected propositions and the approved foundations. It decides `accepted`,
+`rejected` with named findings, or `tool_failure`.
+
+Honest theorems are accepted. Fixtures using `sorry`, `native_decide`, or an
+undeclared axiom are rejected, including when the axiom hides behind an
+imported definition. A root with the wrong statement, a theorem about a
+different policy literal, a root that is not a theorem, and a declaration the
+kernel refuses are each rejected for their own named reason. Malformed worker
+output is a tool failure, never a rejection or an acceptance. A Verus proof
+shows settlement accepts exactly when an independently written specification
+holds.
+
+This task does **not** establish **operational integrity**: that the Lean
+environment that answered is the one the evidence names. Module provenance and
+shadowing, privileged-name forgery, and trusted proof-package integrity move to
+roadmap 4.3.2, and
+[ADR 0006](../adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
+records why. The earlier adversarial work is preserved in the
+[findings record](../lean-environment-integrity-findings.md).
+
+A passing audit is an input to claim 2 in AGENTS.md, and proves no registered
+requirement, because no Polean semantics exist yet. It says nothing about
+admission, translation, or runtime correspondence. Promotion into production
+belongs to 2.2.4.
+
+## Revised scope for review
+
+These tables are what changed in revision 4.
+
+| Concern                                          | Revision 3 | Revision 4                   |
+| ------------------------------------------------ | ---------- | ---------------------------- |
+| Kernel replay of non-toolchain modules           | 1.2.3      | 1.2.3                        |
+| Exact statement, coverage, and kind              | 1.2.3      | 1.2.3                        |
+| Transitive axioms against approved foundations   | 1.2.3      | 1.2.3, by name               |
+| Machine-readable report and fail-closed outcomes | 1.2.3      | 1.2.3                        |
+| No execution of inspected code                   | 1.2.3      | 1.2.3                        |
+| Own axiom walker                                 | 1.2.3      | Upstream `collectAxioms`     |
+| Foundation origin table                          | 1.2.3      | 4.3.2                        |
+| Pinned `Init` replay base                        | 1.2.3      | 4.3.2                        |
+| Worker-fixed search order and module classes     | 1.2.3      | 4.3.2                        |
+| Statement provenance                             | 1.2.3      | 4.3.2                        |
+| Trusted-package identity                         | 4.1.3      | 4.3.2, using 4.1.1's binding |
+| Worker deadline and output reader                | 1.2.3      | 2.3.1, then 4.3.1            |
+
+_Table 1: Where each concern now lands._
+
+Dependencies after this revision:
+
+```plaintext
+1.2.1 -> 1.2.3 -> 2.2.4 -> 2.3.3 -> phase 3 -> 4.1.1 -> 4.1.2 -> 4.1.3
+4.1.3 -> 4.2.x -> 4.3.1
+4.1.3 and 4.3.1 -> 4.3.2 (new) -> 4.3.3 (was 4.3.2) -> 5.1.1
+```
+
+The assurance trade-offs are stated plainly under `Assurance trade-offs`.
+
+## Constraints
+
+- Keep the four claims in AGENTS.md separate in every test name, diagnostic,
+  contract, and document. An `accepted` settlement is not `model_proved`.
+  Describe settlement as verified at a named commit and the worker as tested.
+  Never describe the audit as verified, and do not describe it as defending
+  against a hostile Lean environment.
+- Accept no user Lean, Lake files, compiled proof modules, native libraries, or
+  plug-ins as verifier input. The expected proposition is data held by Rust and
+  never reaches Lean. Names reach the worker only as argument array entries,
+  which it splits on `.` into `Name` values without parsing them as Lean source.
+- The audit must not execute code from the modules it inspects. The worker
+  imports with `loadExts := false`, never enables initializer execution, and
+  never calls `evalConst`.
+- Do not add an item to `src/` or a binary target to `Cargo.toml`. The guard in
+  `tests/documentation_examples/scope.rs` fails when one appears, and 2.1.4
+  owns the application edge. The Rust side of this spike is test-only under
+  `tests/toolchain/audit/`.
+- The Lean worker is repository-owned trusted code at `lean/PoleanAudit.lean`.
+  Fixtures are compiled into scratch directories and never join the Lake
+  package.
+- The worker reports observations, with no verdict and no comparison result.
+  Rust settlement is the only acceptance authority. A report cannot choose its
+  own outcome (technical design §8), and the exit status is not acceptance
+  (§6.2).
+- Run tools by explicit digest-named path with a cleared environment and an
+  argument array. Do not resolve any tool through `PATH` or elan.
+- Do not change a pin: `toolchain-pins.json`, `lean/lean-toolchain`, the empty
+  package list in `lean/lake-manifest.json`, `rust-toolchain.toml`, or the
+  Verus pins.
+- Do not use `assume`, `admit`, `external_body`, or any other trusted proof
+  body in `verus/`. Do not use `sorry`, `native_decide`, or an `axiom` in
+  `lean/PoleanAudit.lean`.
+- Do not add operational-integrity checks to this milestone. Findings that fall
+  outside the input model go to the findings record for 4.3.2.
+- Do not modify `examples/tenant-write/` or `examples/admission/`.
+- Keep Rust modules under 400 lines and functions under 70 lines. Every Rust
+  module begins with a module-level comment. `std::fs` remains banned in tests;
+  use `tests/toolchain/ambient.rs`.
+
+If satisfying the objective requires violating a constraint, do not proceed.
+Record the conflict in `Decision log`, set the status to `BLOCKED`, and
+escalate.
+
+## Tolerances (exception triggers)
+
+Exclude this ExecPlan from every count below.
+
+- Scope: stop and escalate if implementation needs more than 30 non-fixture
+  files or about 3,000 net lines of code and other documentation. Lean
+  fixtures, reviewed snapshots, and regenerated validation outputs do not count.
+- Interface: stop if any public item in `src/` or the proposed CLI in
+  `contracts/cli.txt` would have to change.
+- Dependencies: the only authorized new dependency is `serde`, pinned
+  `=1.0.229` with the `derive` feature under `[dev-dependencies]`. It is
+  already in `Cargo.lock` at that version. Anything else needs approval.
+- Design: if any fixture in Table 2 cannot be classified as specified by the
+  pinned toolchain, or a probe in `Artefacts and notes` does not reproduce,
+  stop. Record the deviation, set `BLOCKED`, and wait for acceptance. Do not
+  edit the manifest to match the worker.
+- Verification: if the settlement theorem cannot be discharged without a
+  trusted body, stop and present the options. Do not weaken the specification.
+- Iterations: stop after three failed attempts on one root cause.
+- Resources: stop if the worker exceeds 30 s or 4 GiB resident on any fixture.
+- Ambiguity: stop and present options when a choice materially changes what a
+  settlement means.
+
+## Assurance trade-offs
+
+- **What is gained.** Phase 1 remains a feasibility demonstration with one
+  clear claim. Phase 2 gets a small interface: a worker of about 85 lines in
+  prototype, a shorter report, and a simpler specification. Hardening lands
+  once, where the identities it depends on exist.
+- **What is given up.** Between 1.2.3 and 4.3.2, an audit can accept a forged
+  result if the input model is broken, and it looks like any other result. On
+  the pinned tuple, the proof-integrity worker reports a clean zero-axiom proof
+  of `False` from a `prelude` module redefining `Nat.gcd`, and a clean result
+  from a same-named replacement of a trusted module (Table 1 in the findings
+  record). A defect in a template, or a tampered proof package, would be
+  undetected in the same way.
+- **Why that is acceptable now.** No external party can supply Lean. The
+  templates of 2.2.4 emit only enum and list literals. Nothing public makes the
+  ADR 0002 statement before 4.3.2, and development reports name the input model.
+- **What stays strong.** A kernel-rejected declaration, a wrong statement, an
+  omitted root, and any unapproved axiom are all still caught, and those are
+  the failures realistic inside the input model.
+- **A cheap option kept open.** Pinning `Init` in the replay base is one line,
+  and would catch privileged-name forgery. It is deferred because that is the
+  agreed boundary, and 4.3.2 can take it early if a template defect ever looks
+  plausible.
+- **Residual gaps after 4.3.2.** Crafted `.olean` files, host compromise, and
+  kernel defects stay outside. Those limits predate this revision.
+
+## Accepted design deviations
+
+The user accepted these on 2026-11-05 (D13), and revision 4 keeps them. This
+revision has applied them to the technical design.
+
+1. The worker lives at `lean/PoleanAudit.lean`, because it imports `Lean`,
+   which policy modules must not load.
+2. A root's statement must be a ground tree of constants and applications (D3).
+   Claims are stated through a named predicate such as `Holds claim literal`,
+   rather than the bare `∀ r` signatures technical design §5 sketches.
+   Non-empty rule bodies are represented structurally. The predicate's
+   definition may quantify.
+3. Toolchain modules are not replayed. The audit trusts toolchain `.olean`
+   files unpacked once from a digest-checked archive.
+
+## Risks
+
+- Risk: structural statement comparison is too brittle for real claims.
+  Severity: medium. Likelihood: medium. Mitigation: the 2026-11-06 probe
+  confirmed a named predicate over a nested list literal is a bare
+  `const`/`app` tree, and a maximal 16-by-16 policy fits at 1,705 nodes and
+  depth 37. `AcceptedClaimShape` and `MaximalPolicy` pin this, and
+  out-of-grammar statements report `null` and fail closed.
+- Risk: a reader takes `accepted` to mean more than it does. Severity: high.
+  Likelihood: medium. Mitigation: the constraints, `Assurance trade-offs`, ADR
+  0006, and technical design §2.1 all state the condition, and development
+  reports must name the model.
+- Risk: `Lean.collectAxioms` relies on a pre-computed extension for imported
+  declarations and ignores an unknown constant. Severity: low inside the model.
+  Likelihood: low. Mitigation: `SorryImported` and `ReachImported` exercise
+  imports at the real interface, and an independent walk agreed on every
+  fixture compared. 4.3.2 owns anything stronger.
+- Risk: a worker hang stalls a gate, because no supervisor exists until 2.3.1.
+  Severity: low. Likelihood: low. Mitigation: the worker takes trusted input
+  and has no loop over untrusted data. A hang shows up as the 30-minute
+  workflow limit, and 2.3.1 and 4.3.1 own bounded execution.
+- Risk: "verified" drifts, because a settlement edit can pass CI without Verus
+  running. Severity: medium. Likelihood: medium. Mitigation: the source is
+  shared through `#[path]`, documents name the verified commit, and the
+  developers guide lists `make verus` for that directory. This matches the
+  recognizer's posture.
+- Risk: the Verus proof costs more than settlement deserves. Severity: medium.
+  Likelihood: low. Removing origin and provenance makes the model far smaller
+  than the recognizer's 2,252 lines of specification and lemmas. Literal-slice
+  contents are opaque to the pinned Verus (`verus/admission_spec.rs`), so use
+  exec builders with `ensures r@ == seq![...]`, one recursive `contains`, and a
+  `bytes_eq` helper following `matches_at`. The verification tolerance applies
+  otherwise.
+- Risk: the fixed foundation names or worker APIs drift on a Lean upgrade.
+  Severity: low. Likelihood: medium. Mitigation: `AcceptedFoundations` fails
+  closed, `warningAsError` turns deprecations into build failures, and EP-M4
+  adds a step to the pin-change procedure.
+- Risk: the sibling-worktree toolchain used for the probes is not this
+  worktree's gate input. Severity: low. Likelihood: certain. Mitigation: EP-M3
+  runs `make tools` here and repeats the probes through the committed fixtures.
+
+## Progress
+
+- [x] (2026-11-05) Renamed the branch, loaded the required skills, and surveyed
+      the repository
+  with a Wyvern team.
+- [x] (2026-11-05) Researched `lake comparator`, `lake check`, SafeVerify, and
+      the Lean
+  proof-validation guide, and probed the pinned Lean 4.35.0.
+- [x] (2026-11-05) Drafted the plan, ran the expert panel and its live attack,
+      and revised it.
+- [x] (2026-11-05) Published draft pull request #35. The user accepted three
+      design deviations
+  and the Verus milestone (D13).
+- [x] (2026-11-06) The user directed separating proof integrity from
+      operational integrity (D14).
+- [x] (2026-11-06) Re-ran the corpus and attacks against a proof-integrity
+      prototype and a hardened
+  prototype.
+- [x] (2026-11-06) Revised this plan (revision 4), the roadmap, the technical
+      design, the
+  vocabulary, and ADR 0002 and ADR 0003, and proposed ADR 0006. Added the
+  findings record.
+- [ ] User review of this revision, and acceptance of ADR 0006.
+- [ ] User approval of the plan. Implementation must not start before this.
+- [ ] EP-M1: contracts, corpus manifest, and settlement.
+- [ ] EP-M2: Verus proof of settlement.
+- [ ] EP-M3: Lean worker and end-to-end corpus run.
+- [ ] EP-M4: documentation and roadmap completion.
+
+## Surprises & discoveries
+
+Findings about the Lean environment outside the input model, including the two
+attacks that defeated revision 1, are in the
+[findings record](../lean-environment-integrity-findings.md) as research and
+regression candidates for 4.3.2. Those affecting this milestone are below.
+
+- Observation: `native_decide` produces one axiom per use, named such as
+  `Fx.Native.helper._native.native_decide.ax_1_1`, in the job's own module.
+  Evidence: `Native`. Impact: this confirms ADR 0003 input 1. Acceptance is by
+  allowlist, and the `_native` component only selects the diagnostic.
+- Observation: a theorem compiled under `debug.skipKernelTC` passes every
+  static check, with `Init` alone: `(1 : Nat) = 2` by `decide +kernel`.
+  Evidence: `ForgeInit`. Impact: replay is what makes "kernel-checked" an
+  observation that can fail, so it stays here as the negative control.
+- Observation: `Kernel.Environment.replay` skips unsafe and partial constants,
+  and compares constructors and recursors rather than sending them to the
+  kernel. Evidence: `Lean/Replay.lean`. Impact: W3's wording. A skipped root is
+  simply absent from the replayed environment.
+- Observation: `«Quot.sound»` is a one-component name that an unescaped
+  renderer prints identically to the two-component `Quot.sound`. Evidence:
+  `SpoofedName`. Impact: names cross JSON as component arrays, which costs
+  nothing and avoids a later schema change.
+- Observation: `docs/references.md`, named in the task's required reading, does
+  not exist. Evidence: `ls docs/`. Impact: none. References stay in the
+  technical design and this plan.
+
+## Decision log
+
+- D1. Decision: the worker observes and Rust settles, including statement
+  comparison. Rationale: technical design §8 forbids a report choosing its own
+  outcome. The worker reports the statement as a tree and never sees the
+  expected one, which moves statement equality inside the theorem. Date/Author:
+  2026-11-05, plan author, from the panel.
+- D2. Decision: build a small repository-owned worker instead of adopting
+  `lake comparator` or `lake check`. Rationale: they need `bwrap` or an
+  explicit unsandboxed flag, report in text, and export the environment at
+  about two minutes a run. They answer hostile-proof questions this milestone
+  does not ask. See Table 3. Date/Author: 2026-11-05, plan author.
+- D3. Decision: an expected proposition is a ground `const`/`app` tree,
+  compared as an injective byte key. Rationale: a named declaration in the job
+  lets a faulty job define its own target, source text would put data in a Lean
+  executable position, and definitional equality accepts more than was asked, as
+  `Unfolded` shows. Date/Author: 2026-11-05, plan author.
+- D4. Superseded by D14. Statement provenance moves to 4.3.2.
+- D5. Superseded by D14. Module class by location moves to 4.3.2.
+- D6. Partly superseded by D14. Replaying non-toolchain modules stays. Pinning
+  `Init` in the base moves to 4.3.2. Fresh replay of the toolchain stays out,
+  at 91 s.
+- D7. Decision: a request may narrow the foundations but not widen them, and
+  `settle` re-validates, so its theorems carry no precondition on callers.
+  Foundations are identified by name, which is sound only under the input
+  model. Date/Author: revised 2026-11-06, plan author.
+- D8. Decision: put the Rust spike in the existing `toolchain` test binary.
+  Rationale: it inherits the helpers, the `smoke::` filter behind
+  `make toolchain-smoke`, and the CI path filter. `settlement/` and `wire/`
+  depend on no sibling module, so 2.2.4 can promote them with `git mv`.
+  Date/Author: 2026-11-05, plan author.
+- D9. Decision: record the integrity boundary in ADR 0006, and the research in
+  a findings record. Rationale: the findings must outlive this plan, which
+  becomes historical on merge. Date/Author: revised 2026-11-06, plan author.
+- D10. Decision: use Verus for settlement, and tests for the worker and
+  adapter. Rationale: see `Verification plan`. The user accepted this (D13).
+  Date/Author: 2026-11-05, plan author.
+- D11. Decision: panel suggestions not adopted. A settlement-table `insta`
+  snapshot duplicates the manifest. A property oracle for settlement duplicates
+  S1. Settling in Lean loses the promotable logic. Date/Author: 2026-11-05,
+  plan author.
+- D12. Decision: worker failures are `tool_failure` here, and `deepRecursion`
+  and `excessiveMemory` reach the worker only as replay text and fail closed as
+  `kernel_rejected`. Date/Author: 2026-11-05, plan author.
+- D13. Decision: accept the plan's recommendations on the worker's location,
+  the ground statement form, trusting toolchain `.olean` files, and keeping
+  EP-M2. Rationale: the user accepted these in conversation when reviewing
+  revision 2. This was not approval to implement. Date/Author: 2026-11-05,
+  `leynos`.
+- D14. Decision: separate proof integrity from operational integrity. This
+  milestone establishes proof integrity under the generated-module input model,
+  and a new item, 4.3.2, owns module provenance and shadowing, privileged-name
+  forgery, trusted-package integrity, and further hardening. Rationale: the
+  user directed this. Polean does not accept arbitrary Lean, so an adversarial
+  Lean environment is outside the initial input model. Date/Author: 2026-11-06,
+  `leynos`.
+- D15. Decision: use upstream `Lean.collectAxioms` rather than a
+  repository-owned walk. Rationale: walk completeness was the worker's largest
+  obligation, and existed to avoid trusting a pre-computed extension in
+  imported files. Inside the input model, those files come from honest
+  compiles. The two agreed on every fixture compared. The walker's per-arm
+  fixtures and mutations go with it. Date/Author: 2026-11-06, plan author.
+- D16. Decision: keep kernel replay in this milestone, although fixed templates
+  cannot disable the kernel. Rationale: the objective is to determine whether
+  Lean has kernel-checked the proposition. Without replay that is an assumption
+  no test can falsify, and it costs about a second. `ForgeInit` and
+  `ForgeImported` are its negative controls, not a defence against adversaries.
+  Date/Author: 2026-11-06, plan author.
+- D17. Decision: reuse the existing unbounded test `run` helper, with a size
+  check on captured output. Rationale: the worker's input is trusted, and 2.3.1
+  owns the deadline. The `run_bounded` helper and `ReplayBomb` fixture from
+  revision 2 are dropped. The bomb result did not reproduce on re-run.
+  Date/Author: 2026-11-06, plan author.
+
+## Outcomes & retrospective
+
+Nothing has been implemented. Complete this section at each milestone and at
+the end. Before setting `COMPLETE`, reconcile every discovery with the upstream
+artefacts in `Conformance basis`.
+
+## Context and orientation
+
+Polean is a design scaffold. `src/lib.rs` holds a project name and a status
+string. Later roadmap items build a Rust orchestrator around a pinned Lean
+proof package. The policy under check is expressed as data, and generated Lean
+modules contain only enum and list literals inside fixed templates.
+
+Some terms recur throughout this plan.
+
+- A **declaration** is a named entry in a Lean environment, such as a theorem
+  or an axiom. A **theorem root** is a declaration the audit is asked about.
+- A **statement** is a theorem's type: the proposition it proves.
+- An **axiom** is a declaration accepted without proof. Its **transitive
+  closure** is every axiom reachable through types and values.
+- A **foundation** is one of `propext`, `Quot.sound`, and `Classical.choice`,
+  the three axioms of Lean's logic that ADR 0002 trusts.
+- The **Lean kernel** is Lean's small trusted checker. **Replay** sends stored
+  declarations through it again, as `leanchecker` does.
+- An **`.olean` file** is Lean's compiled module format.
+- The **sysroot** is the digest-named Lean install.
+- **Settlement** is the Rust decision over a request and a report. Its outcomes
+  are `accepted`, `rejected`, and `tool_failure`.
+
+The relevant files are these. `lean/` is a Lake package whose only library,
+`PoleanSmoke`, is a compile-time probe. `lean/lakefile.toml` sets
+`warningAsError = true`, so fixtures with `sorry` cannot be built there.
+`toolchain-pins.json` records the Lean archive, which
+`scripts/provision_tools.py` installs at `.polean/tools/lean/<sha256>/` after a
+digest check. `make tools` provisions it. `make toolchain-smoke` provisions and
+then runs the `#[ignore]` tests matched by `smoke::` in the `toolchain` test
+binary (`tests/toolchain/main.rs`). `tests/toolchain/smoke/mod.rs` shows how a
+tool is run with `env_clear()`, and how an absent tool fails rather than
+skipping.
+
+`contracts/` holds the JSON Schema contracts. `validation/validate_design.py`
+discovers every `contracts/*.schema.json` through `load_schemas` and records
+`json_schemas_checked` in `validation/design-validation.json`. `SHA256SUMS`
+lists the design pack. No gate checks it, but plans refresh it by hand.
+
+`verus/admission_recognizer.rs` shows the proof pattern. Source written once
+under `tests/admission/recognizer/kernel/` is compiled by Cargo as test code
+and pulled into Verus with `#[path]`, so the executed and verified code are the
+same files. `scripts/check_verus_controls.py` requires Verus to reject seeded
+faults. `make verus` runs both, on demand.
+
+Consult these before starting:
+
+- `docs/technical-design.md` §§2.1, 5, 6.2, 8, 10, and 13.
+- `docs/adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md`.
+- `docs/terms-of-reference.md`, `docs/context.md`, and
+  `docs/developers-guide.md`.
+- ADR 0002 for the trust statement, and ADR 0003 "Inputs for 1.2.3".
+- `docs/reliable-testing-in-rust-via-dependency-injection.md`,
+  `docs/rust-testing-with-rstest-fixtures.md`, and
+  `docs/rust-doctest-dry-guide.md`.
+- `docs/complexity-antipatterns-and-refactoring-strategies.md`.
+- `docs/scripting-standards.md` for the changes to `scripts/`.
+- `docs/documentation-style-guide.md` for assurance language.
+
+The task also names `docs/references.md`, which does not exist.
+
+Load the skills `rust-router`, then `rust-unit-testing`, `rust-errors`,
+`proptest`, and `verus` as each facet arises. Use `codegraph-mcp` for
+navigation, `execplans` for this document, `en-gb-oxendict-style` for prose,
+`addressing-whitaker-findings` for lint findings, and `sdlc-implementation` to
+drive the milestones.
+
+## Conformance basis
+
+Upstream artefacts: commit `de8a85ece8340fb7ab57794b405c16fe86db2bee`, as
+amended on this branch by this revision.
+
+- `docs/terms-of-reference.md`: goals G5 and G6, success criterion SC6,
+  assumption A6. Unchanged, because the scope of the product does not change.
+- `docs/technical-design.md`, draft v0.1: §2.1 (new), §5, §6, §6.2, §8, §10
+  (V11 and V12, new), and §13.
+- `docs/roadmap.md`: item 1.2.3, and new item 4.3.2.
+- ADR 0002 item 2, ADR 0003 "Inputs for 1.2.3", and ADR 0006 (proposed).
+- `contracts/cli.txt`: exit 6 and exit 7, unchanged by this work.
+
+Trace links:
+
+```plaintext
+1.2.3 "pinned audit interface"
+  -> TD §6.2, ADR 0003 tuple -> polean-audit, audit contracts -> EP-M3
+  -> smoke::audit::corpus_matches_manifest
+1.2.3 "accepts an expected proposition and approved foundations"
+  -> TD §6.2, V11 -> S1 -> EP-M1, EP-M2 -> AcceptedGround, AcceptedFoundations, S7
+1.2.3 "rejects sorryAx"
+  -> TD §6.2, ADR 0002 item 2 -> S3 -> EP-M2, EP-M3 -> Sorry, SorryImported
+1.2.3 "native-computation trust axioms"
+  -> TD §5, ADR 0003 input 1 -> S3, A1 -> EP-M2, EP-M3 -> Native
+1.2.3 "undeclared assumptions"
+  -> TD §6.2 -> S3, W2 -> EP-M2, EP-M3 -> Undeclared, ReachImported, NarrowedFoundations
+1.2.3 "machine-readable results"
+  -> TD §6.2, §8 -> contracts/audit-report.schema.json -> EP-M1 -> design-check, wire tests
+TD §6.2 "expected declaration type"
+  -> S1, W4, W5 -> EP-M2, EP-M3 -> WrongStatement, WrongPolicyLiteral, AxiomRoot
+TD §6.2 "exact requested claim coverage"
+  -> S2 -> EP-M1, EP-M2 -> coverage unit tests, settlement proof
+TD §6.2 "malformed, or contradictory worker output is a tool failure"
+  -> S2, A2, W1 -> EP-M1 -> wire tests, feature scenarios, WorkerGarbled
+TD §2 "kernel replay"
+  -> W3 -> EP-M3 -> ForgeInit, ForgeImported
+TD §2.1 operational integrity, V12 -> 4.3.2 -> not this plan
+```
+
+## Verification plan
+
+### What is being claimed
+
+Three layers with different evidence meet at the JSON report.
+
+1. **Settlement** is a pure function, so Verus can prove it for all inputs.
+2. **The wire adapter** is strict JSON decoding and key encoding, tested by
+   unit and property tests.
+3. **The worker** is Lean `IO` code over toolchain internals. It carries no
+   proof. It is tested against a corpus at the real interface, with seeded
+   mutations showing the corpus detects faults.
+
+Verus proves settlement correct given a truthful report. Nothing proves the
+report truthful: that rests on the corpus and the axioms below. The whole
+result is conditional on the input model.
+
+### Abstract model first
+
+Define these specifications in `verus/audit_settlement_spec.rs`, independently
+of the executable code. Keys are byte sequences built by `wire::name_key` and
+`wire::tree_key`, and are opaque to the model. `K_propext`, `K_quot`,
+`K_choice`, and `K_sorry` are concrete byte sequences.
+
+```text
+Axiom   := { name: Key, native: bool }     // native selects a diagnostic only
+Decl    := { kind, statement: Option<Key>, axioms: Seq<Axiom> }
+RootObs := { name: Key, decl: Option<Decl> }
+Replay  := Accepted(modules: Seq<Key>) | Rejected
+Report  := { githash, module: Key, replay: Replay, roots: Seq<RootObs> }
+Request := { module: Key, foundations: Seq<Key>, roots: Seq<{ name: Key, expected: Key }> }
+
+pinned(n) := n in { K_propext, K_quot, K_choice }
+
+valid_request(q) := |q.roots| > 0
+  and root names are pairwise distinct
+  and forall f in q.foundations. pinned(f)
+
+protocol_ok(q, p, pin) := p.githash == pin and p.module == q.module and match p.replay {
+  Rejected => |p.roots| == 0,
+  Accepted(ms) => q.module in ms
+    and |p.roots| == |q.roots|
+    and forall i. p.roots[i].name == q.roots[i].name }
+
+approved(q, a) := a.name in q.foundations
+
+root_clean(q, i, o) := o.decl == Some(d) and d.kind == theorem
+  and d.statement == Some(q.roots[i].expected)
+  and forall a in d.axioms. approved(q, a)
+
+acceptable(q, p, pin) := valid_request(q) and protocol_ok(q, p, pin)
+  and p.replay is Accepted
+  and forall i. root_clean(q, i, p.roots[i])
+
+axiom_code(q, a) :=
+  if approved(q, a) then None
+  else if a.name == K_sorry then Some(SorryAxiom)
+  else if a.native then Some(NativeAxiom)
+  else Some(UndeclaredAxiom)
+
+// expected_findings(q, p), in order:
+//   Rejected replay => [ { root: None, item: None, KernelRejected } ]
+//   Otherwise, for each root i:
+//     decl None    => [ { i, None, RootAbsent } ]
+//     decl Some(d) => WrongKind if kind != theorem;
+//       StatementMismatch if statement != Some(expected);
+//       { i, j, axiom_code } for each unapproved axiom j.
+```
+
+### Settlement obligations (Verus)
+
+Each is a hypothesis about the eventual proof structure, and implementation may
+split or refine them. `settle` returns `Result<Settlement, RequestRefusal>` and
+carries no precondition, because the adapter is unverified and could not
+discharge one.
+
+- S0 `settle_refuses_exactly`: `settle` is `Err` if and only if not
+  `valid_request(q)`.
+- S1 `settle_accepts_exactly`: `settle` is `Ok(Accepted)` if and only if
+  `acceptable(q, p, pin)`. This is the main theorem. Soundness alone is met by
+  a function that never accepts, as deny-all meets the safety claims (technical
+  design §3), so it runs in both directions.
+- S2 `settle_fails_exactly`: `settle` is `Ok(ToolFailure)` if and only if
+  `valid_request(q)` and not `protocol_ok(q, p, pin)`. S0, S1, and S2 leave
+  `Rejected` as exactly the remainder, and a protocol breach always takes
+  precedence over findings.
+- S3 `accepted_axioms_closed_world`: `Ok(Accepted)` implies every reported
+  axiom's name is one of the three literals, and is not `K_sorry`. This is the
+  roadmap's rejection criterion as a closed-world statement. Exclusion of
+  `_native` and undeclared names follows by being outside the table, and A1
+  connects that to real names.
+- S5 `rejected_findings_exact`: under `valid_request` and `protocol_ok`, and not
+  `acceptable`, `settle` returns `Rejected(expected_findings(q, p))`, and root
+  `i` has a finding if and only if it is not `root_clean`. A first-finding-only
+  implementation fails this, and a mixed report keeps its per-root evidence
+  (technical design §8).
+- S6 `validate_request` is `Ok` if and only if `valid_request(q)`.
+- S7 witnesses over ghost values show `Ok(Accepted)`, `Ok(Rejected)`,
+  `Ok(ToolFailure)`, and `Err` are each reachable, so no antecedent is vacuous.
+
+Non-vacuity for the proof as a whole: `scripts/check_verus_controls.py` gains
+controls that must each fail at a named obligation.
+
+- Body controls: always reject; drop the `replay accepted` check, since empty
+  roots make `forall` vacuous; compare no statement key; drop the name
+  comparison from coverage; stop the root loop and the axiom loop one early;
+  ignore `q.foundations`; report a protocol breach as a rejection.
+- Specification controls: add `K_sorry` to the pinned table, which must fail
+  S3; weaken `valid_request` to `false`, which must fail the `Accepted` witness.
+
+Evidence: `make verus` prints `verification results:: N verified, 0 errors` for
+both proof entry points, followed by every control rejected. Grepping
+`verus/audit_*` for `assume`, `admit`, and `external_body` finds nothing.
+Discharge condition: `make verus` exits 0, recorded with the commit it ran on.
+
+Solver plumbing, trigger selection, and auxiliary sequence lemmas are
+deliberately left until implementation exposes the actual verification
+conditions.
+
+### Worker obligations (tests at the real interface)
+
+Each is exercised by `smoke::audit::corpus_matches_manifest`, which compiles
+the corpus with the pinned `lean`, runs the real worker, settles, and compares
+the outcome and findings with the hand-written manifest. Manifest expectations
+are written before the worker exists, and are never generated from its output.
+Evidence: `make toolchain-smoke`. Discharge condition: every line matches.
+Bound: the committed corpus and pinned toolchain.
+
+- W1 Process protocol. The worker prints exactly one JSON document and exits 0
+  if and only if it completed an audit. Otherwise it exits non-zero with
+  nothing on standard output. A signal death has no exit code and is
+  `tool_failure`. Artefact: `ModuleAbsent`, `WorkerGarbled`. Non-vacuity:
+  `ModuleAbsent` exits 1 in the probe.
+- W2 Axiom reporting. The reported axioms are those `Lean.collectAxioms`
+  returns for the root, across modules. Artefact: `SorryImported`,
+  `ReachImported`, and `AcceptedFoundations`. Non-vacuity: M1.
+- W3 Replay. An accepted replay means the kernel accepted every retained
+  declaration in each non-toolchain module of the import closure. Unsafe and
+  partial constants are not retained. Artefact: `ForgeInit`, `ForgeImported`,
+  and `RootAbsent`. Non-vacuity: M2.
+- W4 Statement fidelity. `statement` is the root's type rendered without loss,
+  or `null` when out of grammar or over the bound. Artefact: `AcceptedGround`,
+  `AcceptedClaimShape`, `MaximalPolicy`, `WrongStatement`,
+  `WrongPolicyLiteral`, and `Unfolded`. Non-vacuity: M3.
+- W5 Kind and existence. `AxiomRoot` and `DefRoot` give `wrong_kind`, and
+  `RootAbsent` gives `root_absent`. Non-vacuity: M4.
+- W6 No execution. Auditing `InitSentinel` leaves no sentinel file. Positive
+  control: `smoke::audit::sentinel_fires_when_initializers_run` runs
+  `lean --run` on a file importing that module and requires the sentinel, so a
+  broken fixture cannot pass.
+
+Seeded mutations are applied once to a scratch copy of the worker. Their
+results are author-reported in `Outcomes & retrospective`, and nothing in the
+gates reproduces them.
+
+- M1: report only the root's direct constants as axioms, and require
+  `SorryImported` and `ReachImported` to fail.
+- M2: remove replay, and require `ForgeInit` and `ForgeImported` to fail.
+- M3: render only the statement's head constant, and require
+  `WrongPolicyLiteral` to fail.
+- M4: report every declaration's kind as `theorem`, and require `AxiomRoot` and
+  `DefRoot` to fail.
+
+### Adapter obligations (property and unit tests)
+
+Evidence for these is `make test`, and discharge is every test passing on every
+host.
+
+- A1 Key injectivity and classification. Keys are injective across name and
+  tree structure. Method: a test-only decoder round trip under `proptest`,
+  since random pairs rarely collide, plus named cases: `["Quot.sound"]` against
+  `["Quot", "sound"]`, and string against numeric components. A seeded removal
+  of the length prefix must fail. The `native` flag is set exactly when a
+  component begins `_native`. `name_key` reproduces the settlement table's
+  literal bytes, which connects the proof to real names.
+- A2 Strict decoding. Unknown fields, duplicate keys, a missing nullable field,
+  wrong JSON types, trailing content, an unknown `schema_version`, integers
+  above `u64`, and oversized output each give exact `tool_failure`. Method:
+  `rstest` tables, with `proptest` mutating a valid report by deleting,
+  renaming, and retyping fields. Non-vacuity: generator classification must
+  show each mutation class occurred.
+- A3 Contract agreement. The Python design harness and the Rust decoder consume
+  the same sample files, so schema and decoder cannot drift unseen. Method:
+  named tests on both sides.
+
+Why not other methods: Kani would bound what Verus already proves without a
+bound, and cannot look into Lean. A state-machine model checker has nothing to
+explore, as settlement has no state. A Lean proof of the worker would need a
+model of `Environment` that the toolchain does not expose.
+
+### Axioms relied upon
+
+These are taken as given, and not verified.
+
+- The generated-module input model in technical design §2.1. A violation is not
+  detected here, and Table 1 of the findings record shows the consequence.
+- The Lean kernel accepts only well-typed declarations, given that privileged
+  names denote their toolchain definitions, which the input model provides.
+- `Kernel.Environment.replay` sends retained declarations to the kernel, and
+  checks constructors and recursors against those it generates.
+- `Lean.collectAxioms` reports every axiom reachable from a declaration in
+  honestly compiled modules.
+- Toolchain `.olean` files match the archive. They are unpacked once from a
+  digest-checked archive, later reuse checks only the `COMPLETE` marker, and
+  they are not replayed.
+- Loading an `.olean` file with `loadExts := false` runs no initializers.
+  `InitSentinel` and its positive control exercise this.
+- `serde` with `deny_unknown_fields` rejects duplicate and unknown fields.
+  Tests exercise this at the interface.
+- Verus, Z3, and the release pins in `tools/verus/` are sound.
+
+Residual gaps: no theorem connects the worker's report to the environment. The
+audit says nothing about what a statement means, since that is the definition
+of the Polean atoms (ADR 0002 item 2).
+
+## Plan of work
+
+### Stage A: propose (done in this plan)
+
+Reconnaissance, research, probes, and review are recorded here and in the
+findings record.
+
+### Stage B: red
+
+Write the contracts, the manifest, and the feature file first. Add settlement's
+types with a `settle` that returns `ToolFailure` for every report, so unit
+tests compile and fail for the expected reason. Add the provisioned corpus
+test, which fails because `polean-audit` is absent.
+
+### Stage C: implement and verify together
+
+Write the specification in `verus/` before the body of `settle`, and develop
+each loop with its invariant. Implement the worker after settlement is proved,
+so the proved contract pressure-tests the report format while it is cheap to
+change.
+
+### Stage D: refactor, document, and validate
+
+Remove the scaffolding, record outcomes, and run all gates.
+
+## Milestones and plateaus
+
+Each milestone runs `make check-fmt`, `make lint`, and `make test`
+sequentially, with output teed to
+`/tmp/$ACTION-polean-1-2-3-demonstrate-type-and-axiom-auditing.out`. Commit
+after each gated change.
+
+### EP-M1: contracts, corpus manifest, and settlement
+
+Outcome: a contract and a tested pure settlement function exist, and no Lean
+code has changed. Any consumer can decide a recorded report.
+
+Work: add `contracts/audit-request.schema.json` and
+`contracts/audit-report.schema.json`. Add `examples/audit/sample-request.json`,
+`examples/audit/sample-report.json`, and `examples/audit/manifest.json`, the
+last being JSON Lines with one hand-written line per corpus entry. Extend
+`validation/validate_design.py` with `check_audit_contracts`, holding the
+samples and negative controls. Add `serde` to `Cargo.toml`. Add
+`tests/toolchain/audit/`: `mod.rs`, `wire/`, `settlement/` with
+`settlement/decision/` (the pure function), `properties/`, `tests.rs`, and
+`bdd.rs`, with the feature in `tests/features/axiom_audit.feature`. Widen the
+description at `tests/toolchain/main.rs:1` and `docs/repository-layout.md:14`.
+
+Requirements: machine-readable results, malformed output, coverage.
+
+Acceptance: `make test` runs the settlement and wire tests, each red before its
+implementation. `make design-check` reports `json_schemas_checked: 7`.
+
+Conformance check:
+
+- The report holds no verdict or comparison result.
+- `settlement/` and `wire/` use nothing from sibling modules.
+- No item is added to `src/`.
+- The only new dependency is the authorized `serde`.
+- `SHA256SUMS` is refreshed for contracts and validation outputs.
+
+Recovery: revert the milestone's commits. Nothing depends on them yet.
+
+Remaining gaps: settlement is tested but not proved, and no real report exists.
+
+Compatibility decision: none. These are new contracts with no consumer.
+
+### EP-M2: Verus proof of settlement
+
+Outcome: S0–S7 are discharged for the same source Cargo compiles.
+
+Work: add `verus/audit_settlement_spec.rs`, `verus/audit_settlement_lemmas.rs`,
+and `verus/audit_settlement.rs`, which pulls in `settlement/decision/` through
+`#[path]`. Change the Makefile so `verus-proof` runs a list of entry points
+(`VERUS_PROOF_FILES`), keeping the recognizer proof unchanged. Generalize
+`scripts/check_verus_controls.py` from one hard-coded kernel directory and
+proof file (`:50-52`) to a list of proof trees, add the controls above, and
+update `scripts/tests/`, including the pinned CLI assertions in
+`test_check_verus_controls_cli.py`.
+
+Requirements: accepts, rejects, undeclared, exact coverage.
+
+Acceptance: `make verus` exits 0, with both proofs reporting `0 errors` and
+every control rejected at its named obligation. `make test-scripts` passes. Then
+`make check-fmt`, `make lint`, and `make test`.
+
+Conformance check:
+
+- No trusted proof body exists.
+- The specification does not reference the executable code.
+- The recognizer's verified count is unchanged.
+- `make verus` stays on demand, and outside `make all` and CI.
+
+Recovery: settlement's behaviour is unchanged by this milestone, so reverting
+the proof leaves EP-M1 valid. If the verification tolerance is reached, stop
+and present options.
+
+Remaining gaps: the report's truthfulness is not addressed by this proof.
+
+Compatibility decision: none.
+
+### EP-M3: Lean worker and end-to-end corpus
+
+Outcome: `make toolchain-smoke` runs the real worker over the corpus, and each
+settlement matches the manifest.
+
+Work: run `make tools` in this worktree. Add `lean/PoleanAudit.lean`, and a
+`[[lean_exe]]` table named `polean-audit` with root `PoleanAudit` to
+`lean/lakefile.toml`, without `supportInterpreter` and without changing
+`defaultTargets`. Add fixtures under `examples/audit/lean/`. Add
+`tests/toolchain/smoke/audit/`, which builds the worker with
+`lake --dir lean build polean-audit`, compiles fixtures with `lean -o`, and
+runs the worker in one sequential test. Add `insta` snapshots of the canonical
+report for `AcceptedFoundations` and `Native`, with `message` excluded. Add
+`contracts/audit-*` and `examples/audit/**` to
+`.github/workflows/toolchain.yml`. Apply the seeded mutations to a scratch copy
+and record the results.
+
+The corpus is hand-written, and each line has the expected outcome below.
+Finding and reason names are contractual.
+
+| Fixture               | Purpose                                      | Settlement                                   |
+| --------------------- | -------------------------------------------- | -------------------------------------------- |
+| `AcceptedGround`      | Honest theorem with no axiom                 | `accepted`                                   |
+| `AcceptedFoundations` | All three foundations                        | `accepted`                                   |
+| `AcceptedClaimShape`  | Named claim over a structural literal        | `accepted`                                   |
+| `MaximalPolicy`       | Claim over a 16-rule, 16-atom literal        | `accepted`, inside the tree bound            |
+| `InitSentinel`        | `initialize` writes a sentinel if ever run   | `accepted`, and no sentinel file             |
+| `MixedRoots`          | One clean root and one with `sorry`          | `rejected`: `sorry_axiom` on one root only   |
+| `Sorry`               | Direct `sorry`                               | `rejected`: `sorry_axiom`                    |
+| `SorryImported`       | `sorry` behind an imported helper            | `rejected`: `sorry_axiom`                    |
+| `Native`              | `native_decide` in a helper                  | `rejected`: `native_axiom`                   |
+| `Undeclared`          | A direct user axiom                          | `rejected`: `undeclared_axiom`               |
+| `ReachImported`       | Axiom behind an imported definition          | `rejected`: `undeclared_axiom`               |
+| `NarrowedFoundations` | Uses foundations the request does not list   | `rejected`: `undeclared_axiom`               |
+| `WrongStatement`      | A different proposition                      | `rejected`: `statement_mismatch`             |
+| `WrongPolicyLiteral`  | Same claim, about a different list literal   | `rejected`: `statement_mismatch`             |
+| `Unfolded`            | Definitionally equal, structurally different | `rejected`: `statement_mismatch`             |
+| `AxiomRoot`           | Root is itself an axiom                      | `rejected`: `wrong_kind`, `undeclared_axiom` |
+| `DefRoot`             | Root is a definition                         | `rejected`: `wrong_kind`                     |
+| `RootAbsent`          | Named root does not exist                    | `rejected`: `root_absent`                    |
+| `ForgeInit`           | Negative control: kernel never checked it    | `rejected`: `kernel_rejected`                |
+| `ForgeImported`       | The same, in an imported module              | `rejected`: `kernel_rejected`                |
+| `ModuleAbsent`        | Module file does not exist                   | `tool_failure`: `worker_failed`              |
+| `WorkerGarbled`       | Program printing a non-report                | `tool_failure`: `malformed_report`           |
+
+_Table 2: The audit corpus and the settlement each entry must produce._
+
+`SpoofedName`, a bad request, and level or coverage mismatches are unit tests
+against recorded reports. `Sorry`, `Native`, `Undeclared`, and `ForgeInit` fall
+outside what the fixed templates emit. They are here as negative controls,
+because the audit's rejections are the thing under demonstration.
+
+Requirements: pinned interface, all rejection classes, no execution of
+inspected code.
+
+Acceptance: `make toolchain-smoke` passes, including the existing OPA and Lean
+smoke tests. `smoke::audit::corpus_matches_manifest` fails before the worker
+exists. Then `make check-fmt`, `make lint`, and `make test`.
+
+Conformance check:
+
+- The worker sees no expected statement and emits no verdict.
+- Fixtures stay outside the Lake package.
+- `make test` needs no provisioned tool.
+- `PoleanSmoke` and `defaultTargets` are unchanged.
+- No operational-integrity check has crept in.
+
+Recovery: delete `lean/PoleanAudit.lean` and the `[[lean_exe]]` table to return
+to EP-M2. If a fixture behaves differently from the table, the design tolerance
+applies.
+
+Remaining gaps: promotion and generated jobs are 2.2.4. Operational integrity
+is 4.3.2.
+
+Compatibility decision: none.
+
+### EP-M4: documentation and roadmap completion
+
+Outcome: durable documents describe what was actually built, and the roadmap
+entry is done.
+
+Work:
+
+- Update ADR 0006 with the measured results, and record its acceptance.
+- Propose the outcome mapping for 2.2.4 in ADR 0006: `rejected` maps to
+  `invalid_evidence` (exit 7); `tool_failure` to `tool_error` (exit 6), with a
+  deadline kill mapping to `unknown` (exit 3) once 2.3.1 provides deadlines; a
+  `RequestRefusal` to `tool_error`, because Rust generates the request. An
+  `accepted` settlement alone never exits 0.
+- Update `docs/developers-guide.md` (what the audit is, what it does not
+  establish, how to add a fixture, how to read a report, `make verus` covering
+  two proofs, and a pin-change step covering foundation names, control anchors,
+  snapshot githash, and the worker's Lean APIs), `docs/repository-layout.md`,
+  `lean/README.md`, `validation/README.md` (seven schemas),
+  `tools/verus/README.md`, and `docs/contents.md`.
+- Add anything the implementation learned about the environment to the findings
+  record.
+- Refresh `SHA256SUMS` after reviewing the drift.
+- Mark roadmap 1.2.3 as done, with a `Recorded:` bullet stating what ran.
+
+`docs/users-guide.md` does not change, because no library or command behaviour
+changes: there is still no executable checker. This revision has already
+amended the technical design, the vocabulary, the roadmap, and ADR 0002 and ADR
+0003.
+
+Acceptance: `make markdownlint`, `make design-check`, and
+`sha256sum -c SHA256SUMS` pass. All gates in `Validation and acceptance` pass.
+Then set `Status: COMPLETE`.
+
+Conformance check: every discovery is reconciled upstream.
+
+Recovery: documentation commits are independently revertible.
+
+Remaining gaps: as listed under EP-M3.
+
+Compatibility decision: none.
+
+## Concrete steps
+
+Run everything from the worktree root. Tee long output, for example:
+
+```bash
+make check-fmt 2>&1 | tee /tmp/check-fmt-polean-1-2-3-demonstrate-type-and-axiom-auditing.out
+make lint 2>&1 | tee /tmp/lint-polean-1-2-3-demonstrate-type-and-axiom-auditing.out
+make test 2>&1 | tee /tmp/test-polean-1-2-3-demonstrate-type-and-axiom-auditing.out
+```
+
+Python 3.14 is needed by `make tools`, `make test-scripts`, and
+`make toolchain-smoke`. On the development host, select it with
+`PYTHON="uv run --python 3.14 --with pytest==9.1.1 python"` as
+`docs/developers-guide.md` describes, or an equivalent.
+
+Provision the tools once, and then run the proof or the corpus:
+
+```bash
+make tools
+make install-verus
+make verus 2>&1 | tee /tmp/verus-polean-1-2-3-demonstrate-type-and-axiom-auditing.out
+make toolchain-smoke 2>&1 | tee /tmp/smoke-polean-1-2-3-demonstrate-type-and-axiom-auditing.out
+```
+
+Expected tail of the proof run:
+
+```plaintext
+verification results:: N verified, 0 errors
+```
+
+To run the worker by hand on a compiled fixture directory:
+
+```bash
+env -i LEAN_SYSROOT="$PWD/.polean/tools/lean/$SHA" LEAN_PATH="$SCRATCH" \
+  lean/.lake/build/bin/polean-audit AuditFixture.AcceptedGround AuditFixture.AcceptedGround.root
+```
+
+## Validation and acceptance
+
+The behavioural specification is `tests/features/axiom_audit.feature`. It runs
+against recorded reports through the decoder and settlement, while the corpus
+exercises the real worker.
+
+```gherkin
+Feature: Settle a Lean audit report against an expected proposition and approved foundations
+
+  Background:
+    Given a request for one theorem root with its expected statement and all pinned foundations
+
+  Scenario: A clean report is accepted
+    Given a report whose root is a theorem with the expected statement and only approved axioms
+    When the report is settled
+    Then the settlement is accepted
+
+  Scenario: A root that depends on sorryAx is rejected
+    Given a report whose root depends on sorryAx
+    When the report is settled
+    Then the settlement is rejected with finding sorry_axiom
+
+  Scenario: A root that depends on a native computation axiom is rejected
+    Given a report whose root depends on an axiom with a _native name component
+    When the report is settled
+    Then the settlement is rejected with finding native_axiom
+
+  Scenario: A root that depends on an undeclared assumption is rejected
+    Given a report whose root depends on an axiom outside the request
+    When the report is settled
+    Then the settlement is rejected with finding undeclared_axiom
+
+  Scenario: A statement that differs from the request is rejected
+    Given a report whose root statement differs from the expected tree
+    When the report is settled
+    Then the settlement is rejected with finding statement_mismatch
+
+  Scenario: A kernel replay rejection is rejected
+    Given a report whose replay was rejected by the kernel
+    When the report is settled
+    Then the settlement is rejected with finding kernel_rejected
+
+  Scenario: A mixed report keeps per-root evidence
+    Given a report with one clean root and one root depending on sorryAx
+    When the report is settled
+    Then only the second root has finding sorry_axiom
+
+  Scenario: Narrowed foundations are enforced
+    Given a request omitting propext and a report using propext
+    When the report is settled
+    Then the settlement is rejected with finding undeclared_axiom
+
+  Scenario: A request that approves sorryAx is refused
+    Given a request listing sorryAx as a foundation
+    When the request is validated
+    Then it is refused before any worker runs
+
+  Scenario: A report that omits a requested root is a tool failure
+    Given a report that answers no requested root despite an accepted replay
+    When the report is settled
+    Then the settlement is a tool failure
+
+  Scenario: Garbled worker output is a tool failure
+    Given worker output that is not a single audit report
+    When the output is decoded and settled
+    Then the settlement is a tool failure
+```
+
+Red-Green-Refactor evidence to record for each milestone:
+
+- Red: `make test` fails for `audit::` because `settle` returns `ToolFailure`
+  for every report; `make toolchain-smoke` fails because `polean-audit` is not
+  built.
+- Green: the same commands pass, with the corpus matching the manifest.
+- Refactor: the same commands, then every gate below.
+
+Testing layers:
+
+- Unit tests with `rstest` and `googletest` or `pretty_assertions` cover each
+  finding, the precedence rules, each `validate_request` refusal, and the key
+  encoding.
+- Behavioural tests with `rstest-bdd` run the feature above against recorded
+  reports. Follow the immutable `Slot` pattern in `tests/toolchain/bdd.rs`,
+  which avoids a compiler crash on the pinned nightly.
+- Property tests with `proptest` cover A1 and A2.
+- Snapshot tests with `insta` hold two canonical reports, so format drift is
+  reviewed.
+- End-to-end tests are the provisioned corpus at the real process boundary.
+  There is no CLI, so no command-line test applies.
+- Verus covers S0–S7. Tests continue to cover the adapter, the compiled binary,
+  and everything outside the proof.
+
+Quality criteria:
+
+- Tests: `make test` and `make toolchain-smoke` pass, with no new `#[ignore]`
+  outside `smoke::`.
+- Verification: `make verus` exits 0, with S0–S7 discharged and all controls
+  rejected.
+- Lint and types: `make check-fmt`, `make typecheck`, and `make lint`, which
+  runs Whitaker.
+- Scripts and design: `make test-scripts`, `make design-check`,
+  `make design-properties`, `make design-boundary`, `make markdownlint`, and
+  `sha256sum -c SHA256SUMS`.
+- Performance: record fixture compile cost, and worker wall time and peak
+  memory on `AcceptedGround` and `MaximalPolicy`. These are observations, not
+  budget claims.
+
+## Idempotence and recovery
+
+Every step can be repeated. `make tools` is digest-checked and reuses verified
+artefacts. Fixtures compile into fresh scratch directories per test run, so
+nothing accumulates under `lean/`. `lean/.lake/` is ignored.
+`make design-check` regenerates its outputs deterministically. If a Verus
+control's anchor drifts, the script fails closed: update the anchor
+deliberately, in the same commit as the source edit. If the provisioned test is
+interrupted, rerun it.
+
+## Artefacts and notes
+
+### Research findings
+
+The [findings record](../lean-environment-integrity-findings.md) preserves the
+adversarial discoveries, measurements, prototype source, and fixtures as
+research and regression candidates for 4.3.2. It marks what was re-run, and
+what did not reproduce.
+
+### Proof-integrity prototype
+
+An 84-line prototype of this revision's worker ran on 2026-11-06 against the
+pinned archive, in a scratch directory, using a sibling worktree's digest-named
+install, with only `LEAN_SYSROOT` and `LEAN_PATH` set. It compiled under
+`warningAsError`. EP-M3 reproduces these results through the committed corpus.
+`ok` below is the replay status only, and settlement then applies the request.
+These are author-reported.
+
+```plaintext
+Good            ok  theorem     statement Fx.Goal      nodes 1     axioms []
+GoodFoundations ok  theorem     statement Fx.Goal      nodes 1     propext Classical.choice Quot.sound
+ClaimShape      ok  theorem     statement tree         nodes 47    depth 8   axioms []
+MaximalPolicy   ok  theorem     statement tree         nodes 1705  depth 37  axioms []
+WrongLiteral    ok  theorem     statement tree         nodes 25    depth 7   axioms []
+InitSentinel    ok  theorem     statement Fx.Goal      axioms []   no sentinel; `lean --run` control writes it
+Sorry           ok  theorem     statement Fx.Goal      sorryAx
+SorryImported   ok  theorem     statement Fx.Goal      sorryAx
+Native          ok  theorem     statement Fx.Goal      Fx.Native.helper._native.native_decide.ax_1_1
+Undeclared      ok  theorem     statement Fx.Goal      Fx.Undeclared.assume
+ReachImported   ok  theorem     statement Fx.Goal      Fx.ReachBase.hidden
+Wrong           ok  theorem     statement True         axioms []
+Unfolded        ok  theorem     statement null         axioms []
+AxiomRoot       ok  axiom       statement Fx.Goal      Fx.AxiomRoot.root
+DefRoot         ok  definition  statement Fx.Goal      axioms []
+RootAbsent      ok  declaration null
+ForgeInit       REJECTED  application type mismatch
+ForgeImported   REJECTED  application type mismatch
+ModuleAbsent    exit 1, standard output empty
+```
+
+Costs: `lake build` in an empty environment takes 15–53 s for a 118 MiB binary.
+An audit takes about 1.5–2 s and, measured on the earlier prototype, about 800
+MiB resident. A fixture compile takes 1.9–4.6 s under load. Expect the corpus
+to take about 1–2 minutes.
+
+A ground claim statement elaborates with no metadata, confirming D3:
+
+```plaintext
+Lean.Expr.app (Lean.Expr.app (Lean.Expr.const `Fx.Holds []) (Lean.Expr.const `Fx.ClaimId.iso []))
+  (Lean.Expr.app (Lean.Expr.app (Lean.Expr.app (Lean.Expr.const `List.cons [Lean.Level.zero]) ...
+hasMData? false  githash=eb6cafb7290e8bd5f2937522d8d804f58f02bafc  v=4.35.0
+```
+
+References inspected on 2026-11-05 are R5, R6, and R13 in the technical design,
+and R16–R18 there.
+
+## Interfaces and dependencies
+
+### Why a new worker
+
+| Candidate                  | Statement check | Axioms         | Replay            | Structured result | Runs here        | Cost per run    |
+| -------------------------- | --------------- | -------------- | ----------------- | ----------------- | ---------------- | --------------- |
+| `#print axioms`            | None            | Transitive     | None              | None              | Yes              | Not measured    |
+| `leanchecker`              | None            | None           | Named modules     | None              | Yes              | About 1 s       |
+| `leanchecker` and a script | None            | Transitive     | Named modules     | Script's own      | Yes              | Not measured    |
+| `lake check`               | None            | Standard set   | Export            | Exit code         | Unsandboxed only | About 2 minutes |
+| `lake comparator`          | Challenge file  | Permitted list | Export            | Text, exit code   | Unsandboxed only | About 2 minutes |
+| SafeVerify                 | Target file     | Standard set   | Named modules     | JSON              | Not established  | Not measured    |
+| `polean-audit` (proposed)  | Data tree       | Name           | All non-toolchain | JSON              | Yes, unsandboxed | About 2 s       |
+
+_Table 3: Existing audit interfaces compared with the proposed worker. The
+export-based costs are derived from measured `leanexport` and
+`leanchecker --from-export` runs on an `Init`-only module._
+
+`lake comparator` gives stronger assurance against hostile Lean than this
+worker, and remains an option for 4.3.2's independent check.
+
+### Request contract
+
+`contracts/audit-request.schema.json`, identifier `polean.audit-request.v0`:
+
+```json
+{
+  "schema_version": "polean.audit-request.v0",
+  "module": ["AuditFixture", "AcceptedGround"],
+  "roots": [
+    {
+      "name": ["AuditFixture", "AcceptedGround", "root"],
+      "expected": { "const": ["AuditFixture", "Goal"], "levels": [] }
+    }
+  ],
+  "foundations": [["propext"], ["Quot", "sound"], ["Classical", "choice"]]
+}
+```
+
+A statement tree is exactly `{"const": Name, "levels": [Nat]}` or
+`{"app": [Tree, Tree]}`, with no binder, literal, or variable form. It is
+bounded at 4,096 nodes and depth 60: `serde_json` allows nesting of 127, each
+`app` costs two levels, and `MaximalPolicy` needs 1,705 nodes at depth 37. A
+request `Name` is a non-empty array of non-empty strings, each matching
+`[A-Za-z_][A-Za-z0-9_']*`, so it can be passed as a dotted argument without
+ambiguity. Levels are small natural numbers.
+
+### Worker interface
+
+`lean/PoleanAudit.lean` provides the `polean-audit` executable. It imports
+`Lean` and `Lean.Replay`, reads `LEAN_SYSROOT` and `LEAN_PATH`, and takes
+positional arguments:
+
+```plaintext
+polean-audit <module> <root> [<root> ...]
+```
+
+The sequence is:
+
+1. Initialize the search path from the sysroot, and split each name on `.` into
+   `Name` values.
+2. Import the job module with `withImportModules`, which forces
+   `loadExts := false`.
+3. Treat a module as toolchain when its `.olean` resolved under the sysroot.
+   This selects the replay scope only.
+4. Import the toolchain modules that non-toolchain modules directly import, as
+   the replay base.
+5. Call `Kernel.Environment.replay` on all constants from non-toolchain modules.
+6. For each root in argument order, read the constant from the replayed
+   environment, render its type as a tree, and collect its axioms with
+   `Lean.collectAxioms`.
+7. Print one compact JSON line, and exit 0.
+
+Any failure before step 7 goes to standard error and exits non-zero, with
+standard output empty. A replay rejection is a completed audit, not a worker
+failure.
+
+### Report contract
+
+`contracts/audit-report.schema.json`, identifier `polean.audit-report.v0`:
+
+```json
+{
+  "schema_version": "polean.audit-report.v0",
+  "githash": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+  "module": ["AuditFixture", "AcceptedFoundations"],
+  "replay": {
+    "status": "accepted",
+    "modules": [["AuditFixture", "Expected"], ["AuditFixture", "AcceptedFoundations"]]
+  },
+  "roots": [
+    {
+      "name": ["AuditFixture", "AcceptedFoundations", "root"],
+      "declaration": {
+        "kind": "theorem",
+        "statement": { "const": ["AuditFixture", "Goal"], "levels": [] },
+        "axioms": [["Classical", "choice"], ["Quot", "sound"], ["propext"]]
+      }
+    }
+  ]
+}
+```
+
+These rules bind independent implementers.
+
+- A rejected replay is `{"status": "rejected", "message": String}` with
+  `roots: []`. `message` is at most 4,096 UTF-8 bytes, truncated on a scalar
+  boundary, never parsed, and excluded from snapshots.
+- `replay.modules` lists the modules replayed, and must include `module`, so a
+  report cannot claim acceptance while omitting the job.
+- `roots` follows the request's order. `declaration` is `null` when the
+  replayed environment has no such constant. It is a required field, and a
+  missing field is malformed. `statement` is likewise required, and `null` when
+  out of grammar or over the bound.
+- `kind` is one of `theorem`, `axiom`, `definition`, `opaque`, `quotient`,
+  `constructor`, `recursor`, and `inductive`.
+- `axioms` lists every axiom `Lean.collectAxioms` returns for the root,
+  including the root itself if it is an axiom.
+- A report `Name` is a non-empty array whose components are strings (possibly
+  empty) or integers up to `u64::MAX`, because private names contain numbers.
+  `githash` is compared with the commit in the `identity` entry of
+  `toolchain-pins.json`.
+- Lists are sets. The worker's deterministic order keeps snapshots stable, and
+  consumers must not rely on it.
+- There is deliberately no `accepted`, `verdict`, `ok`, or `statement_match`
+  field. Any shape change means a new schema identifier, which is how 4.3.2
+  adds provenance.
+- Enforcement: the schema checks shape. `wire` also checks integer ranges, byte
+  bounds, duplicates, trailing content, and tree bounds. Settlement checks
+  correspondence.
+
+### The Rust settlement function
+
+In `tests/toolchain/audit/settlement/decision/mod.rs`, pure and with no
+`serde`, I/O, or Lean. Keys are `Vec<u8>` length-prefixed, tag-prefixed
+encodings built by `wire::name_key` and `wire::tree_key`.
+
+```rust
+pub struct AuditRequest { /* module, foundations, roots with name and expected, as keys */ }
+pub struct AuditReport { /* githash, module, replay, roots, as keys and closed enums */ }
+
+pub enum Settlement { Accepted, Rejected(Vec<Finding>), ToolFailure(ProtocolBreach) }
+
+pub struct Finding { pub root: Option<usize>, pub item: Option<usize>, pub code: FindingCode }
+
+pub enum FindingCode {
+    KernelRejected, RootAbsent, WrongKind, StatementMismatch,
+    SorryAxiom, NativeAxiom, UndeclaredAxiom,
+}
+
+pub enum ProtocolBreach {
+    ToolchainMismatch, ModuleMismatch, CoverageMismatch, RejectedReplayWithRoots,
+}
+
+pub fn validate_request(request: &AuditRequest) -> Result<(), RequestRefusal>;
+pub fn settle(request: &AuditRequest, report: &AuditReport, pin: &[u8])
+    -> Result<Settlement, RequestRefusal>;
+```
+
+The `native` flag and `FindingCode` select a diagnostic only: acceptance rests
+on `approved`, so a defect in classification cannot admit an axiom. Process and
+decoding failures (`worker_failed`, `output_overflow`, and `malformed_report`)
+arise in `tests/toolchain/audit/wire/` and the smoke runner, before settlement,
+and are reported as the same `tool_failure` outcome. Promotion into
+`src/lean.rs` is 2.2.4's work.
+
+### Dependencies
+
+`serde` `=1.0.229` with `derive`, under `[dev-dependencies]`, gives derived
+decoding with `deny_unknown_fields`, which rejects duplicate and unknown fields.
+`serde_json::Value` would silently keep the last duplicate. Derived decoding
+treats a missing `Option` as `None`, so required nullable fields use a
+presence-checking `deserialize_with`, and A2 tests this. No Lake package is
+added. The worker uses only the pinned Lean's own `Lean` library.
+
+## Revision notes
+
+- Revision 1 (2026-11-05): initial draft, from reconnaissance, research, and
+  probes of the pinned toolchain.
+- Revision 2 (2026-11-05): revised after expert panel review, including a live
+  attack that defeated revision 1 twice. Added a pinned `Init`, a worker-fixed
+  search path, module classes, and a corrected specification.
+- Revision 3 (2026-11-05): recorded the user's acceptance of three design
+  deviations and the Verus milestone (D13).
+- Revision 4 (2026-11-06): separated proof integrity from operational integrity
+  at the user's direction (D14). This milestone now establishes proof integrity
+  under the generated-module input model. Foundation origin, the pinned `Init`
+  base, the fixed search order, module classes, and statement provenance moved
+  to new roadmap item 4.3.2, and the deadline helper to 2.3.1 and 4.3.1. The
+  worker now uses `Lean.collectAxioms` (D15) and keeps replay (D16). The corpus
+  shrank from 37 entries to 22, and the specification lost its origin and
+  provenance clauses. The adversarial results moved to a findings record, with
+  their sources. Revision 2's design stands as the starting point for 4.3.2.
+  Implementation still awaits approval.
