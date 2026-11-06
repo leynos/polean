@@ -142,9 +142,11 @@ takes none of them: an `env` prefix on the Whitaker command clears the
 inherited encoded flags and target settings, assigns `RUSTFLAGS` the warning
 policy alone (unset, Cargo would still read the configuration's `rustflags`),
 and sets `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to displace the Cranelift
-default, so its installer-managed toolchain builds without repository
-development flags. `scripts/tests/test_build_standard.py` holds each of these
-properties (`make test-scripts`). CI installs `mold` through `install-mold` on
+default (with `CARGO_UNSTABLE_CODEGEN_BACKEND=true`, which opts in the
+temporary Cargo project where Dylint builds its driver), so its
+installer-managed toolchain builds without repository development flags.
+`scripts/tests/test_build_standard.py` holds each of these properties
+(`make test-scripts`). CI installs `mold` through `install-mold` on
 `setup-rust`, and the Cranelift component for the Whitaker toolchain through
 `cranelift: 'true'` on `install-whitaker`, the CI equivalent of
 `whitaker-installer --cranelift`.

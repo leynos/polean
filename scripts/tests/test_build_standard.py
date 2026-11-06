@@ -79,6 +79,9 @@ def test_the_whitaker_route_is_isolated() -> None:
     assert assigned.get("CARGO_PROFILE_DEV_CODEGEN_BACKEND") == "llvm", (
         "the route must displace the Cranelift development backend"
     )
+    assert assigned.get("CARGO_UNSTABLE_CODEGEN_BACKEND") == "true", (
+        "the route must opt Dylint's temporary driver project into the backend key"
+    )
     assert "CARGO_ENCODED_RUSTFLAGS" not in assigned, "the route must assign no encoded flags"
 
 
