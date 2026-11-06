@@ -10,6 +10,7 @@ quietly break, so each is held here.
 from __future__ import annotations
 
 import re
+import shlex
 import tomllib
 from pathlib import Path
 
@@ -65,15 +66,20 @@ def test_typecheck_restates_the_fast_flags() -> None:
 
 
 def test_the_whitaker_route_is_isolated() -> None:
-    """The route clears inherited flags and backend overrides, and takes none."""
-    makefile = (ROOT / "Makefile").read_text("utf-8")
-    clean = re.search(r"^WHITAKER_CLEAN_ENV = (?:[^\n]*\\\n)*[^\n]*", makefile, re.MULTILINE)
-    assert clean, "the Makefile must define WHITAKER_CLEAN_ENV"
-    for variable in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_PROFILE_DEV_CODEGEN_BACKEND"):
-        assert f"-u {variable}" in clean.group(0), f"the Whitaker route must clear {variable}"
+    """The route clears inherited sources and assigns its own flags and backend."""
     recipe = _recipe("lint-whitaker")
-    assert "$(WHITAKER_CLEAN_ENV)" in recipe, "lint-whitaker must run in the clean environment"
     assert "STANDARD_RUSTFLAGS" not in recipe, "the Whitaker route must not inherit mold"
+    words = shlex.split(recipe)
+    removed = {words[i + 1] for i, word in enumerate(words[:-1]) if word == "-u"}
+    assert "CARGO_ENCODED_RUSTFLAGS" in removed, "the route must clear encoded flags"
+    assigned = dict(word.split("=", 1) for word in words if re.match(r"[A-Z_]+=", word))
+    assert assigned.get("RUSTFLAGS") == "-D warnings", (
+        "the route must assign RUSTFLAGS the warning policy alone"
+    )
+    assert assigned.get("CARGO_PROFILE_DEV_CODEGEN_BACKEND") == "llvm", (
+        "the route must displace the Cranelift development backend"
+    )
+    assert "CARGO_ENCODED_RUSTFLAGS" not in assigned, "the route must assign no encoded flags"
 
 
 def test_ci_installs_mold_and_the_whitaker_cranelift_component() -> None:
