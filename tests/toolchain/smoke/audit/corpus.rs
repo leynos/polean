@@ -61,6 +61,15 @@ const FIXTURES: &[&str] = &[
 /// The fixtures whose canonical report is snapshotted.
 const SNAPSHOTTED: &[&str] = &["AcceptedFoundations", "Native"];
 
+/// The fixture whose initializer writes a sentinel only when it runs.
+///
+/// Named once so a rename cannot silently skip both the pre-run and post-run
+/// sentinel checks.
+const INIT_SENTINEL: &str = "InitSentinel";
+
+/// The fixture whose worker output is truncated mid-document.
+const WORKER_GARBLED: &str = "WorkerGarbled";
+
 /// Every manifest entry must have a request, even without provisioned tools.
 #[test]
 fn every_manifest_entry_has_a_request() -> Result<(), String> {
@@ -106,7 +115,7 @@ fn corpus_matches_manifest() -> Result<(), String> {
 /// Returns a diagnostic naming the fixture, the difference, and both streams.
 fn settle_one(corpus: &Corpus, expected: &manifest::Expectation) -> Result<(), String> {
     let entry = requests::entry(&expected.fixture)?;
-    if expected.fixture == "InitSentinel" {
+    if expected.fixture == INIT_SENTINEL {
         check!(
             !corpus.sentinel_present()?,
             "InitSentinel: the sentinel exists before the audit"
@@ -121,7 +130,7 @@ fn settle_one(corpus: &Corpus, expected: &manifest::Expectation) -> Result<(), S
             String::from_utf8_lossy(&output.stderr)
         )
     })?;
-    if expected.fixture == "InitSentinel" {
+    if expected.fixture == INIT_SENTINEL {
         check!(
             !corpus.sentinel_present()?,
             "InitSentinel: the audit ran an initializer"
@@ -163,7 +172,7 @@ fn sentinel_fires_when_initializers_run() -> Result<(), String> {
 ///
 /// Returns a diagnostic when the process cannot be started.
 fn run(corpus: &Corpus, entry: &Entry) -> Result<Output, String> {
-    if entry.fixture == "WorkerGarbled" {
+    if entry.fixture == WORKER_GARBLED {
         return corpus.garbled();
     }
     corpus.worker(&entry.module, &entry.roots)

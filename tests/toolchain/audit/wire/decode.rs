@@ -3,10 +3,11 @@
 //! The worker is unverified, so the adapter treats its output as untrusted
 //! data. Derived `serde` decoding with `deny_unknown_fields` rejects unknown
 //! and duplicate fields, and a missing required field is an error rather than
-//! a default. A missing *nullable* field is the one case a derive would accept
-//! silently, because `Option` defaults to `None`, so `declaration` and
-//! `statement` use a presence-checking `deserialize_with` and a missing field
-//! is malformed.
+//! a default. A *nullable* field is the one case a derive would otherwise
+//! accept silently, because `Option` defaults to `None`; `declaration` and
+//! `statement` therefore deserialize with `Option::deserialize` and no
+//! `default`, which keeps a missing key malformed while admitting an explicit
+//! `null`.
 //!
 //! Every refusal is a [`DecodeError`]. The smoke runner reports `Malformed` as
 //! `malformed_report` and `OutputOverflow` as `output_overflow`, both before
@@ -98,9 +99,11 @@ pub fn decode_report(bytes: &[u8]) -> Result<AuditReport, DecodeError> {
 /// Decode a request, or refuse it before settlement can see it.
 ///
 /// Request names must be passable as dotted command-line arguments, so every
-/// component is non-empty text matching `[A-Za-z_][A-Za-z0-9_']*`. The report
-/// contract is looser because private names contain empty and numeric
-/// components.
+/// component is non-empty text matching `[A-Za-z_][A-Za-z0-9_']*`, and a name
+/// has at least one component. The same grammar applies to the constant names
+/// inside a request's `expected` tree, because those names are echoed into the
+/// worker's arguments. The report contract is looser because private names
+/// contain empty and numeric components.
 ///
 /// # Errors
 ///
@@ -127,7 +130,7 @@ pub fn decode_request(bytes: &[u8]) -> Result<AuditRequest, DecodeError> {
             .map(|root| {
                 Ok(RequestRoot {
                     name: name_key(&convert_request_name(root.name)?),
-                    expected: tree_key(&checked_tree(root.expected)?),
+                    expected: tree_key(&checked_request_tree(root.expected)?),
                 })
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -153,7 +156,16 @@ fn convert_name(name: Vec<ComponentDocument>) -> Result<Name, DecodeError> {
 }
 
 /// Convert a request name, which must be passable as a dotted argument.
+///
+/// A request name has at least one component, as the request schema's
+/// `minItems: 1` states. An empty name would otherwise encode as the same key
+/// as no name at all, so it is refused rather than passed to settlement.
 fn convert_request_name(name: Vec<ComponentDocument>) -> Result<Name, DecodeError> {
+    if name.is_empty() {
+        return Err(DecodeError::Malformed(
+            "a request name must have at least one component".to_owned(),
+        ));
+    }
     name.into_iter()
         .map(|component| match component {
             ComponentDocument::Text(text) if is_request_text(&text) => Ok(Component::Text(text)),
@@ -176,47 +188,72 @@ fn is_request_text(text: &str) -> bool {
         })
 }
 
-/// Convert a tree and hold it to the node and depth bounds.
+/// Convert a report tree and hold it to the node and depth bounds.
 fn checked_tree(tree: TreeDocument) -> Result<Tree, DecodeError> {
     let converted = convert_tree(tree)?;
-    if nodes(&converted) > MAX_NODES {
+    check_tree_bounds(&converted)?;
+    Ok(converted)
+}
+
+/// Convert a request's expected tree and hold it to the node and depth bounds.
+///
+/// A request's `expected` tree is compared against report trees, but its
+/// constant names are also echoed into the worker's arguments, so they follow
+/// the request name grammar rather than the report's looser one.
+fn checked_request_tree(tree: TreeDocument) -> Result<Tree, DecodeError> {
+    let converted = convert_tree_with(tree, convert_request_name)?;
+    check_tree_bounds(&converted)?;
+    Ok(converted)
+}
+
+/// Refuse a tree over the node or depth bound.
+fn check_tree_bounds(tree: &Tree) -> Result<(), DecodeError> {
+    if nodes(tree) > MAX_NODES {
         return Err(DecodeError::Malformed(format!(
             "statement tree exceeds {MAX_NODES} nodes"
         )));
     }
-    if depth(&converted) > MAX_DEPTH {
+    if depth(tree) > MAX_DEPTH {
         return Err(DecodeError::Malformed(format!(
             "statement tree exceeds depth {MAX_DEPTH}"
         )));
     }
-    Ok(converted)
+    Ok(())
 }
 
-/// Convert a tree without re-checking the bound at every level.
+/// Convert a report tree without re-checking the bound at every level.
 fn convert_tree(tree: TreeDocument) -> Result<Tree, DecodeError> {
+    convert_tree_with(tree, convert_name)
+}
+
+/// Convert a tree, naming its constants with `convert`.
+///
+/// The bound is checked once, on the whole tree, rather than at every level.
+fn convert_tree_with(
+    tree: TreeDocument,
+    convert: fn(Vec<ComponentDocument>) -> Result<Name, DecodeError>,
+) -> Result<Tree, DecodeError> {
     Ok(match tree {
         TreeDocument::Const(node) => Tree::Const {
-            name: convert_name(node.name)?,
+            name: convert(node.name)?,
             levels: node.levels,
         },
         TreeDocument::App(node) => Tree::App(
-            Box::new(convert_tree(*node.app.0)?),
-            Box::new(convert_tree(*node.app.1)?),
+            Box::new(convert_tree_with(*node.app.0, convert)?),
+            Box::new(convert_tree_with(*node.app.1, convert)?),
         ),
     })
 }
 
 /// Convert a declaration.
 fn convert_declaration(declaration: DeclarationDocument) -> Result<Decl, DecodeError> {
-    let Some(statement) = declaration.statement else {
-        return Err(DecodeError::Malformed(
-            "declaration is missing `statement`".to_owned(),
-        ));
-    };
-    let checked = statement.map(checked_tree).transpose()?;
     Ok(Decl {
         kind: convert_kind(declaration.kind),
-        statement: checked.map(|tree| tree_key(&tree)),
+        statement: declaration
+            .statement
+            .map(checked_tree)
+            .transpose()?
+            .map(|tree| tree_key(&tree)),
         axioms: declaration
             .axioms
             .into_iter()
@@ -247,14 +284,9 @@ const fn convert_kind(kind: KindDocument) -> DeclKind {
 
 /// Convert one observed root.
 fn convert_root(root: RootDocument) -> Result<RootObs, DecodeError> {
-    let Some(declaration) = root.declaration else {
-        return Err(DecodeError::Malformed(
-            "root is missing `declaration`".to_owned(),
-        ));
-    };
     Ok(RootObs {
         name: name_key(&convert_name(root.name)?),
-        decl: declaration.map(convert_declaration).transpose()?,
+        decl: root.declaration.map(convert_declaration).transpose()?,
     })
 }
 

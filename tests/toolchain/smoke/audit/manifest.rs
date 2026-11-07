@@ -5,6 +5,8 @@
 //! from a report, so a matching line is evidence that the worker and the
 //! settlement agree with the plan rather than with each other.
 
+use serde_json::Value;
+
 use crate::{
     ambient,
     audit::settlement::decision::{Finding, FindingCode, ProtocolBreach, Settlement},
@@ -72,20 +74,12 @@ fn parse_line(line: &str, index: usize) -> Result<Expectation, String> {
     let findings = array(&document, "findings", &context)?
         .iter()
         .map(|finding| {
-            let root = field(finding, "root", &context)?
-                .as_u64()
-                .map(|number| {
-                    usize::try_from(number)
-                        .map_err(|error| format!("{context}: root does not fit usize: {error}"))
-                })
-                .transpose()?;
+            let root = optional_root(field(finding, "root", &context)?, &context)?;
             let code = string(finding, "code", &context)?.to_owned();
             Ok(ExpectedFinding { root, code })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    let reason = field(&document, "reason", &context)?
-        .as_str()
-        .map(str::to_owned);
+    let reason = optional_string(field(&document, "reason", &context)?, &context)?;
     let module = array(&document, "module", &context)?
         .iter()
         .map(|component| {
@@ -102,6 +96,43 @@ fn parse_line(line: &str, index: usize) -> Result<Expectation, String> {
         findings,
         reason,
     })
+}
+
+/// A finding's `root`: `null` for a whole-report finding, or a root index.
+///
+/// Only `null` and an unsigned integer are accepted. A string, a negative
+/// number, or a float is a malformed line rather than an absent root, because
+/// reading it as `None` would silently change what the manifest expects.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the value is neither null nor an index that fits
+/// `usize`.
+fn optional_root(value: &Value, context: &str) -> Result<Option<usize>, String> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    let number = value.as_u64().ok_or_else(|| {
+        format!("{context}: field `root` is neither null nor an unsigned integer")
+    })?;
+    usize::try_from(number)
+        .map(Some)
+        .map_err(|error| format!("{context}: field `root` does not fit usize: {error}"))
+}
+
+/// An optional string field, accepting `null` but no other non-string value.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the value is neither null nor a string.
+fn optional_string(value: &Value, context: &str) -> Result<Option<String>, String> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    value
+        .as_str()
+        .map(|text| Some(text.to_owned()))
+        .ok_or_else(|| format!("{context}: field `reason` is neither null nor a string"))
 }
 
 /// Turn settlement's outcome into the form the manifest records.

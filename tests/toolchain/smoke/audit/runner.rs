@@ -8,11 +8,15 @@
 //!
 //! The fixtures stay outside the Lake package: `--root` points at
 //! `examples/audit/lean`, and the `.olean` files go to a scratch directory, so
-//! running the corpus never changes the committed tree.
+//! the fixtures never change the committed tree. The worker build is the one
+//! exception: `lake build` writes `.lake/build` inside the committed package,
+//! which is ignored by Git. Tests run on parallel threads, so the build holds a
+//! process-wide lock and two builds cannot share that directory at once.
 
 use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
+    sync::Mutex,
 };
 
 use crate::{
@@ -181,13 +185,19 @@ impl Corpus {
     }
 }
 
+/// Serialises `lake build`, which writes `.lake/build` in the package.
+static BUILD_LOCK: Mutex<()> = Mutex::new(());
+
 /// Build the audit worker with the pinned Lake.
 ///
 /// # Errors
 ///
 /// Returns a diagnostic naming the package and both streams when the build
-/// fails.
+/// fails, or when another test panicked while holding the build lock.
 fn build_worker(lake: &Path, package: &Path, repository: &Path) -> Result<(), String> {
+    let _guard = BUILD_LOCK
+        .lock()
+        .map_err(|_| "the audit worker build lock is poisoned".to_owned())?;
     let package_text = package.display().to_string();
     let arguments = ["--dir", package_text.as_str(), "build", "polean-audit"];
     let output = capture(lake, &arguments, &[], repository)?;

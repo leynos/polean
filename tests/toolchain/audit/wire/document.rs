@@ -2,30 +2,16 @@
 //!
 //! These are the shapes `serde_json` sees, and every one of them is stricter
 //! than the JSON Schema: `deny_unknown_fields` rejects an unknown or duplicate
-//! key, a field with no `Option` and no default is required, and the
-//! presence-checking [`present`] deserializer separates a missing nullable key
-//! from an explicit `null`.
+//! key, and a field with no `Option` and no default is required. A nullable
+//! field deserializes with `Option::deserialize` and no `default`, so a
+//! missing key is an error while an explicit `null` is admitted.
 //!
 //! The types are deliberately inert. They hold no behaviour beyond the derive,
 //! so the conversion in [`super::decode`] is the single place a document
 //! becomes a settlement value, and a change to the contract cannot quietly
 //! change the meaning of a decoded report.
 
-use serde::{Deserialize, Deserializer};
-
-/// Accept a present value, including `null`, and record that it was present.
-///
-/// A derived `Option` field cannot tell a missing key from an explicit `null`,
-/// because both become `None`. The field holds `Option<Option<T>>`: a missing
-/// key keeps the outer `None`, while `null` and a value become `Some(None)` and
-/// `Some(Some(_))`. The conversion then refuses a missing key.
-pub(super) fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    T::deserialize(deserializer).map(Some)
-}
+use serde::Deserialize;
 
 /// One name component as the contract spells it.
 #[derive(Deserialize)]
@@ -132,15 +118,11 @@ pub(super) struct RootDocument {
     pub(super) name: Vec<ComponentDocument>,
     /// The declaration, or `null` when the replayed environment has none.
     ///
-    /// The outer `Option` records that the key was present. Collapsing it to
-    /// one `Option` would make a missing key indistinguishable from `null`,
-    /// and a derived default would then silently accept a truncated report.
-    #[expect(
-        clippy::option_option,
-        reason = "the outer Option records presence, which one Option cannot distinguish from null"
-    )]
-    #[serde(default, deserialize_with = "present")]
-    pub(super) declaration: Option<Option<DeclarationDocument>>,
+    /// `deserialize_with` without `default` makes a missing key an error while
+    /// still admitting an explicit `null`, so a truncated report cannot be
+    /// read as a whole-report finding.
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub(super) declaration: Option<DeclarationDocument>,
 }
 
 /// One observed declaration.
@@ -151,14 +133,9 @@ pub(super) struct DeclarationDocument {
     pub(super) kind: KindDocument,
     /// The declaration's type, or `null` when out of grammar or over bound.
     ///
-    /// The outer `Option` records presence for the same reason as
-    /// [`RootDocument::declaration`].
-    #[expect(
-        clippy::option_option,
-        reason = "the outer Option records presence, which one Option cannot distinguish from null"
-    )]
-    #[serde(default, deserialize_with = "present")]
-    pub(super) statement: Option<Option<TreeDocument>>,
+    /// Presence works the same way as [`RootDocument::declaration`].
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub(super) statement: Option<TreeDocument>,
     /// Every axiom reachable from the declaration.
     pub(super) axioms: Vec<Vec<ComponentDocument>>,
 }

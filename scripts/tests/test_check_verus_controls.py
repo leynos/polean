@@ -246,28 +246,31 @@ def test_every_tree_has_body_and_specification_controls() -> None:
         )
 
 
-def test_stage_preserves_the_admission_relative_paths(tmp_path: Path) -> None:
-    """The admission proof's relative includes resolve in the staged tree."""
-    controls.stage(ROOT, tmp_path, controls.ADMISSION)
-    assert (tmp_path / controls.ADMISSION.entry).is_file(), (
-        "the proof entry point is staged"
-    )
-    assert (tmp_path / controls.KERNEL_DIR / "mod.rs").is_file(), "the kernel is staged"
-    assert (tmp_path / controls.PROOF_DIR / "admission_spec.rs").is_file(), (
-        "the specification is staged"
-    )
-
-
-def test_stage_preserves_the_settlement_relative_paths(tmp_path: Path) -> None:
-    """The settlement proof's relative includes resolve in the staged tree."""
-    controls.stage(ROOT, tmp_path, controls.SETTLEMENT)
-    assert (tmp_path / controls.SETTLEMENT.entry).is_file(), (
-        "the proof entry point is staged"
-    )
-    assert (tmp_path / controls.SETTLEMENT_DIR / "mod.rs").is_file(), (
-        "the decision module is staged"
-    )
-    assert (tmp_path / controls.PROOF_DIR / "audit_settlement_spec.rs").is_file(), (
+@pytest.mark.parametrize(
+    ("tree", "module_dir", "spec_name"),
+    [
+        pytest.param(
+            controls.ADMISSION,
+            controls.KERNEL_DIR,
+            "admission_spec.rs",
+            id="admission",
+        ),
+        pytest.param(
+            controls.SETTLEMENT,
+            controls.SETTLEMENT_DIR,
+            "audit_settlement_spec.rs",
+            id="settlement",
+        ),
+    ],
+)
+def test_stage_preserves_the_relative_paths(
+    tmp_path: Path, tree: controls.ProofTree, module_dir: Path, spec_name: str
+) -> None:
+    """Each proof's relative includes resolve in the staged tree."""
+    controls.stage(ROOT, tmp_path, tree)
+    assert (tmp_path / tree.entry).is_file(), "the proof entry point is staged"
+    assert (tmp_path / module_dir / "mod.rs").is_file(), "the module tree is staged"
+    assert (tmp_path / controls.PROOF_DIR / spec_name).is_file(), (
         "the specification is staged"
     )
 

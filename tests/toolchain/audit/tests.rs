@@ -6,6 +6,8 @@
 //! root would be useless, and S1's proof runs in both directions for the same
 //! reason.
 
+use rstest::rstest;
+
 use super::{
     fixtures::{self, Case},
     settlement::decision::{
@@ -77,24 +79,19 @@ fn accepted_ground_is_accepted() { expect_accepted(&fixtures::accepted_ground())
 fn accepted_foundations_is_accepted() { expect_accepted(&fixtures::accepted_foundations()); }
 
 /// Dependence on `sorryAx` is rejected, naming the axiom.
-#[test]
-fn sorry_is_rejected_with_a_sorry_finding() {
-    let case = fixtures::sorry("Sorry");
+///
+/// A directly used `sorry` and one reached through an import are the same
+/// finding, because settlement sees the transitive axiom, not the syntax that
+/// introduced it.
+#[rstest]
+#[case::direct("Sorry")]
+#[case::imported("SorryImported")]
+fn sorry_is_rejected_with_a_sorry_finding(#[case] fixture: &str) {
+    let case = fixtures::sorry(fixture);
     assert_eq!(
         expect_rejected(&case),
         vec![axiom_finding(0, 0, FindingCode::SorryAxiom)],
         "a sorry root did not produce exactly one sorry finding"
-    );
-}
-
-/// An imported `sorry` is rejected the same way as a direct one.
-#[test]
-fn imported_sorry_is_rejected_with_a_sorry_finding() {
-    let case = fixtures::sorry("SorryImported");
-    assert_eq!(
-        expect_rejected(&case),
-        vec![axiom_finding(0, 0, FindingCode::SorryAxiom)],
-        "an imported sorry was not reported as a sorry axiom"
     );
 }
 
@@ -204,43 +201,23 @@ fn mixed_roots_keep_per_root_evidence() {
     );
 }
 
-/// A report naming another toolchain is a tool failure, not a rejection.
-#[test]
-fn toolchain_mismatch_is_a_tool_failure() {
-    expect_tool_failure(
-        &fixtures::toolchain_mismatch(),
-        ProtocolBreach::ToolchainMismatch,
-    );
-}
-
-/// A report answering for another module is a tool failure.
-#[test]
-fn module_mismatch_is_a_tool_failure() {
-    expect_tool_failure(&fixtures::module_mismatch(), ProtocolBreach::ModuleMismatch);
-}
-
-/// A report whose replayed modules omit the job module is a tool failure.
-#[test]
-fn coverage_mismatch_is_a_tool_failure() {
-    expect_tool_failure(
-        &fixtures::coverage_mismatch(),
-        ProtocolBreach::CoverageMismatch,
-    );
-}
-
-/// A report answering a different root is a tool failure.
-#[test]
-fn root_mismatch_is_a_tool_failure() {
-    expect_tool_failure(&fixtures::root_mismatch(), ProtocolBreach::CoverageMismatch);
-}
-
-/// A rejected replay that still reports roots is a tool failure.
-#[test]
-fn rejected_replay_with_roots_is_a_tool_failure() {
-    expect_tool_failure(
-        &fixtures::rejected_with_roots(),
-        ProtocolBreach::RejectedReplayWithRoots,
-    );
+/// A report that does not answer its request is a tool failure, not a
+/// rejection.
+///
+/// The distinctions are contractual: a mismatched toolchain, module, or root
+/// coverage means the report is about something else, and reporting that as a
+/// policy rejection would blame the policy for the worker's fault.
+#[rstest]
+#[case::toolchain(fixtures::toolchain_mismatch, ProtocolBreach::ToolchainMismatch)]
+#[case::module(fixtures::module_mismatch, ProtocolBreach::ModuleMismatch)]
+#[case::coverage(fixtures::coverage_mismatch, ProtocolBreach::CoverageMismatch)]
+#[case::root(fixtures::root_mismatch, ProtocolBreach::CoverageMismatch)]
+#[case::rejected_with_roots(fixtures::rejected_with_roots, ProtocolBreach::RejectedReplayWithRoots)]
+fn reports_about_another_request_are_tool_failures(
+    #[case] fixture: fn() -> Case,
+    #[case] breach: ProtocolBreach,
+) {
+    expect_tool_failure(&fixture(), breach);
 }
 
 /// A protocol breach outranks the findings the report would otherwise produce.
@@ -291,8 +268,7 @@ fn unapproved_foundation_is_refused() {
     );
 }
 
-/// Validation accepts an admissible request and names the same refusal as
-/// settlement.
+/// Validation accepts an admissible request.
 #[test]
 fn validate_request_accepts_the_fixture_request() {
     let case = fixtures::accepted_foundations();
@@ -300,6 +276,42 @@ fn validate_request_accepts_the_fixture_request() {
         validate_request(&case.request),
         Ok(()),
         "an admissible request was refused"
+    );
+}
+
+/// Validation and settlement name the same refusal for the same request.
+///
+/// The Verus proof and the Cargo build both rely on this parity: settlement
+/// validates before deciding, so a divergence would let an inadmissible
+/// request reach the decision logic.
+#[rstest]
+#[case::no_roots(RequestRefusal::NoRoots)]
+#[case::duplicate_root(RequestRefusal::DuplicateRoot(1))]
+#[case::unapproved_foundation(RequestRefusal::UnapprovedFoundation(0))]
+fn validate_request_and_settle_name_the_same_refusal(#[case] refusal: RequestRefusal) {
+    let mut case = fixtures::accepted_ground();
+    match refusal {
+        RequestRefusal::NoRoots => case.request.roots.clear(),
+        RequestRefusal::DuplicateRoot(_) => {
+            let root = case.request.roots.first().cloned();
+            let Some(root) = root else {
+                panic!("the fixture has no root");
+            };
+            case.request.roots.push(root);
+        }
+        RequestRefusal::UnapprovedFoundation(_) => {
+            case.request.foundations = vec![fixtures::key(&["sorryAx"])];
+        }
+    }
+    assert_eq!(
+        validate_request(&case.request),
+        Err(refusal),
+        "validation named another refusal"
+    );
+    assert_eq!(
+        decide(&case),
+        Err(refusal),
+        "settlement named another refusal"
     );
 }
 
@@ -320,16 +332,15 @@ fn accepted_axioms_are_exactly_the_pinned_foundations() {
         fixtures::key(&["Quot", "sound"]),
         fixtures::key(&["Classical", "choice"]),
     ];
-    for name in &names {
+    assert_eq!(
+        names.len(),
+        expected.len(),
+        "an accepted report did not carry exactly the pinned foundations"
+    );
+    for key in &expected {
         assert!(
-            expected.contains(name),
-            "an accepted report carried an axiom outside the pinned table"
+            names.contains(&key),
+            "an accepted report omitted a pinned foundation"
         );
     }
-    assert!(
-        !names
-            .iter()
-            .any(|name| *name == &fixtures::key(&["sorryAx"])),
-        "an accepted report carried sorryAx"
-    );
 }

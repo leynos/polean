@@ -86,11 +86,11 @@ fn valid_document() -> Map<String, Value> {
     document
 }
 
-/// Serialise a mutated document.
+/// Serialize a mutated document.
 fn encode(document: &Map<String, Value>) -> Vec<u8> {
     match serde_json::to_vec(&Value::Object(document.clone())) {
         Ok(bytes) => bytes,
-        Err(error) => panic!("a mutated document must serialise: {error}"),
+        Err(error) => panic!("a mutated document must serialize: {error}"),
     }
 }
 

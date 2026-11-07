@@ -211,6 +211,27 @@ fn valid_request() -> String { request(REQUEST_MODULE, &format!("[{REQUEST_ROOT}
 /// A request naming a root component that is not an argument token.
 fn empty_root_component() -> String { valid_request().replace(r#""root"]"#, r#"""]"#) }
 
+/// A request whose module has no components.
+fn empty_module() -> String { request("[]", &format!("[{REQUEST_ROOT}]")) }
+
+/// A request whose root name has no components.
+fn empty_root_name() -> String {
+    request(
+        REQUEST_MODULE,
+        &format!(r#"[{{"name":[],"expected":{{"const":["AuditFixture","Goal"],"levels":[]}}}}]"#),
+    )
+}
+
+/// A request whose expected tree names a constant with a numeric component.
+fn numeric_expected_component() -> String {
+    request(
+        REQUEST_MODULE,
+        &format!(
+            r#"[{{"name":["AuditFixture","AcceptedGround","root"],"expected":{{"const":["AuditFixture",7],"levels":[]}}}}]"#
+        ),
+    )
+}
+
 /// A request whose module holds a numeric component.
 fn numeric_module_component() -> String {
     valid_request().replace(REQUEST_MODULE, r#"["AuditFixture",7]"#)
@@ -270,6 +291,9 @@ fn malformed_reports_are_refused(#[case] label: &str, #[case] mutate: ReportMuta
 /// Every request mutation the decoder must refuse as malformed.
 #[rstest]
 #[case("empty root component", empty_root_component as RequestMutation)]
+#[case("empty module", empty_module as RequestMutation)]
+#[case("empty root name", empty_root_name as RequestMutation)]
+#[case("numeric expected component", numeric_expected_component as RequestMutation)]
 #[case("numeric module component", numeric_module_component as RequestMutation)]
 #[case("leading digit component", leading_digit_component as RequestMutation)]
 #[case("root without expected", root_without_expected as RequestMutation)]
