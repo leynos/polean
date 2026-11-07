@@ -95,84 +95,72 @@ fn sorry_is_rejected_with_a_sorry_finding(#[case] fixture: &str) {
     );
 }
 
-/// A native-computation axiom is rejected, naming the axiom.
-#[test]
-fn native_axiom_is_rejected_as_native() {
-    let case = fixtures::native();
-    assert_eq!(
-        expect_rejected(&case),
-        vec![axiom_finding(0, 0, FindingCode::NativeAxiom)],
-        "a native axiom was not classified as native"
-    );
+/// Build one single-root rejection case from its fixture label.
+fn rejected_case(fixture: &str) -> Case {
+    match fixture {
+        "Native" => fixtures::native(),
+        "Undeclared" => fixtures::undeclared("Undeclared"),
+        "NarrowedFoundations" => fixtures::narrowed_foundations(),
+        "WrongStatement" => fixtures::wrong_statement("WrongStatement"),
+        "AxiomRoot" => fixtures::axiom_root(),
+        "DefRoot" => fixtures::def_root(),
+        "RootAbsent" => fixtures::root_absent(),
+        other => panic!("{other} is not a single-root rejection fixture"),
+    }
 }
 
-/// An axiom the request never declares is rejected as undeclared.
-#[test]
-fn undeclared_axiom_is_rejected() {
-    let case = fixtures::undeclared("Undeclared");
-    assert_eq!(
-        expect_rejected(&case),
-        vec![axiom_finding(0, 0, FindingCode::UndeclaredAxiom)],
-        "an undeclared axiom was not rejected"
-    );
-}
-
-/// Approving one pinned foundation does not approve the others.
-#[test]
-fn narrowed_foundations_are_rejected() {
-    let case = fixtures::narrowed_foundations();
-    assert_eq!(
-        expect_rejected(&case),
-        vec![axiom_finding(0, 0, FindingCode::UndeclaredAxiom)],
-        "a foundation outside the request's declared set was approved"
-    );
-}
-
-/// A theorem of a different proposition is rejected.
-#[test]
-fn wrong_statement_is_rejected() {
-    let case = fixtures::wrong_statement("WrongStatement");
-    assert_eq!(
-        expect_rejected(&case),
-        vec![root_finding(0, FindingCode::StatementMismatch)],
-        "a theorem of the wrong proposition was not rejected"
-    );
-}
-
-/// An axiom root is the wrong kind and depends on an unapproved name.
-#[test]
-fn axiom_root_reports_wrong_kind_then_undeclared_axiom() {
-    let case = fixtures::axiom_root();
-    assert_eq!(
-        expect_rejected(&case),
-        vec![
-            root_finding(0, FindingCode::WrongKind),
-            axiom_finding(0, 0, FindingCode::UndeclaredAxiom),
-        ],
-        "an axiom root did not report both its kind and its dependency"
-    );
-}
-
-/// A definition root is the wrong kind and has no axiom finding.
-#[test]
-fn def_root_reports_wrong_kind_only() {
-    let case = fixtures::def_root();
-    assert_eq!(
-        expect_rejected(&case),
-        vec![root_finding(0, FindingCode::WrongKind)],
-        "a definition root reported more than its kind"
-    );
-}
-
-/// A root the environment does not hold is reported absent.
-#[test]
-fn root_absent_is_reported() {
-    let case = fixtures::root_absent();
-    assert_eq!(
-        expect_rejected(&case),
-        vec![root_finding(0, FindingCode::RootAbsent)],
-        "an absent root was not reported"
-    );
+/// One unsound single-root report is rejected with exactly its findings.
+///
+/// The cases share a shape but not an outcome, so each keeps its own message: a
+/// failure names the property that broke, not only the fixture. The axiom root
+/// is the one case with two findings, the wrong kind and the unapproved
+/// dependency, in that order.
+#[rstest]
+#[case(
+    "Native",
+    &[axiom_finding(0, 0, FindingCode::NativeAxiom)],
+    "a native axiom was not classified as native"
+)]
+#[case(
+    "Undeclared",
+    &[axiom_finding(0, 0, FindingCode::UndeclaredAxiom)],
+    "an undeclared axiom was not rejected"
+)]
+#[case(
+    "NarrowedFoundations",
+    &[axiom_finding(0, 0, FindingCode::UndeclaredAxiom)],
+    "a foundation outside the request's declared set was approved"
+)]
+#[case(
+    "WrongStatement",
+    &[root_finding(0, FindingCode::StatementMismatch)],
+    "a theorem of the wrong proposition was not rejected"
+)]
+#[case(
+    "AxiomRoot",
+    &[
+        root_finding(0, FindingCode::WrongKind),
+        axiom_finding(0, 0, FindingCode::UndeclaredAxiom),
+    ],
+    "an axiom root did not report both its kind and its dependency"
+)]
+#[case(
+    "DefRoot",
+    &[root_finding(0, FindingCode::WrongKind)],
+    "a definition root reported more than its kind"
+)]
+#[case(
+    "RootAbsent",
+    &[root_finding(0, FindingCode::RootAbsent)],
+    "an absent root was not reported"
+)]
+fn single_root_rejections_name_their_findings(
+    #[case] fixture: &str,
+    #[case] expected: &[Finding],
+    #[case] message: &str,
+) {
+    let case = rejected_case(fixture);
+    assert_eq!(expect_rejected(&case), expected, "{message}");
 }
 
 /// A rejected replay is a completed audit that rejects.

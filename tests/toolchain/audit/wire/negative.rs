@@ -109,6 +109,14 @@ fn wrong_type() -> String {
     valid_report().replace(&format!(r#""githash":"{}""#, super::PIN), r#""githash":5"#)
 }
 
+/// A report whose `githash` is the empty string.
+///
+/// The contract requires at least one character, so the empty value must be
+/// malformed rather than reach settlement as a toolchain mismatch.
+fn empty_githash() -> String {
+    valid_report().replace(&format!(r#""githash":"{}""#, super::PIN), r#""githash":"""#)
+}
+
 /// A report followed by a second document.
 fn trailing_content() -> String { format!("{}{}", valid_report(), "{}") }
 
@@ -291,6 +299,7 @@ fn duplicate_foundation() -> String {
 #[case("missing axioms", missing_axioms as ReportMutation)]
 #[case("empty name", empty_name as ReportMutation)]
 #[case("wrong field type", wrong_type as ReportMutation)]
+#[case("empty githash", empty_githash as ReportMutation)]
 #[case("trailing content", trailing_content as ReportMutation)]
 #[case("unknown schema version", unknown_schema_version as ReportMutation)]
 #[case("integer above u64", integer_above_u64 as ReportMutation)]

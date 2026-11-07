@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: COMPLETE (revision 7). The user approved this plan and accepted
+Status: COMPLETE (revision 8). The user approved this plan and accepted
 [ADR 0006](../adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
 on 2026-11-06. Implementation finished on 2026-11-07; promotion into the
 product is roadmap 2.2.4 and operational integrity is roadmap 4.3.2.
@@ -897,6 +897,30 @@ were actioned and one is declined because it contradicts an accepted decision.
   carries an exact pin", records that caret requirements would make an intended
   tuple change indistinguishable from an incidental one; relaxing that is a
   separate decision. The finding asks for a change the accepted ADR forbids.
+
+### Review round 7 (2026-11-07)
+
+A fourth CodeRabbit CLI pass, over `c104ec2`, raised four findings. All four
+were actioned.
+
+- `decode_report` now refuses an empty `githash` as `Malformed`. The report
+  schema sets `minLength: 1`, so the decoder accepted a document the contract
+  rejects and the empty value surfaced as `ToolchainMismatch`, which blames the
+  toolchain for a malformed report. This is the same one-sided A3 gap round 6
+  closed for `foundations`; a report mutation, a decoder negative case, and a
+  contract control cover it. The controls now number thirteen.
+- `read_audit_manifest` validates each finding through a structural `match`
+  helper, `manifest_finding`, rather than an inline chain of `isinstance`
+  checks. The reviewer's proposed pattern bound `root` only in the `int()`
+  alternative; the committed form, `(None | int()) as root`, binds it on both
+  paths.
+- `audit_controls`, `read_audit_manifest`, and `check_audit_contracts` carry
+  NumPy-style `Parameters`, `Returns`, and `Raises` sections, so each raised
+  diagnostic is documented rather than inferred.
+- The seven single-root rejection tests become one `#[rstest]`, with a
+  fixture-label helper and per-case expected findings and failure messages. The
+  cases share a shape but not an outcome, so each keeps its own message; a
+  shared one would only name the fixture.
 
 ## Context and orientation
 
@@ -1800,3 +1824,6 @@ added. The worker uses only the pinned Lean's own `Lean` library.
 - Revision 7 (2026-11-07): recorded review round 6, including the decoder's
   enforcement of the request contract's `uniqueItems` and the reason `serde`
   keeps its exact pin. No scope change from revision 6.
+- Revision 8 (2026-11-07): recorded review round 7, including the decoder's
+  refusal of an empty `githash` and the thirteenth contract control. No scope
+  change from revision 7.

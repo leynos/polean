@@ -79,13 +79,20 @@ pub enum DecodeError {
 /// [`MAX_REPORT_BYTES`], and [`DecodeError::Malformed`] when the document is
 /// not valid JSON, has an unknown or duplicate field, omits a required field,
 /// carries a value outside the field's range, or holds a statement over the
-/// node or depth bound.
+/// node or depth bound. An empty `githash` is malformed: the contract requires
+/// at least one character, and only a non-empty hash is meaningfully compared
+/// with the pinned identity.
 pub fn decode_report(bytes: &[u8]) -> Result<AuditReport, DecodeError> {
     if bytes.len() > MAX_REPORT_BYTES {
         return Err(DecodeError::OutputOverflow);
     }
     let document: ReportDocument = serde_json::from_slice(bytes)
         .map_err(|error| DecodeError::Malformed(format!("report is not valid JSON: {error}")))?;
+    if document.githash.is_empty() {
+        return Err(DecodeError::Malformed(
+            "githash must not be empty".to_owned(),
+        ));
+    }
     Ok(AuditReport {
         githash: document.githash.into_bytes(),
         module: name_key(&convert_name(document.module)?),

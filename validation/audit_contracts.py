@@ -72,8 +72,24 @@ def audit_controls(validators: dict[str, Draft202012Validator],
     The report contract deliberately has no verdict field, so the first control
     is the one that keeps a worker from choosing its own outcome. The rest cover
     the required nullable fields, the closed declaration-kind set, the ground
-    tree's two exclusive forms, the integer range a name component may use, and
-    the set semantics of the approved foundations.
+    tree's two exclusive forms, the integer range a name component may use, the
+    set semantics of the approved foundations, and the report's non-empty
+    toolchain identity.
+
+    Parameters
+    ----------
+    validators:
+        The compiled contract validators, keyed by contract name.
+    request_sample:
+        The decoded request sample the harness validates.
+    report_sample:
+        The decoded report sample the harness validates.
+
+    Returns
+    -------
+    list[tuple[str, bool, bool]]
+        One entry per control: its description, whether the unmutated sample is
+        accepted, and whether the mutated sample is still accepted.
     """
 
     def request_accepted(document: dict[str, Any]) -> bool:
@@ -98,6 +114,8 @@ def audit_controls(validators: dict[str, Draft202012Validator],
 
     verdict = copy.deepcopy(report_sample)
     verdict["accepted"] = True
+    empty_githash = copy.deepcopy(report_sample)
+    empty_githash["githash"] = ""
     missing_declaration = copy.deepcopy(report_sample)
     del missing_declaration["roots"][0]["declaration"]
     missing_statement = copy.deepcopy(report_sample)
@@ -127,6 +145,8 @@ def audit_controls(validators: dict[str, Draft202012Validator],
          request_accepted(request_sample), request_accepted(root_without_expected)),
         ("audit report rejects a verdict field",
          report_accepted(report_sample), report_accepted(verdict)),
+        ("audit report rejects an empty githash",
+         report_accepted(report_sample), report_accepted(empty_githash)),
         ("audit report rejects a missing declaration field",
          report_accepted(report_sample), report_accepted(missing_declaration)),
         ("audit report rejects a missing statement field",
@@ -149,6 +169,43 @@ class ManifestLineError(AssertionError):
         super().__init__(f"{AUDIT_MANIFEST} line {number} is not JSON: {error}")
 
 
+def manifest_finding(number: int, finding: object) -> tuple[int | None, str]:
+    """Return the root index and code of one well-formed manifest finding.
+
+    Parameters
+    ----------
+    number:
+        The manifest line the finding came from, used in the diagnostic.
+    finding:
+        One decoded entry of a manifest line's ``findings`` list. It is
+        untrusted: the manifest is hand-written, and a malformed line must fail
+        the check rather than reach the corpus comparison.
+
+    Returns
+    -------
+    tuple[int | None, str]
+        The root index, ``None`` for a whole-report finding, and the code.
+
+    Raises
+    ------
+    AssertionError
+        If the finding has another shape, names an unknown code, or carries a
+        root index that is not a non-negative integer. A Boolean is refused
+        even though it is an ``int`` subclass.
+    """
+    where = f"{AUDIT_MANIFEST} line {number}"
+    match finding:
+        case {"root": (None | int()) as root, "code": str() as code} if len(finding) == 2:
+            pass
+        case _:
+            raise AssertionError(f"{where} has a malformed finding")
+    require(code in AUDIT_FINDING_CODES,
+            f"{where} names an unknown finding code {code!r}")
+    require(root is None or (type(root) is int and root >= 0),
+            f"{where} has a malformed root index")
+    return root, code
+
+
 def read_audit_manifest(repo: Repository) -> list[dict[str, Any]]:
     """Read the hand-written corpus manifest and hold it to the reviewed table.
 
@@ -157,6 +214,25 @@ def read_audit_manifest(repo: Repository) -> list[dict[str, Any]]:
     to match whatever the worker later reports. Findings are compared in order,
     because settlement emits them in a fixed order and the smoke test compares
     the same sequence.
+
+    Parameters
+    ----------
+    repo:
+        The repository reader the manifest path is resolved against.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        The manifest entries, in file order.
+
+    Raises
+    ------
+    ManifestLineError
+        If a line is not valid JSON.
+    AssertionError
+        If a line names an unreviewed or repeated fixture, disagrees with the
+        reviewed table, has a malformed finding, or the manifest omits a
+        reviewed fixture.
     """
     text = repo.read_text(AUDIT_MANIFEST)
     lines = [line for line in text.splitlines() if line.strip()]
@@ -195,21 +271,8 @@ def read_audit_manifest(repo: Repository) -> list[dict[str, Any]]:
                 f"reviewed as {reason!r}")
         require(isinstance(entry["findings"], list),
                 f"{AUDIT_MANIFEST} line {number} has findings that are not a list")
-        observed = []
-        for finding in entry["findings"]:
-            require(isinstance(finding, dict)
-                    and set(finding) == {"root", "code"},
-                    f"{AUDIT_MANIFEST} line {number} has a malformed finding")
-            require(isinstance(finding["code"], str)
-                    and finding["code"] in AUDIT_FINDING_CODES,
-                    f"{AUDIT_MANIFEST} line {number} names an unknown finding "
-                    f"code {finding['code']!r}")
-            require(finding["root"] is None
-                    or (isinstance(finding["root"], int)
-                        and not isinstance(finding["root"], bool)
-                        and finding["root"] >= 0),
-                    f"{AUDIT_MANIFEST} line {number} has a malformed root index")
-            observed.append((finding["root"], finding["code"]))
+        observed = [manifest_finding(number, finding)
+                    for finding in entry["findings"]]
         require(tuple(observed) == findings,
                 f"{AUDIT_MANIFEST} line {number} expects findings {observed}, "
                 f"reviewed as {list(findings)}")
@@ -230,6 +293,26 @@ def check_audit_contracts(repo: Repository,
     both sides failing on the same document. The negative controls require each
     contract to reject one targeted fault, because a contract that rejects
     everything proves as little as one that accepts everything.
+
+    Parameters
+    ----------
+    repo:
+        The repository reader the samples and manifest are read through.
+    validators:
+        The compiled contract validators, keyed by contract name.
+
+    Returns
+    -------
+    tuple[int, int]
+        The number of negative controls that passed and the number of manifest
+        entries read.
+
+    Raises
+    ------
+    AssertionError
+        If a sample violates its contract, the samples disagree, a negative
+        control does not detect its fault, or the manifest disagrees with the
+        reviewed corpus.
     """
     request_sample = repo.read_json(AUDIT_REQUEST_SAMPLE)
     report_sample = repo.read_json(AUDIT_REPORT_SAMPLE)
