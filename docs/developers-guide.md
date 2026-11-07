@@ -156,6 +156,21 @@ CI installs `mold` through `install-mold` on `setup-rust`, and the Cranelift
 component for the Whitaker toolchain through `cranelift: 'true'` on
 `install-whitaker`, the CI equivalent of `whitaker-installer --cranelift`.
 
+## Fetching dependencies before tests
+
+The admission compile-fail test starts its own `cargo`. Cargo resolves
+dependencies while it holds the package-cache lock in `$CARGO_HOME`, so a nested
+`cargo` that resolves cold can wait on another repository's build for many
+minutes. The fix is to fetch once, before any test starts, and to run the
+nested call offline:
+
+- `make test` runs `cargo fetch --locked` first. A failed fetch stops the run,
+  and CI reaches it through `make test`.
+- The admission test passes `--offline` and sets `CARGO_NET_OFFLINE=true`.
+
+Prepare a direct or offline run with `cargo fetch --locked` first. The estate
+lint rule `nested-cargo-offline-tests` checks both.
+
 ## Changing a toolchain pin
 
 `toolchain-pins.json` is the authoritative identity of the provisioned
