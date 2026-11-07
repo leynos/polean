@@ -526,10 +526,23 @@ def require_rejection(
 
 
 def check_tree(
-    root: Path, tree: ProofTree, verus: Path, z3: Path, *, runner: Runner
+    root: Path,
+    tree: ProofTree,
+    controls: Sequence[Control],
+    verus: Path,
+    z3: Path,
+    *,
+    runner: Runner,
 ) -> list[str]:
-    """Run one tree's baseline and every control in a fresh scratch tree."""
-    controls = tuple(control for control in CONTROLS if control.tree == tree)
+    """Run one tree's baseline and ``controls`` in a fresh scratch tree.
+
+    The controls are supplied rather than selected here, so a caller can check a
+    tree against a collection this module does not configure. A tree with no
+    controls is a configuration fault: a verified proof with no negative evidence
+    would otherwise report success with nothing to show.
+    """
+    if not controls:
+        raise ControlError(f"tree {tree.name} has no controls to replay")
     lines: list[str] = []
     with tempfile.TemporaryDirectory(
         prefix=f"polean-verus-controls-{tree.name}-"
@@ -554,19 +567,29 @@ def check_tree(
     return lines
 
 
-def check(root: Path, verus: Path, z3: Path, *, runner: Runner) -> list[str]:
-    """Run every proof tree's baseline and controls.
+def check(
+    root: Path,
+    trees: Sequence[ProofTree],
+    controls: Sequence[Control],
+    verus: Path,
+    z3: Path,
+    *,
+    runner: Runner,
+) -> list[str]:
+    """Run each tree's baseline and the controls that name it.
 
-    `runner` is the dependency that invokes the verifier, so a test can observe
-    the staged tree without replacing a module global. :func:`main` supplies
-    :func:`run_verus`.
+    The trees and controls are supplied rather than read from this module's
+    configuration, which :func:`main` selects at the command boundary. `runner`
+    is the dependency that invokes the verifier, so a test can observe the staged
+    tree without replacing a module global.
 
-    Returns one evidence line per control. Raises :class:`ControlError` on the
-    first control that does not behave as required.
+    Returns one evidence line per control. Raises :class:`ControlError` on a tree
+    with no controls, or on the first control that does not behave as required.
     """
     lines: list[str] = []
-    for tree in TREES:
-        lines.extend(check_tree(root, tree, verus, z3, runner=runner))
+    for tree in trees:
+        selected = tuple(control for control in controls if control.tree == tree)
+        lines.extend(check_tree(root, tree, selected, verus, z3, runner=runner))
     return lines
 
 
@@ -588,7 +611,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Z3 is not installed at {z3}; run 'make install-verus'", file=sys.stderr)
         return 2
     try:
-        for line in check(root, verus, z3, runner=run_verus):
+        for line in check(root, TREES, CONTROLS, verus, z3, runner=run_verus):
             print(line)
     except ControlError as error:
         print(f"negative control failed: {error}", file=sys.stderr)
