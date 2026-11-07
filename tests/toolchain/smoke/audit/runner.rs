@@ -185,7 +185,7 @@ impl Corpus {
     }
 }
 
-/// Serialises `lake build`, which writes `.lake/build` in the package.
+/// Serializes `lake build`, which writes `.lake/build` in the package.
 static BUILD_LOCK: Mutex<()> = Mutex::new(());
 
 /// Build the audit worker with the pinned Lake.

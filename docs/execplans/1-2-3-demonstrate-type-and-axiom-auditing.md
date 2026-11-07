@@ -1714,4 +1714,5 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   shrank from 37 entries to 22, and the specification lost its origin and
   provenance clauses. The adversarial results moved to a findings record, with
   their sources. Revision 2's design stands as the starting point for 4.3.2.
-  Implementation still awaits approval.
+- Revision 5 (2026-11-07): recorded the completed implementation, the measured
+  results, and decisions D17 to D20. No scope change from revision 4.

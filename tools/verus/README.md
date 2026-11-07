@@ -86,6 +86,8 @@ The five admission controls are:
 | specification | let `body_byte` admit NUL                    | T1's `lemma_comment_body_permitted` |
 | specification | drop `comment_ok`'s metadata exclusion       | T2's `lemma_comment_no_metadata`    |
 
+_Table 1: The five admission negative controls and the failure each must cause._
+
 The ten settlement controls are:
 
 | Kind          | Change                                 | Required failure              |
@@ -100,6 +102,8 @@ The ten settlement controls are:
 | body          | report a breach as a rejection         | the settlement postcondition  |
 | specification | admit `sorryAx` as a pinned foundation | the pinned-foundation lemma   |
 | specification | weaken an admissible request           | the request witness assertion |
+
+_Table 2: The ten settlement negative controls and the failure each must cause._
 
 The body controls mutate executable decision code and leave the specification
 unchanged; the specification controls mutate a definition and leave the code
