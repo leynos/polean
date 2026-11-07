@@ -203,9 +203,10 @@ revision has applied them to the technical design.
 - Risk: structural statement comparison is too brittle for real claims.
   Severity: medium. Likelihood: medium. Mitigation: the 2026-11-06 probe
   confirmed a named predicate over a nested list literal is a bare
-  `const`/`app` tree, and a maximal 16-by-16 policy fits at 1,705 nodes and
-  depth 37. `AcceptedClaimShape` and `MaximalPolicy` pin this, and
-  out-of-grammar statements report `null` and fail closed.
+  `const`/`app` tree, and a maximal 16-by-16 policy fits at 1,765 nodes and 38
+  levels by application; the plan estimated 1,705 nodes at depth 37, and the
+  corpus measured the larger figure. `AcceptedClaimShape` and `MaximalPolicy`
+  pin this, and out-of-grammar statements report `null` and fail closed.
 - Risk: a reader takes `accepted` to mean more than it does. Severity: high.
   Likelihood: medium. Mitigation: the constraints, `Assurance trade-offs`, ADR
   0006, and technical design §2.1 all state the condition, and development
@@ -1562,10 +1563,10 @@ worker, and remains an option for 4.3.2's independent check.
 A statement tree is exactly `{"const": Name, "levels": [Nat]}` or
 `{"app": [Tree, Tree]}`, with no binder, literal, or variable form. It is
 bounded at 4,096 nodes and depth 60: `serde_json` allows nesting of 127, each
-`app` costs two levels, and `MaximalPolicy` needs 1,705 nodes at depth 37. A
-request `Name` is a non-empty array of non-empty strings, each matching
-`[A-Za-z_][A-Za-z0-9_']*`, so it can be passed as a dotted argument without
-ambiguity. Levels are small natural numbers.
+`app` costs two levels, and `MaximalPolicy` needs 1,765 nodes at 38 levels by
+application. A request `Name` is a non-empty array of non-empty strings, each
+matching `[A-Za-z_][A-Za-z0-9_']*`, so it can be passed as a dotted argument
+without ambiguity. Levels are small natural numbers.
 
 ### Worker interface
 
