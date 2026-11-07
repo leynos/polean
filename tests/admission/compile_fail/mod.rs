@@ -187,6 +187,9 @@ fn compile(root: &Path, target: &Path) -> io::Result<Output> {
         ])
         .current_dir(root)
         .env("CARGO_TARGET_DIR", target)
+        // `--offline` is already passed; the variable also covers the cargo
+        // subprocesses this one starts.
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
 }
 
