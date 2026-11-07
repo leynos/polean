@@ -1,9 +1,10 @@
-//! Generators, reference encodings, and document helpers for A1 and A2.
+//! Generators, reference encodings, key decoders, and document helpers for A1
+//! and A2.
 //!
 //! The properties in [`super::keys`] and [`super::contract`] share these so the
-//! reference encodings and the mutated documents are defined once. Every helper
-//! here is deterministic: the seeded runner fixes the draw order, and the near
-//! edits are total functions over the generated values.
+//! reference encodings, the key decoders, and the mutated documents are defined
+//! once. Every helper here is deterministic: the seeded runner fixes the draw
+//! order, and the near edits are total functions over the generated values.
 
 use proptest::{
     arbitrary::any,
@@ -243,6 +244,146 @@ pub(super) fn retype_field(index: usize) -> Vec<u8> {
     let mut document = valid_document();
     document.insert(key.to_owned(), replacement);
     encode(&document)
+}
+
+/// The tag that starts a name key, repeated for the test-only decoder.
+///
+/// The wire module's constants are private, so they are written out again here
+/// on purpose. A decoder that read the encoder's own constants could not catch
+/// an encoding change that made a key ambiguous; repeating the format means a
+/// drift on either side breaks the round trip.
+const NAME_TAG: u8 = 0x4e;
+
+/// The tag that starts a textual component.
+const TEXT_TAG: u8 = 0x53;
+
+/// The tag that starts a numeric component.
+const NUMBER_TAG: u8 = 0x49;
+
+/// The tag that starts a constant node.
+const CONST_TAG: u8 = 0x43;
+
+/// The tag that starts an application node.
+const APP_TAG: u8 = 0x41;
+
+/// A cursor over one key's bytes.
+struct KeyReader<'a> {
+    /// The key being read.
+    bytes: &'a [u8],
+    /// How many bytes have been consumed.
+    at: usize,
+}
+
+impl<'a> KeyReader<'a> {
+    /// Start reading at the key's first byte.
+    const fn new(bytes: &'a [u8]) -> Self { Self { bytes, at: 0 } }
+
+    /// Consume one byte, or return `None` at the end of the key.
+    fn byte(&mut self) -> Option<u8> {
+        let byte = *self.bytes.get(self.at)?;
+        self.at += 1;
+        Some(byte)
+    }
+
+    /// Consume `len` bytes, or return `None` if the key is too short.
+    fn take(&mut self, len: usize) -> Option<&'a [u8]> {
+        let end = self.at.checked_add(len)?;
+        let slice = self.bytes.get(self.at..end)?;
+        self.at = end;
+        Some(slice)
+    }
+
+    /// Consume one little-endian `u64`.
+    #[expect(
+        clippy::little_endian_bytes,
+        reason = "the decoder must read the wire format's little-endian integers"
+    )]
+    fn u64(&mut self) -> Option<u64> { Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?)) }
+
+    /// Consume one universe level, which the wire format widens to a `u64`.
+    fn level(&mut self) -> Option<u32> { u32::try_from(self.u64()?).ok() }
+
+    /// How many bytes are left.
+    const fn remaining(&self) -> usize { self.bytes.len() - self.at }
+
+    /// Whether every byte has been consumed.
+    const fn at_end(&self) -> bool { self.at == self.bytes.len() }
+}
+
+/// Decode the name at the cursor, or return `None` if the bytes are not one.
+fn decode_name(reader: &mut KeyReader<'_>) -> Option<Name> {
+    if reader.byte()? != NAME_TAG {
+        return None;
+    }
+    let count = usize::try_from(reader.u64()?).ok()?;
+    // Every component spends at least its tag byte, so a count above the
+    // remaining length is malformed rather than merely large.
+    if count > reader.remaining() {
+        return None;
+    }
+    let mut name = Vec::with_capacity(count.min(64));
+    for _ in 0..count {
+        let component = match reader.byte()? {
+            TEXT_TAG => {
+                let len = usize::try_from(reader.u64()?).ok()?;
+                Component::Text(String::from_utf8(reader.take(len)?.to_vec()).ok()?)
+            }
+            NUMBER_TAG => Component::Number(reader.u64()?),
+            _ => return None,
+        };
+        name.push(component);
+    }
+    Some(name)
+}
+
+/// Bytes spent by one universe level on the wire.
+const LEVEL_BYTES: usize = 8;
+
+/// Decode the constant node whose tag the cursor has already consumed.
+fn decode_const(reader: &mut KeyReader<'_>) -> Option<Tree> {
+    let name = decode_name(reader)?;
+    let count = usize::try_from(reader.u64()?).ok()?;
+    // Each level spends eight bytes, so a count that cannot fit in the bytes
+    // left is malformed rather than merely large.
+    let needed = count.checked_mul(LEVEL_BYTES)?;
+    if needed > reader.remaining() {
+        return None;
+    }
+    let mut levels = Vec::with_capacity(count.min(64));
+    for _ in 0..count {
+        levels.push(reader.level()?);
+    }
+    Some(Tree::Const { name, levels })
+}
+
+/// Decode the tree at the cursor, or return `None` if the bytes are not one.
+fn decode_tree(reader: &mut KeyReader<'_>) -> Option<Tree> {
+    match reader.byte()? {
+        CONST_TAG => decode_const(reader),
+        APP_TAG => Some(Tree::App(
+            Box::new(decode_tree(reader)?),
+            Box::new(decode_tree(reader)?),
+        )),
+        _ => None,
+    }
+}
+
+/// Decode a name key, or return `None` if the bytes are not exactly one key.
+pub(super) fn decode_name_key(bytes: &[u8]) -> Option<Name> {
+    let mut reader = KeyReader::new(bytes);
+    let name = decode_name(&mut reader)?;
+    reader.at_end().then_some(name)
+}
+
+/// Decode a tree key, or return `None` if the bytes are not exactly one key.
+///
+/// The cursor must be spent afterwards, so trailing bytes are a decode failure
+/// rather than an ignored suffix. Without that check an encoding that appended
+/// a discriminant could still pass a prefix-only round trip.
+pub(super) fn decode_tree_key(bytes: &[u8]) -> Option<Tree> {
+    let mut reader = KeyReader::new(bytes);
+    let tree = decode_tree(&mut reader)?;
+    reader.at_end().then_some(tree)
 }
 
 /// Run a property and report a failure as a panic naming the shrunk case.

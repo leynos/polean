@@ -1,13 +1,17 @@
-//! A1: the byte keys settlement compares are injective.
+//! A1: the byte keys settlement compares are injective and faithful.
 //!
-//! Each property pairs the real key with a tag-free, length-free reference
-//! encoding. The reference is what a careless implementation would produce, and
-//! every seeded case shows it colliding on inputs the real key separates.
+//! Injectivity is necessary but not sufficient: an encoding can separate every
+//! pair and still lose information. Each property therefore pairs the real key
+//! with a tag-free, length-free reference encoding, which is what a careless
+//! implementation would produce, and with a test-only decoder that must return
+//! the value the key was made from.
 
-use proptest::prelude::prop_assert;
+use proptest::prelude::{prop_assert, prop_assert_eq};
 
 use super::support::{
     check,
+    decode_name_key,
+    decode_tree_key,
     naive_name,
     naive_tree,
     name_strategy,
@@ -41,6 +45,31 @@ fn tree_keys_are_injective() {
             left,
             right
         );
+        Ok(())
+    });
+}
+
+/// Every generated name survives a decode of its own key.
+///
+/// Injectivity alone would be satisfied by an encoding that is not a faithful
+/// reading of the name, so the decoder repeats the wire tags rather than
+/// importing them: a format change on either side breaks this property.
+#[test]
+fn name_keys_round_trip() {
+    check(name_strategy(), |name| {
+        prop_assert_eq!(decode_name_key(&name_key(&name)), Some(name.clone()));
+        Ok(())
+    });
+}
+
+/// Every generated statement survives a decode of its own key.
+///
+/// The decoder must also consume every byte: a trailing suffix would fail
+/// here even though a prefix-only reading would still be injective.
+#[test]
+fn tree_keys_round_trip() {
+    check(tree_strategy(), |tree| {
+        prop_assert_eq!(decode_tree_key(&tree_key(&tree)), Some(tree.clone()));
         Ok(())
     });
 }

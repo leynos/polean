@@ -1,7 +1,12 @@
 //! Witnesses showing every settlement outcome is reachable.
 //!
 //! Each witness runs the real `settle` on one concrete request and report, so
-//! no obligation in the proof has a vacuous antecedent.
+//! the acceptance, rejection, and protocol-failure outcomes are reachable as
+//! abstract values and the proof's preconditions are satisfiable. The keys are
+//! arbitrary byte strings rather than keys produced by `name_key`, so the
+//! witnesses do not show reachability through the wire decoder or non-vacuity
+//! of every obligation; the A1 key properties cover the encoding's link to real
+//! names and statements.
 
 use vstd::prelude::*;
 

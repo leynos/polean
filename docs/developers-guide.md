@@ -262,11 +262,14 @@ decision through `#[path]`. It then replays the negative controls that
 detects its named defect fails the target. Both are on-demand: `make all` and
 CI do not need a solver, a network connection, or several gigabytes of disk for
 Verus. The recognizer proof establishes the kernel's byte-level soundness for
-sources of any length. The settlement proof establishes what acceptance means
-for a report settlement is given; it does not establish that the worker told
-the truth. Neither proof establishes that the AST walk maps Regorus faithfully,
-that the renderer chooses the right tokens, or that Rego means what the model
-means. Those remain tested or open as the record describes.
+sources of any length. Its completeness result is stated only for a
+canonical-token predicate, which is a sufficient condition for a successful
+recognition rather than a characterisation of every input it accepts. The
+settlement proof establishes what acceptance means for a report settlement is
+given; it does not establish that the worker told the truth. Neither proof
+establishes that the AST walk maps Regorus faithfully, that the renderer
+chooses the right tokens, or that Rego means what the model means. Those remain
+tested or open as the record describes.
 
 ## The audit corpus (1.2.3)
 

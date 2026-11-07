@@ -196,6 +196,19 @@ fn run(corpus: &Corpus, entry: &Entry) -> Result<Output, String> {
 /// corpus itself is inadmissible.
 fn classify(entry: &Entry, output: &Output) -> Result<Outcome, String> {
     if !output.status.success() {
+        // W1: everything that goes wrong before the report is printed exits
+        // non-zero with standard output empty. Without this check a worker that
+        // printed a partial report before failing would still be classified as
+        // a failure, hiding that its contract was broken.
+        if !output.stdout.is_empty() {
+            return Err(format!(
+                "{} failed with {:?} but left {} bytes on stdout; a worker failure must leave \
+                 standard output empty",
+                entry.fixture,
+                output.status.code(),
+                output.stdout.len()
+            ));
+        }
         return Ok(Outcome::ToolFailure("worker_failed"));
     }
     match decode_report(&output.stdout) {

@@ -3,8 +3,12 @@
 
   The worker observes one compiled Lean module and the roots a request names,
   and prints one JSON document describing what it saw. It emits no verdict: the
-  Rust side settles a report against the request, so a worker bug can make a
-  report wrong but cannot make an audit pass.
+  Rust side settles a report against the request, so the worker cannot choose
+  the outcome. Settlement still trusts a report that matches the request, so a
+  worker fault that omits an axiom can make an audit pass; acceptance means the
+  report says the right thing, not that the report is true. Report truthfulness
+  is the worker's to establish and lies outside the settlement proof, which is
+  the operational-integrity boundary ADR 0006 records.
 
   Input is positional:
 
@@ -134,8 +138,12 @@ def emit (doc : Json) : IO UInt32 := do
     compiled `.olean` files into the environment without re-checking them, which
     is precisely the replay this worker observes and reports. Nothing read
     through that boundary is trusted here; the report is data for the Rust
-    settlement, which decides, and a fault in the worker can make a report wrong
-    but cannot make an audit pass. Every other step is ordinary `IO`. -/
+    settlement, which decides. Settlement guarantees that acceptance follows
+    from the submitted report and request; it does not make a false report true.
+    A worker fault that drops an axiom can therefore produce an accepted audit,
+    which is why report truthfulness is a separate claim and why ADR 0006 keeps
+    operational integrity outside this worker. Every other step is ordinary
+    `IO`. -/
 unsafe def main (args : List String) : IO UInt32 := do
   let modS :: root0 :: rootRest := args
     | throw (IO.userError "usage: polean-audit <module> <root>...")

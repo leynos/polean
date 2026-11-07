@@ -122,8 +122,10 @@ The decision was implemented in 1.2.3 and measured on the pinned tuple.
   expected statement and emits no verdict.
 - `tests/toolchain/audit/settlement/` decides acceptance. Verus verifies 64
   obligations over it, and the recognizer proof still verifies 89. Fifteen
-  negative controls (five admission, ten settlement) fail at their named
-  obligations.
+  negative controls (five admission, ten settlement) are rejected with a
+  diagnostic naming the expected failure kind and source path; the checker
+  matches that text, so a control shows its edit is detected and located, not
+  that the first failing obligation is the one the specification intended.
 - The corpus is twenty-five modules under `examples/audit/lean/AuditFixture/`
   — twenty audited fixtures and five support modules — plus two programs, all
   checked against a hand-written manifest rather than a generated one.

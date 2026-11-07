@@ -495,7 +495,14 @@ def require_baseline(control_run: subprocess.CompletedProcess[str]) -> None:
 def require_rejection(
     control: Control, control_run: subprocess.CompletedProcess[str]
 ) -> str:
-    """Require Verus to reject the edited proof at the control's obligation."""
+    """Require Verus to reject the edited proof with the expected diagnostic.
+
+    The match is textual: each expected item must appear somewhere in the
+    combined output, which names the failure kind and the source path but not
+    the individual obligation. A control therefore shows that its edit is
+    detected and located, not that the first failing obligation is the one the
+    specification intended to defend.
+    """
     output = control_run.stdout + control_run.stderr
     if control_run.returncode == 0:
         raise ControlError(f"control {control.name}: Verus accepted the defect")
