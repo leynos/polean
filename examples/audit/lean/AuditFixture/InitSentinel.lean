@@ -1,4 +1,6 @@
-/-
+import AuditFixture.Goal
+
+/-!
 An `initialize` block that writes a sentinel if it ever runs.
 
 The audit imports the job with `loadExts := false`, so initializers must not
@@ -8,7 +10,6 @@ control. If the audit ran the initializer, the sentinel would appear and the
 corpus would fail; `lean --run` on `SentinelProbe` must create it, so a broken
 fixture cannot pass by never writing anything.
 -/
-import AuditFixture.Goal
 
 namespace AuditFixture.InitSentinel
 

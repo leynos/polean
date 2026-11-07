@@ -1,4 +1,6 @@
-/-
+import AuditFixture.Goal
+
+/-!
 The goal resting on a foundation the request does not list.
 
 The root uses `propext`, and the corpus request approves only `Quot.sound` and
@@ -6,7 +8,6 @@ The root uses `propext`, and the corpus request approves only `Quot.sound` and
 fewer foundations than the job uses, and settlement then rejects the surplus
 as an undeclared axiom.
 -/
-import AuditFixture.Goal
 
 namespace AuditFixture.NarrowedFoundations
 

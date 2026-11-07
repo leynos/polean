@@ -1,11 +1,12 @@
-/-
+import AuditFixture.Goal
+
+/-!
 A theorem that uses all three approved foundations.
 
 `propext`, `Quot.sound`, and `Classical.choice` are the pinned foundations the
 request may approve. The root's axiom set must be exactly these three, and
 settlement accepts them because the request lists them.
 -/
-import AuditFixture.Goal
 
 namespace AuditFixture.AcceptedFoundations
 

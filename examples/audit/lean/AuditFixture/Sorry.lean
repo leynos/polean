@@ -1,10 +1,11 @@
-/-
+import AuditFixture.Goal
+
+/-!
 A direct `sorry`.
 
 `sorry` closes the goal with `sorryAx`, which `Lean.collectAxioms` reports.
 The finding is `sorry_axiom`, and no request can approve `sorryAx`.
 -/
-import AuditFixture.Goal
 
 namespace AuditFixture.Sorry
 

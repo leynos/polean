@@ -1,11 +1,12 @@
-/-
+import AuditFixture.Goal
+
+/-!
 A direct user axiom.
 
 The root is a theorem, its statement is the goal, and the only axiom is
 `AuditFixture.Undeclared.assume`, which the request does not approve. The
 finding is `undeclared_axiom`.
 -/
-import AuditFixture.Goal
 
 namespace AuditFixture.Undeclared
 

@@ -1,4 +1,6 @@
-/-
+import AuditFixture.Goal
+
+/-!
 A native-computation axiom reached through a helper.
 
 `native_decide` trusts compiled evaluation and records an axiom whose name
@@ -6,7 +8,6 @@ contains a `_native` component. The request cannot approve it, so settlement
 reports `native_axiom` rather than the generic `undeclared_axiom`, which names
 the trust step the user must see.
 -/
-import AuditFixture.Goal
 
 namespace AuditFixture.Native
 

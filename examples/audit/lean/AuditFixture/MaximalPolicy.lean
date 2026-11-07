@@ -1,4 +1,6 @@
-/-
+import AuditFixture.Claim
+
+/-!
 A claim over a maximal policy literal.
 
 Sixteen rules, each covering all sixteen atoms, written out in full. The tree
@@ -6,7 +8,6 @@ is well inside the 4,096-node, depth-60 bound, but large enough that a renderer
 which truncated the statement, dropped an argument, or lost a cons cell would
 produce a different tree. Acceptance here is what pins the bound's headroom.
 -/
-import AuditFixture.Claim
 
 namespace AuditFixture.MaximalPolicy
 

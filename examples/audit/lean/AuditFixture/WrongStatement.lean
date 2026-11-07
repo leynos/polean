@@ -1,4 +1,4 @@
-/-
+/-!
 A different proposition. The root proves `True`, not `AuditFixture.Goal`.
 
 The declaration is the right kind and has no axioms, so `statement_mismatch`

@@ -1,11 +1,12 @@
-/-
+import AuditFixture.Claim
+
+/-!
 A named claim over a structural policy literal.
 
 The root's type is `Claim.Holds` applied to a two-rule policy written out in
 full. It is a ground `const`/`app` tree: no binder, literal, or variable form.
 The settlement accepts it because the request carries exactly this tree.
 -/
-import AuditFixture.Claim
 
 namespace AuditFixture.AcceptedClaimShape
 

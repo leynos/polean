@@ -1,11 +1,12 @@
-/-
+import AuditFixture.Goal
+
+/-!
 A `sorry` behind an imported helper.
 
 `SorryImported` proves the goal from this declaration, so the axiom is reached
 through another module in the import closure. This exercises axiom collection
 across modules rather than within one.
 -/
-import AuditFixture.Goal
 
 namespace AuditFixture.SorryBase
 

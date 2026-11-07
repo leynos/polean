@@ -1,4 +1,4 @@
-/-
+/-!
 The module exists but defines no `root`.
 
 The worker reports `declaration: null` and settlement reports `root_absent`.

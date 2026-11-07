@@ -1,4 +1,4 @@
-/-
+/-!
 A program that prints something which is not an audit report.
 
 The smoke runner runs this in place of the worker for the `WorkerGarbled`

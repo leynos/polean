@@ -1,12 +1,13 @@
-/-
+import AuditFixture.Goal
+import Lean
+
+/-!
 A declaration the frontend wrote without asking the kernel.
 
 The forged theorem is in the audited module itself. Replay reads every retained
 constant in every non-toolchain module and rejects the job, so the settlement
 is `kernel_rejected` whatever the declaration claims.
 -/
-import AuditFixture.Goal
-import Lean
 open Lean Elab Command
 
 namespace AuditFixture.ForgeInit

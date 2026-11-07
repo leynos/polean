@@ -1,4 +1,4 @@
-/-
+/-!
 The claim vocabulary the structural-literal fixtures share.
 
 A real Polean claim is a named predicate applied to a policy literal, so the

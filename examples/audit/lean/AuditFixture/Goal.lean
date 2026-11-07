@@ -1,4 +1,4 @@
-/-
+/-!
 The proposition every accepted audit fixture's root proves.
 
 The root's type must render as the ground tree `AuditFixture.Goal`, so the
