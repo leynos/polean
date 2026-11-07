@@ -37,9 +37,10 @@ already exist.
 - [Admission design decision][adr-0005]: AST mapping plus a canonical-token
   recognizer with a Verus-verified kernel.
 - [Integrity boundary decision][adr-0006]: separating proof integrity from
-  operational integrity, and what each milestone may claim (proposed).
+  operational integrity, and what each milestone may claim.
 - [Audit ExecPlan](execplans/1-2-3-demonstrate-type-and-axiom-auditing.md): the
-  draft plan for demonstrating declaration-type and transitive-axiom auditing.
+  approved plan for demonstrating declaration-type and transitive-axiom
+  auditing.
 - [Lean environment integrity findings](lean-environment-integrity-findings.md):
   adversarial research and regression candidates for roadmap 4.3.2.
 - [Draft-pack validation](../validation/README.md): checks that ran, results,

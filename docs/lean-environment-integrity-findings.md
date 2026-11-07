@@ -110,6 +110,29 @@ unconfirmed.
   blocks, while `lean --run` on the same module did. This one stays in the
   1.2.3 corpus.
 
+### Observed again during 1.2.3
+
+The committed corpus reproduced part of this record, and answered three
+questions it left open.
+
+- `ForgeInit` and `ForgeImported` reproduce on the pinned tuple, and the
+  worker's replay rejects both. `ForgeImported` shows that the rejection does
+  not depend on the forgery sitting in the audited module rather than in an
+  import.
+- `native_decide` records its axiom under the declaration that used it:
+  `AuditFixture.Native.helper._native.native_decide.ax_1_1`. The `_native`
+  component is not a prefix, so a classifier must scan components rather than
+  test the first one.
+- Replay accepts a declaration whose type is a constructor or a recursor and
+  leaves the kind to the observer, which reports `constructor` or `recursor`
+  and lets settlement reject it as the wrong kind. Replay failures stay
+  reserved for declarations it cannot rebuild.
+- The worker collects axioms from the imported environment while reading the
+  declaration's kind and type from the replayed one. On every corpus fixture
+  the two agree, because replay accepted the same declaration. A future
+  promotion should take both from the replayed environment so the observation
+  has one source.
+
 ## Prototype
 
 This is the 2026-11-06 hardened prototype. Removing the four marked hardenings
@@ -259,8 +282,16 @@ theorem Fx.StatementForge.root : Fx.Goal := Fx.Truth.intro
 
 ### Shadowed trusted module
 
-Compile both against each other, with the real `Fx.Expected` in the trusted
-root. The job's `Fx/Expected.olean` must not be loaded.
+The trusted root holds the real `Fx/Expected.lean`. Its `Fx.Goal` is the
+two-argument proposition the `DupRoot` and `RecForge` fixtures also prove, so
+one trusted module serves every case in this section.
+
+```lean
+def Fx.Goal : Prop := ∀ a b : Bool, (a && b) = (b && a)
+```
+
+The job ships its own `Fx/Expected.lean`, which redefines `Fx.Goal` as `True`,
+and a theorem that is only well typed against that redefinition.
 
 ```lean
 def Fx.Goal : Prop := True
@@ -270,6 +301,13 @@ def Fx.Goal : Prop := True
 import Fx.Expected
 theorem Fx.TrustedSpoof.root : Fx.Goal := trivial
 ```
+
+Compile the job with its own root first, so its `Fx/Expected.olean` is the one
+`import` resolves. The theorem then elaborates, and a worker that takes
+`LEAN_PATH` as given reports a clean statement. Compile it again with the
+trusted root first: `Fx.Goal` is the trusted proposition, and `trivial` fails
+with `True` where `Goal` is expected. The job's `Fx/Expected.olean` must not be
+loaded.
 
 ### Shadowed toolchain module
 

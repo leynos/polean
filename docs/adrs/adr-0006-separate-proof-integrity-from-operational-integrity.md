@@ -19,11 +19,14 @@ recorded in the [findings](../lean-environment-integrity-findings.md). A
 `prelude` module that redefines the kernel-accelerated `Nat.gcd` derives
 `False` with no axiom, and a same-named module can replace a trusted statement.
 
-The attacks need Lean that Polean never accepts. Polean generates its modules
-from trusted templates and constrained policy data, and technical design §7
-forbids importing submitted proof artefacts. Defending against them inside
-1.2.3 made a feasibility demonstration carry module provenance, search-path
-control, and forgery fixtures, and blurred what the demonstration established.
+The attacks need Lean that Polean does not accept as job source. Polean
+generates its modules from trusted templates and constrained policy data, and
+technical design §7 forbids importing submitted proof artefacts. That excludes
+a hostile job, not a tampered trusted proof package: a package altered on disk
+is still loaded, and 4.3.2 owns detecting it. Defending against the attacks
+inside 1.2.3 made a feasibility demonstration carry module provenance,
+search-path control, and forgery fixtures, and blurred what the demonstration
+established.
 
 The two concerns also have different natural owners. Phase 1 needs to show that
 the audit interface is usable. Phase 2 needs it to build policy verification.
@@ -77,7 +80,10 @@ Responsibilities divide as follows.
 _Table 1: Which milestone owns each integrity concern._
 
 Development reports from E0 and E1 name the input model. Only public `prove` and
-`verify`, which depend on 4.3.2, may make the ADR 0002 statement.
+`verify`, which depend on 4.3.2, may make the ADR 0002 statement. Roadmap
+4.2.2 records that dependency explicitly: it requires 4.2.1 for the command
+contract, and 4.3.2 before either command's success outcome may carry the
+public statement.
 
 ## Consequences
 
@@ -97,6 +103,45 @@ if a template defect ever looks plausible.
 
 The first release still depends on 4.3.2. The sequence delays hardening without
 removing it.
+
+## Measured results
+
+The decision was implemented in 1.2.3 and measured on the pinned tuple.
+
+- The worker is `lean/PoleanAudit.lean`, 179 lines. It replays the requested
+  non-toolchain modules against the toolchain's `Init`, collects axioms with
+  `Lean.collectAxioms`, and prints one compact JSON report. It never sees the
+  expected statement and emits no verdict.
+- `tests/toolchain/audit/settlement/` decides acceptance. Verus verifies 61
+  obligations over it, and the recognizer proof still verifies 89. Fifteen
+  negative controls (five admission, ten settlement) fail at their named
+  obligations.
+- The corpus is twenty-five modules under `examples/audit/lean/AuditFixture/`
+  — twenty audited fixtures and five support modules — plus two programs, all
+  checked against a hand-written manifest rather than a generated one.
+- `make toolchain-smoke` runs the corpus end to end as nine tests.
+- On the shared development host, fixture compilation took 0.66–4.94 s and an
+  audit took 1.1–14.9 s with peak child RSS of 425–799 MiB. Those are upper
+  bounds under contention, not budgets. The accepted report was 404 bytes and
+  the sixteen-rule maximal policy report 54,371 bytes, against a 1 MiB bound.
+
+## Outcome mapping for 2.2.4
+
+Promotion is 2.2.4's work, not 1.2.3's. When it happens, settlement's three
+outcomes map onto the public contract as follows.
+
+| Settlement outcome    | Public outcome     | Exit | Why                                                              |
+| --------------------- | ------------------ | ---- | ---------------------------------------------------------------- |
+| `Rejected(findings)`  | `invalid_evidence` | 7    | A theorem, root, or axiom-policy requirement was not met         |
+| `ToolFailure(breach)` | `tool_error`       | 6    | The report did not answer the request, so no policy claim exists |
+| `Err(RequestRefusal)` | `tool_error`       | 6    | Rust generated the request, so a refusal is an internal fault    |
+| deadline kill         | `unknown`          | 3    | Available only once 2.3.1 enforces a deadline                    |
+
+_Table 2: How 1.2.3's settlement outcomes reach the public command contract._
+
+An `accepted` settlement alone never exits 0. Exit 0 additionally requires the
+six proved claims, bound identities, and tested runtime agreement, and it may
+carry the ADR 0002 statement only after 4.3.2.
 
 ## Alternatives considered
 

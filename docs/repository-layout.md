@@ -11,12 +11,13 @@ The module split proposed by the technical design is not yet implemented.
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib.rs`                      | Current Rust crate root and disposable scaffold identity.                                                                                              |
 | `tests/`                          | Rust integration tests for implemented public behaviour, including the test-only 1.2.2 admission spike.                                                |
-| `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple, including the audit settlement module.                                                  |
+| `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple, including the audit wire adapter, settlement, and end-to-end corpus.                    |
 | `tests/admission/`                | The 1.2.2 admission spike: closed decoder, profile walk, recognizer, properties, feature scenarios, and a compile-fail guard for the exhaustive walks. |
 | `examples/admission/`             | Admission corpus fixtures and their JSON Lines manifest; separate from the tenant-write example.                                                       |
+| `examples/audit/`                 | Audit corpus: Lean fixtures, their JSON Lines manifest, and sample request and report documents.                                                       |
 | `verus/`                          | Verification of the recognizer kernel and the audit settlement: specifications, lemmas, witnesses, and proof entry points.                             |
 | `tools/`                          | Pins for the Verus release, the Z3 solver, and the prover launcher; development-only.                                                                  |
-| `lean/`                           | Pinned Lean package: toolchain selection, Lake configuration, and the smoke library.                                                                   |
+| `lean/`                           | Pinned Lean package: toolchain selection, Lake configuration, the smoke library, and the audit worker.                                                 |
 | `contracts/`                      | Versioned profile, profile schema, request, policy, claims, result, CLI, and audit request and report contracts.                                       |
 | `examples/tenant-write/`          | Baseline Rego source, canonical IR, claims, requests, and mutations.                                                                                   |
 | `validation/`                     | Design-fixture checks, property checks, and witnesses; not the production checker.                                                                     |
@@ -30,7 +31,7 @@ The module split proposed by the technical design is not yet implemented.
 | `docs/rfcs/`                      | Reserved for proposed changes, named `rfc-nnnn-title-slug.md`; none are committed yet.                                                                 |
 | `.github/workflows/ci.yml`        | Hosted Rust, Markdown, and basic repository gate.                                                                                                      |
 | `.github/workflows/design.yml`    | Independent design-contract validation lane.                                                                                                           |
-| `.github/workflows/toolchain.yml` | Path-filtered provisioning and smoke run for the pinned tuple and its example policy.                                                                  |
+| `.github/workflows/toolchain.yml` | Path-filtered provisioning and smoke run for the pinned tuple, its example policy, and the audit corpus.                                               |
 | `.github/dependabot.yml`          | Cargo and GitHub Actions dependency updates.                                                                                                           |
 | `Cargo.toml`, `Cargo.lock`        | Package metadata, lint policy, and dependency lockfile.                                                                                                |
 | `rust-toolchain.toml`             | Pinned Rust toolchain and required components.                                                                                                         |
@@ -80,6 +81,14 @@ production admission. They are not part of the E0 toolchain tuple in
 `make verus` is an on-demand check rather than a commit gate. The admission
 spike in `tests/admission/` is test-only: its IR is a throwaway type, and
 production ingestion and admission remain roadmap 2.1.1 and 2.1.2 work.
+
+`examples/audit/` and the audit modules under `tests/toolchain/` are the 1.2.3
+feasibility demonstration, not a production checker. The worker observes and
+reports; `tests/toolchain/audit/settlement/` decides, and `verus/` proves what
+that decision means. Nothing under `src/` is involved, and promotion is roadmap
+2.2.4. The fixtures stay outside the Lake package, so compiling them writes
+only to a scratch directory; the worker build is the one exception and writes
+the ignored `lean/.lake/build`.
 
 Update [documentation contents](contents.md) when adding, removing, or renaming
 durable documents. Prefer Make targets for contributor entry points. Generated

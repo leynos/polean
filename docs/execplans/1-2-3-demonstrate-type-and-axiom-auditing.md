@@ -5,9 +5,10 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: APPROVED (revision 4). The user approved this plan and accepted
+Status: COMPLETE (revision 4). The user approved this plan and accepted
 [ADR 0006](../adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
-on 2026-11-06, and implementation is under way.
+on 2026-11-06. Implementation finished on 2026-11-07; promotion into the
+product is roadmap 2.2.4 and operational integrity is roadmap 4.3.2.
 
 Roadmap item: [1.2.3](../roadmap.md). Branch:
 `1-2-3-demonstrate-type-and-axiom-auditing`.
@@ -297,7 +298,7 @@ revision has applied them to the technical design.
         its specification, lemmas, and witnesses, and split the contracted
         `decision/mod.rs` into `scan.rs`, `request.rs`, `replay.rs`, and
         `findings.rs` (D19).
-  - [x] (2026-11-07) Generalised `VERUS_PROOF_FILES` in the Makefile and the
+  - [x] (2026-11-07) Generalized `VERUS_PROOF_FILES` in the Makefile and the
         two-tree staging in `scripts/check_verus_controls.py`, and added the
         ten settlement controls.
   - [x] (2026-11-07) `make verus` exits 0: the recognizer still verifies
@@ -357,7 +358,18 @@ revision has applied them to the technical design.
         `make test` (74 + 27 + 2 + 101 passed, 9 ignored, doc-tests 1, 682 s),
         `make design-check`, `make test-scripts` (170 passed), and
         `make toolchain-smoke` (9 passed in 778.49 s).
-- [ ] EP-M4: documentation and roadmap completion.
+- [x] EP-M4: documentation and roadmap completion.
+  - [x] (2026-11-07) Recorded ADR 0006's measured results, its outcome mapping
+        for 2.2.4, and roadmap 4.2.2's dependency on 4.3.2.
+  - [x] (2026-11-07) Documented the audit corpus in `docs/developers-guide.md`,
+        with report reading, fixture addition, and pin-change evidence, and
+        updated the command table and the Verus paragraphs for two proofs and
+        fifteen controls.
+  - [x] (2026-11-07) Updated `docs/repository-layout.md`, `lean/README.md`,
+        `validation/README.md`, `tools/verus/README.md`, and `docs/contents.md`.
+  - [x] (2026-11-07) Added `Observed again during 1.2.3` to the findings record.
+  - [x] (2026-11-07) Refreshed `SHA256SUMS` after reviewing the two changed
+        entries, and marked roadmap 1.2.3 done with a `Recorded:` bullet.
 
 ## Surprises & discoveries
 
@@ -644,13 +656,37 @@ Design check. `make design-check` reports `json_schemas_checked: 7`,
 `audit_contract_samples_checked: 2`, `audit_manifest_entries_checked: 22`,
 `audit_contract_controls_passed: 11`, and `negative_controls_passed: 19`.
 
+### EP-M2 outcome (2026-11-07)
+
+Delivered `verus/audit_settlement.rs` with its specification, lemmas, and
+witnesses. The root pulls in `tests/toolchain/audit/settlement/` with
+`#[path]`, so Cargo and Verus compile the same source. Verus verifies 61
+obligations over the settlement decision, and the recognizer proof still
+verifies 89.
+
+The proof states S0 to S7 over an abstract report: acceptance requires the
+pinned toolchain, the requested module and roots, an exact statement, and only
+approved foundations; a protocol breach outranks any finding; and a refusal is
+distinguished from a rejection. The ten settlement controls in
+`scripts/check_verus_controls.py` each fail at their named obligation, and the
+five admission controls still fail at theirs.
+
+What the proof does not establish. It says what acceptance means for a report
+it is given. It does not say the worker told the truth, that the wire decoder
+admitted the report faithfully, or that the report corresponds to any source
+policy. Those are separate claims, and only the first is inside the proof.
+
+`make verus` is on demand and is not part of the commit gate, so these numbers
+are recorded from a run on the pinned Verus release rather than reproduced by
+`make test`.
+
 ### EP-M3 outcome (2026-11-07)
 
 Delivered the Lean worker, the twenty-five fixture and support modules, and the
 end-to-end corpus that compiles them with the pinned toolchain, audits them
-with the real worker, decodes the report through the strict adapter, and settles
-it against a hand-written request. All twenty-two manifest lines match, the sentinel
-positive control fires, and `make toolchain-smoke` is green.
+with the real worker, decodes the report through the strict adapter, and
+settles it against a hand-written request. All twenty-two manifest lines match,
+the sentinel positive control fires, and `make toolchain-smoke` is green.
 
 What the corpus establishes, and what it does not. A matching line shows that
 on these twenty-two cases the worker, the adapter, and the settlement agree
@@ -698,6 +734,41 @@ against a bound of 60. The corpus found it on its first complete run. The
 decoder, its documentation, the report schema's description, and the
 depth-negative fixture were corrected together, and
 `cargo test --test toolchain audit::wire` is green with 37 tests.
+
+### EP-M4 outcome (2026-11-07)
+
+Delivered the durable documentation and closed roadmap 1.2.3.
+
+- ADR 0006 gained `Measured results` and `Outcome mapping for 2.2.4`, and the
+  roadmap records that 4.2.2 depends on 4.3.2 before either public command may
+  carry the ADR 0002 statement.
+- `docs/developers-guide.md` gained `The audit corpus (1.2.3)`, covering what
+  the corpus is and is not, how to read a report, how to add a fixture, and the
+  four pieces of pin-bound evidence. The command table and the Verus paragraphs
+  now describe two proofs and their fifteen controls.
+- `docs/repository-layout.md`, `lean/README.md`, `validation/README.md`, and
+  `tools/verus/README.md` describe the audit worker, the settlement proof, and
+  the seven schemas.
+- The findings record gained `Observed again during 1.2.3`, including the
+  `native_decide` axiom's shape, replay's treatment of constructors and
+  recursors, and the worker's split source for axioms and declaration kind.
+- `SHA256SUMS` was refreshed for `contracts/audit-report.schema.json` and
+  `validation/README.md` after reviewing the drift, and roadmap 1.2.3 is
+  checked with a `Recorded:` bullet.
+
+Retrospective. The milestone code was small; the documentation was not, because
+four lanes now need to say what each does and does not establish. The corpus's
+own first complete run found D20, a depth-counting disagreement between the
+worker and the decoder, which is the strongest evidence that the end-to-end
+harness earns its cost. Two limits are recorded rather than smoothed over: the
+worker collects axioms from the imported environment while reading the
+declaration from the replayed one, and neither the corpus nor the proof says
+anything about operational integrity.
+
+Performance, measured on the shared development host under contention: fixture
+compilation took 0.66–4.94 s and an audit 1.1–14.9 s, with peak child RSS of
+425–799 MiB. The accepted report was 404 bytes and the maximal-policy report
+54,371 bytes. These are upper bounds, not budgets.
 
 ## Context and orientation
 
@@ -776,7 +847,7 @@ amended on this branch by this revision.
 - `docs/technical-design.md`, draft v0.1: §2.1 (new), §5, §6, §6.2, §8, §10
   (V11 and V12, new), and §13.
 - `docs/roadmap.md`: item 1.2.3, and new item 4.3.2.
-- ADR 0002 item 2, ADR 0003 "Inputs for 1.2.3", and ADR 0006 (proposed).
+- ADR 0002 item 2, ADR 0003 "Inputs for 1.2.3", and ADR 0006.
 - `contracts/cli.txt`: exit 6 and exit 7, unchanged by this work.
 
 Trace links:
@@ -1461,10 +1532,10 @@ and R16–R18 there.
 | `lake check`               | None            | Standard set   | Export            | Exit code         | Unsandboxed only | About 2 minutes |
 | `lake comparator`          | Challenge file  | Permitted list | Export            | Text, exit code   | Unsandboxed only | About 2 minutes |
 | SafeVerify                 | Target file     | Standard set   | Named modules     | JSON              | Not established  | Not measured    |
-| `polean-audit` (proposed)  | Data tree       | Name           | All non-toolchain | JSON              | Yes, unsandboxed | About 2 s       |
+| `polean-audit` (1.2.3)     | Data tree       | Name           | All non-toolchain | JSON              | Yes, unsandboxed | About 2 s       |
 
-_Table 3: Existing audit interfaces compared with the proposed worker. The
-export-based costs are derived from measured `leanexport` and
+_Table 3: Existing audit interfaces compared with the worker this plan built.
+The export-based costs are derived from measured `leanexport` and
 `leanchecker --from-export` runs on an `Init`-only module._
 
 `lake comparator` gives stronger assurance against hostile Lean than this

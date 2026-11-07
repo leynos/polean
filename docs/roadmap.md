@@ -83,7 +83,7 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
     AST node kinds are observed, and the recognizer kernel proves with no
     `assume`, `admit`, or `external_body`. The record finds no E0 blocking
     issue. The spike is test-only; 2.1.1 and 2.1.2 own production admission.
-- [ ] 1.2.3. Demonstrate declaration-type and transitive-axiom auditing.
+- [x] 1.2.3. Demonstrate declaration-type and transitive-axiom auditing.
   - Requires 1.2.1.
   - See technical-design.md §§2.1, 5, and 6.2; [ADR 0006][adr-0006].
   - Success: a pinned audit interface accepts an expected proposition and
@@ -91,6 +91,15 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
     and undeclared assumptions, and emits machine-readable results. It reports
     kernel replay and exact root coverage, and establishes proof integrity under
     the generated-module input model. Environment integrity is 4.3.2.
+  - Recorded: the pinned worker replays non-toolchain modules and emits a
+    bounded JSON report without seeing the expected statement. Rust settlement
+    decides acceptance, and Verus verifies 61 obligations over it with ten
+    negative controls; the recognizer proof still verifies 89 with five. The
+    twenty-five-module corpus matches its hand-written manifest in every case,
+    including `sorryAx`, native-computation axioms, undeclared assumptions,
+    wrong statements, wrong kinds, and both forgery fixtures. `make
+    toolchain-smoke` runs it end to end. The demonstration is test-only;
+    promotion is 2.2.4 and environment integrity is 4.3.2.
 - [ ] 1.2.4. Record an enforceable Linux execution-boundary decision.
   - Requires 1.2.1.
   - See technical-design.md §§2 and 11; terms-of-reference.md §8.2, A4–A6.
@@ -315,6 +324,10 @@ technical-design.md §8 and §10, V8.
     be hidden by incomplete logical results or a report-supplied exit value.
 - [ ] 4.2.2. Expose the complete public `prove` and `verify` command contract.
   - Requires 4.2.1.
+  - Also requires 4.3.2 before either command may make the ADR 0002 public
+    assurance statement. Until then the commands may exist, but their success
+    outcomes are development reports that name the generated-module input
+    model rather than the public statement.
   - See technical-design.md §8; ../contracts/cli.txt; users-guide.md.
   - Success: exits 0 and 2–8 match the contract in text and JSON; stdout has
     one bounded result, stderr has escaped diagnostics, and witnesses require
