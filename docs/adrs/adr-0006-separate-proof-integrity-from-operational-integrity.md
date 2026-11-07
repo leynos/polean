@@ -80,10 +80,12 @@ Responsibilities divide as follows.
 _Table 1: Which milestone owns each integrity concern._
 
 Development reports from E0 and E1 name the input model. Only public `prove` and
-`verify`, which depend on 4.3.2, may make the ADR 0002 statement. Roadmap
-4.2.2 records that dependency explicitly: it requires 4.2.1 for the command
-contract, and 4.3.2 before either command's success outcome may carry the
-public statement.
+`verify` may make the ADR 0002 statement, and only once 4.3.2 has established
+environment integrity. Roadmap 4.2.2 requires 4.2.1 for the command contract
+alone; until 4.3.2 completes, its success outcomes are development reports that
+name the generated-module input model. The gate sits on the statement rather
+than on the command contract, so roadmap 5.2.1 — which documents the workflow
+and the assurance ledger — is what requires 4.3.2.
 
 ## Consequences
 

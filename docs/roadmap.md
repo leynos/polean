@@ -324,10 +324,9 @@ technical-design.md §8 and §10, V8.
     be hidden by incomplete logical results or a report-supplied exit value.
 - [ ] 4.2.2. Expose the complete public `prove` and `verify` command contract.
   - Requires 4.2.1.
-  - Also requires 4.3.2 before either command may make the ADR 0002 public
-    assurance statement. Until then the commands may exist, but their success
-    outcomes are development reports that name the generated-module input
-    model rather than the public statement.
+  - Until 4.3.2 completes, success outcomes are development reports that name
+    the generated-module input model rather than the ADR 0002 public statement.
+    4.3.2 gates that statement, not this task; 5.2.1 carries the gate.
   - See technical-design.md §8; ../contracts/cli.txt; users-guide.md.
   - Success: exits 0 and 2–8 match the contract in text and JSON; stdout has
     one bounded result, stderr has escaped diagnostics, and witnesses require
@@ -413,7 +412,8 @@ step closes distribution and documentation gates before public availability.
 See technical-design.md §§11–14; terms-of-reference.md §9, OQ5.
 
 - [ ] 5.2.1. Document the implemented workflow and assurance ledger.
-  - Requires 5.1.1.
+  - Requires 5.1.1 and 4.3.2, so the guides cannot quote the ADR 0002 public
+    assurance statement before environment integrity is established.
   - See users-guide.md; developers-guide.md; repository-layout.md;
     documentation-style-guide.md; technical-design.md §§9–10 and 14.
   - Success: guides, contents, layout, contracts, and validation records agree

@@ -332,10 +332,13 @@ fixtures, claims or proof updates, and source-runtime conformance coverage.
 
 ### Pin-change evidence
 
-A Lean pin change moves four things that the audit corpus holds fixed:
+A Lean pin change moves five things that the audit corpus holds fixed:
 
 - `PIN` in `tests/toolchain/audit/wire/mod.rs` is the pinned githash, and the
   decoder refuses a report that names another.
+- `githash` in `examples/audit/sample-report.json` must equal `PIN`.
+  `decode_report_accepts_the_shared_sample` compares them, so changing only
+  `PIN` fails `make test`.
 - The canonical snapshots under `tests/toolchain/smoke/audit/snapshots/` carry
   the githash and the report shape. Review a diff with `cargo insta review`.
 - The foundation names in `tests/toolchain/smoke/audit/requests.rs` and the
