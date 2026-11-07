@@ -404,6 +404,14 @@ boundary tests give evidence that they do not.
   publication can leave the witnesses it had already written, but never
   `design-validation.json`.
 
+The audit wire contracts, their samples, and the hand-written corpus manifest
+are checked in `validation/audit_contracts.py`, which `run_checks()` calls
+once. The diagnostics it shares with the rest of the harness — `require`,
+`check_schema`, and the negative-control message — live in
+`validation/harness.py`, so neither module imports the other's orchestration.
+The split keeps each file's subject visible; it does not change what any check
+establishes.
+
 `validation/property_fixtures.py` states the same model-side obligations as
 Hypothesis properties. It requires one explicit `load_admitted()` call, made by
 `main`, and passes the result to `Suite`, so a property reads `self.admitted`

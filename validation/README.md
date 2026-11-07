@@ -28,6 +28,13 @@ machine-readable result is [design-validation.json](design-validation.json).
 | Storage-boundary seams                | Two seams: reviewing the loaded fixtures leaves every witness in `witnesses/` unchanged in size, modification time, and SHA-256 digest, and publishing through a temporary root writes there and leaves the observed repository documents — the witnesses and the summary — alone. |
 | Boundary tests                        | Eleven independent tests of the orchestration and storage boundary, each falsified against a targeted injected fault.                                                                                                                                                              |
 
+`validate_design.py` keeps the orchestration, the storage boundaries, and the
+policy checks. The audit wire contracts, their samples, and the hand-written
+corpus manifest are checked in `audit_contracts.py`, which `run_checks` calls
+once; the diagnostics the two share live in `harness.py`, so the audit checks
+do not import the module that drives them. Every file in this directory is run
+by path from `validation/`, which is also where the imports resolve.
+
 `property_fixtures.py` states the same model-side obligations as properties and
 searches the admitted input domain for counterexamples, with Hypothesis
 shrinking any it finds while keeping the value valid. It checks that concrete

@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: COMPLETE (revision 4). The user approved this plan and accepted
+Status: COMPLETE (revision 6). The user approved this plan and accepted
 [ADR 0006](../adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
 on 2026-11-06. Implementation finished on 2026-11-07; promotion into the
 product is roadmap 2.2.4 and operational integrity is roadmap 4.3.2.
@@ -284,7 +284,7 @@ revision has applied them to the technical design.
         `make markdownlint`, `make typecheck`, `make lint`, `make test`, and
         `make design-check` passed; `make check-fmt` failed only on a
         `mdtablefix` prose reflow in this plan, which was repaired and
-        re-checked green. `sha256sum -c SHA256SUMS` verifies all 44 entries.
+        re-checked green. `sha256sum -c SHA256SUMS` verifies all 46 entries.
   - [x] (2026-11-07) `make test-scripts` cannot run under the default target
         because the `python3` on `PATH` is 3.12.15 and
         `scripts/provision_tools.py` requires Python 3.14 with
@@ -767,7 +767,7 @@ Delivered the durable documentation and closed roadmap 1.2.3.
   carry the ADR 0002 statement.
 - `docs/developers-guide.md` gained `The audit corpus (1.2.3)`, covering what
   the corpus is and is not, how to read a report, how to add a fixture, and the
-  four pieces of pin-bound evidence. The command table and the Verus paragraphs
+  five pieces of pin-bound evidence. The command table and the Verus paragraphs
   now describe two proofs and their fifteen controls.
 - `docs/repository-layout.md`, `lean/README.md`, `validation/README.md`, and
   `tools/verus/README.md` describe the audit worker, the settlement proof, and
@@ -822,7 +822,7 @@ findings. Twenty-three were repaired and two were recorded rather than changed.
   shared sample rather than with a literal.
 - The settlement's root-finding builder was split into `kind_code`,
   `statement_code`, and a single `root_finding` constructor, and the three
-  refusal tests that duplicated the parameterised one were removed.
+  refusal tests that duplicated the parameterized one were removed.
 - The Toolchain workflow now runs on `verus/**` and
   `tests/admission/recognizer/kernel/**`, so a control anchor cannot drift
   without the job that checks it.
@@ -838,6 +838,26 @@ because the split described above adds three verified helper functions; the
 `statement-comparison-dropped` control was re-anchored on the extracted
 `statement_code` body and now fails at an assertion in `decision/findings.rs`
 rather than at the former inline comparison.
+
+### Review round 5 (2026-11-07)
+
+A second CodeRabbit CLI pass, over the repaired head `afe212f`, raised four
+findings. All four were actioned.
+
+- The status line now reads revision 6, and the pin-bound evidence count matches
+  the developers guide's five.
+- ADR 0003's open item 2 is restored to its accepted wording, and the
+  2026-11-06 addendum records that, under ADR 0006, the `bwrap` limitation
+  constrains roadmap 1.2.4 and 4.3.2 but not the 1.2.3 experiment. Accepted
+  ADRs are amended by dated addenda, not in place.
+- The audit contract checks moved from `validate_design.py` to
+  `validation/audit_contracts.py`, and `require`, `check_schema`, and the
+  negative-control message moved to `validation/harness.py`, so the two modules
+  do not import each other's orchestration. `run_checks` is the only caller.
+  The harness module is still 1,104 lines, so the 400-logical-line rule the
+  review cites is not met by this change; the split gives the audit checks a
+  module of their own rather than claiming the harness is now within the limit.
+- `sha256sum -c SHA256SUMS` covers 46 entries, including the two new modules.
 
 ## Context and orientation
 
@@ -1201,11 +1221,13 @@ code has changed. Any consumer can decide a recorded report.
 Work: add `contracts/audit-request.schema.json` and
 `contracts/audit-report.schema.json`. Add `examples/audit/sample-request.json`,
 `examples/audit/sample-report.json`, and `examples/audit/manifest.json`, the
-last being JSON Lines with one hand-written line per corpus entry. Extend
-`validation/validate_design.py` with `check_audit_contracts`, holding the
-samples and negative controls. Add `serde` to `Cargo.toml`. Add
-`tests/toolchain/audit/`: `mod.rs`, `wire/`, `settlement/` with
-`settlement/decision/` (the pure function), `properties/`, `tests.rs`, and
+last being JSON Lines with one hand-written line per corpus entry. Extend the
+validation harness with `check_audit_contracts`, holding the samples and
+negative controls; it lives in `validation/audit_contracts.py`, with the shared
+diagnostics in `validation/harness.py`, so the audit checks are a module of
+their own rather than further growth in the harness. Add `serde` to
+`Cargo.toml`. Add `tests/toolchain/audit/`: `mod.rs`, `wire/`, `settlement/`
+with `settlement/decision/` (the pure function), `properties/`, `tests.rs`, and
 `bdd.rs`, with the feature in `tests/features/axiom_audit.feature`. Widen the
 description at `tests/toolchain/main.rs:1` and `docs/repository-layout.md:14`.
 
