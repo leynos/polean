@@ -27,15 +27,16 @@ not against `PoleanSmoke`.
 
 `PoleanAudit.lean` is the 1.2.3 worker, declared in `lakefile.toml` as the
 `polean-audit` executable. It is not a verifier. Given a module and a list of
-roots, it replays the module's non-toolchain imports against the toolchain's
-`Init`, collects each root's transitive axioms with `Lean.collectAxioms`, and
-prints one compact JSON report. It never sees the expected statement and emits
-no verdict; Rust settlement decides.
+roots, it replays the module's non-toolchain imports over a base of the
+toolchain's `Init` plus the toolchain modules those imports directly use,
+collects each root's transitive axioms with `Lean.collectAxioms`, and prints
+one compact JSON report. It never sees the expected statement and emits no
+verdict; Rust settlement decides.
 
-The worker fails closed on anything outside its grammar: a statement tree over
-4,096 nodes or depth 60 is reported as `null` rather than truncated, and a
-replay failure is reported rather than worked around. `tests/toolchain/smoke/`
-builds it and runs it over the corpus in `examples/audit/`.
+The worker fails closed on anything outside its grammar. It reports a statement
+tree over 4,096 nodes or depth 60 as `null` and never truncates it. It reports
+a replay failure and does not work around it. `tests/toolchain/smoke/` builds
+the worker and runs it over the corpus in `examples/audit/`.
 
 ## What belongs here
 

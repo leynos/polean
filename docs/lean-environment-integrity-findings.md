@@ -131,7 +131,13 @@ questions it left open.
   declaration's kind and type from the replayed one. On every corpus fixture
   the two agree, because replay accepted the same declaration. A future
   promotion should take both from the replayed environment so the observation
-  has one source.
+  has one source. The obvious substitution does not work: on the pinned
+  toolchain, `Lean.Environment.ofKernelEnv` fills `base.private` and
+  `base.public` but leaves `checked` empty, and `Lean.collectAxioms` walks a
+  constant's body through `env.checked.get`. A worker built on it would report
+  every root as axiom-free, which is why the current split is recorded rather
+  than silently "fixed". Promotion needs a supported way to set the checked
+  environment, or a local collector over the replayed constants.
 
 ## Prototype
 

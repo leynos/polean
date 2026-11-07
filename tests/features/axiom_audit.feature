@@ -54,4 +54,4 @@ Feature: Settlement decides audit reports
   Scenario: A malformed report is refused before settlement
     Given a report with an unknown field
     When the adapter decodes the report
-    Then the adapter refuses it as malformed
+    Then the adapter refuses it as malformed, naming extra

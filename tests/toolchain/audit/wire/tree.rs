@@ -10,6 +10,12 @@
 //! counted as one per constant and one per application. Settlement does not
 //! re-check the bound, because the adapter refuses an over-bound tree before a
 //! report reaches it.
+//!
+//! [`nodes`], [`depth`], [`tree_key`], and `encode_into` walk the whole tree
+//! recursively, so they assume a bounded tree and do not bound it themselves.
+//! The decoder refuses an over-bound document as soon as it is built, so every
+//! tree it passes on satisfies that precondition; a tree built by other means
+//! must be checked with [`MAX_NODES`] and [`MAX_DEPTH`] first.
 
 use super::name::{Name, name_key};
 

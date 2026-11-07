@@ -45,6 +45,22 @@ pub struct Case {
     pub pin: Vec<u8>,
 }
 
+impl Case {
+    /// Pair a request and report with the pinned toolchain identity.
+    ///
+    /// Most fixtures differ only in their request and report, so they go
+    /// through this constructor rather than repeating the pin. A fixture that
+    /// mutates the identity afterwards says so at the mutation.
+    #[must_use]
+    pub fn pinned(request: AuditRequest, report: AuditReport) -> Self {
+        Self {
+            request,
+            report,
+            pin: PIN.as_bytes().to_vec(),
+        }
+    }
+}
+
 /// Build a name from its components.
 #[must_use]
 pub fn name(parts: &[&str]) -> Name {
@@ -108,15 +124,21 @@ pub fn theorem(expected: &Tree, axioms: &[&[&str]]) -> Decl {
     }
 }
 
+/// The keys of the foundations a request names.
+#[must_use]
+pub fn foundations(parts: &[&[&str]]) -> Vec<Vec<u8>> {
+    parts
+        .iter()
+        .map(|foundation| name_key(&name(foundation)))
+        .collect()
+}
+
 /// The request that asks a fixture's root to prove the goal.
 #[must_use]
 pub fn request(fixture: &str, foundations: &[&[&str]]) -> AuditRequest {
     AuditRequest {
         module: name_key(&module(fixture)),
-        foundations: foundations
-            .iter()
-            .map(|parts| name_key(&name(parts)))
-            .collect(),
+        foundations: self::foundations(foundations),
         roots: vec![RequestRoot {
             name: name_key(&root_name(fixture)),
             expected: tree_key(&goal()),

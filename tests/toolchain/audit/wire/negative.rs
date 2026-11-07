@@ -230,6 +230,25 @@ fn numeric_expected_component() -> String {
     )
 }
 
+/// A report whose name component is a number that does not fit `u64`.
+///
+/// `ComponentDocument` is untagged, so the refusal is a generic "no variant
+/// matched" error. The case pins that the oversized number is still refused
+/// rather than read as text or silently defaulted.
+fn numeric_over_u64_component() -> String {
+    report_with_statement(r#"{"const":["AuditFixture",18446744073709551616],"levels":[]}"#)
+}
+
+/// A report whose name component is a negative number.
+fn negative_component() -> String {
+    report_with_statement(r#"{"const":["AuditFixture",-1],"levels":[]}"#)
+}
+
+/// A report whose name component is a fractional number.
+fn fractional_component() -> String {
+    report_with_statement(r#"{"const":["AuditFixture",1.5],"levels":[]}"#)
+}
+
 /// A request whose module holds a numeric component.
 fn numeric_module_component() -> String {
     valid_request().replace(REQUEST_MODULE, r#"["AuditFixture",7]"#)
@@ -267,6 +286,9 @@ fn extra_request_entry() -> String {
 #[case("integer above u64", integer_above_u64 as ReportMutation)]
 #[case("negative level", negative_level as ReportMutation)]
 #[case("fractional level", fractional_level as ReportMutation)]
+#[case("numeric component above u64", numeric_over_u64_component as ReportMutation)]
+#[case("negative numeric component", negative_component as ReportMutation)]
+#[case("fractional numeric component", fractional_component as ReportMutation)]
 #[case("unknown declaration kind", unknown_kind as ReportMutation)]
 #[case("both tree forms", both_tree_forms as ReportMutation)]
 #[case("three-operand application", three_way_app as ReportMutation)]

@@ -57,8 +57,8 @@ pub fn load() -> Result<Vec<Expectation>, String> {
     let text = ambient::read_to_string(&path)
         .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
     text.lines()
-        .filter(|line| !line.trim().is_empty())
         .enumerate()
+        .filter(|(_, line)| !line.trim().is_empty())
         .map(|(index, line)| parse_line(line, index))
         .collect()
 }
@@ -210,7 +210,27 @@ pub fn check(expected: &Expectation, outcome: &Outcome) -> Result<(), String> {
                 expected.fixture, expected.reason
             ))
         }
-        Outcome::Accepted => Ok(()),
+        Outcome::Accepted => require_no_extras(expected),
+    }
+}
+
+/// Require an `accepted` manifest line to list neither findings nor a reason.
+///
+/// The manifest is a hand-written oracle, so a line that contradicts itself is
+/// a fault in the oracle and must fail loudly rather than pass by being
+/// ignored.
+///
+/// # Errors
+///
+/// Returns a diagnostic naming the fixture when the line is inconsistent.
+fn require_no_extras(expected: &Expectation) -> Result<(), String> {
+    if expected.findings.is_empty() && expected.reason.is_none() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{}: manifest expects `accepted` but also lists findings or a reason",
+            expected.fixture
+        ))
     }
 }
 

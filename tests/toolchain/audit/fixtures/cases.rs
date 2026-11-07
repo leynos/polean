@@ -12,6 +12,7 @@ use super::{
     MODULE,
     PIN,
     accepted_report,
+    foundations,
     goal,
     module,
     name,
@@ -38,103 +39,97 @@ use crate::audit::{
 /// A pair whose single root is a theorem of the goal with no axioms.
 #[must_use]
 pub fn accepted_ground() -> Case {
-    Case {
-        request: request("AcceptedGround", &[]),
-        report: accepted_report(
+    Case::pinned(
+        request("AcceptedGround", &[]),
+        accepted_report(
             "AcceptedGround",
             vec![observed_root("AcceptedGround", Some(theorem(&goal(), &[])))],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose theorem depends only on the three approved foundations.
 #[must_use]
 pub fn accepted_foundations() -> Case {
-    Case {
-        request: request("AcceptedFoundations", FOUNDATIONS),
-        report: accepted_report(
+    Case::pinned(
+        request("AcceptedFoundations", FOUNDATIONS),
+        accepted_report(
             "AcceptedFoundations",
             vec![observed_root(
                 "AcceptedFoundations",
                 Some(theorem(&goal(), FOUNDATIONS)),
             )],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose theorem depends on `sorryAx`.
 #[must_use]
 pub fn sorry(fixture: &str) -> Case {
-    Case {
-        request: request(fixture, FOUNDATIONS),
-        report: accepted_report(
+    Case::pinned(
+        request(fixture, FOUNDATIONS),
+        accepted_report(
             fixture,
             vec![observed_root(
                 fixture,
                 Some(theorem(&goal(), &[&["sorryAx"]])),
             )],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose theorem depends on a native-computation axiom.
 #[must_use]
 pub fn native() -> Case {
-    Case {
-        request: request("Native", FOUNDATIONS),
-        report: accepted_report(
+    Case::pinned(
+        request("Native", FOUNDATIONS),
+        accepted_report(
             "Native",
             vec![observed_root(
                 "Native",
                 Some(theorem(&goal(), &[&["_native", "decide"]])),
             )],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose theorem depends on an axiom the request never declares.
 #[must_use]
 pub fn undeclared(fixture: &str) -> Case {
-    Case {
-        request: request(fixture, FOUNDATIONS),
-        report: accepted_report(
+    Case::pinned(
+        request(fixture, FOUNDATIONS),
+        accepted_report(
             fixture,
             vec![observed_root(
                 fixture,
                 Some(theorem(&goal(), &[&["Fancy", "assumption"]])),
             )],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose request approves only `propext` while the root depends on
 /// `Classical.choice`.
 #[must_use]
 pub fn narrowed_foundations() -> Case {
-    Case {
-        request: request("NarrowedFoundations", &[&["propext"]]),
-        report: accepted_report(
+    Case::pinned(
+        request("NarrowedFoundations", &[&["propext"]]),
+        accepted_report(
             "NarrowedFoundations",
             vec![observed_root(
                 "NarrowedFoundations",
                 Some(theorem(&goal(), &[&["Classical", "choice"]])),
             )],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose theorem proves a different proposition.
 #[must_use]
 pub fn wrong_statement(fixture: &str) -> Case {
-    Case {
-        request: request(fixture, FOUNDATIONS),
-        report: accepted_report(
+    Case::pinned(
+        request(fixture, FOUNDATIONS),
+        accepted_report(
             fixture,
             vec![observed_root(
                 fixture,
@@ -145,8 +140,7 @@ pub fn wrong_statement(fixture: &str) -> Case {
                 }),
             )],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose root is an axiom rather than a theorem.
@@ -157,9 +151,9 @@ pub fn wrong_statement(fixture: &str) -> Case {
 #[must_use]
 pub fn axiom_root() -> Case {
     let name = root_name("AxiomRoot");
-    Case {
-        request: request("AxiomRoot", FOUNDATIONS),
-        report: accepted_report(
+    Case::pinned(
+        request("AxiomRoot", FOUNDATIONS),
+        accepted_report(
             "AxiomRoot",
             vec![RootObs {
                 name: name_key(&name),
@@ -173,16 +167,15 @@ pub fn axiom_root() -> Case {
                 }),
             }],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose root is a definition rather than a theorem.
 #[must_use]
 pub fn def_root() -> Case {
-    Case {
-        request: request("DefRoot", FOUNDATIONS),
-        report: accepted_report(
+    Case::pinned(
+        request("DefRoot", FOUNDATIONS),
+        accepted_report(
             "DefRoot",
             vec![observed_root(
                 "DefRoot",
@@ -193,33 +186,30 @@ pub fn def_root() -> Case {
                 }),
             )],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose report says the environment has no such constant.
 #[must_use]
 pub fn root_absent() -> Case {
-    Case {
-        request: request("RootAbsent", FOUNDATIONS),
-        report: accepted_report("RootAbsent", vec![observed_root("RootAbsent", None)]),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    Case::pinned(
+        request("RootAbsent", FOUNDATIONS),
+        accepted_report("RootAbsent", vec![observed_root("RootAbsent", None)]),
+    )
 }
 
 /// A pair whose replay the kernel rejected.
 #[must_use]
 pub fn rejected_replay(fixture: &str) -> Case {
-    Case {
-        request: request(fixture, FOUNDATIONS),
-        report: AuditReport {
+    Case::pinned(
+        request(fixture, FOUNDATIONS),
+        AuditReport {
             githash: PIN.as_bytes().to_vec(),
             module: name_key(&module(fixture)),
             replay: Replay::Rejected,
             roots: Vec::new(),
         },
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// A pair whose report names a different toolchain.
@@ -268,13 +258,10 @@ pub fn mixed_roots() -> Case {
     let fixture = "MixedRoots";
     let clean = name(&[MODULE, fixture, "clean"]);
     let unsound = name(&[MODULE, fixture, "unsound"]);
-    Case {
-        request: AuditRequest {
+    Case::pinned(
+        AuditRequest {
             module: name_key(&module(fixture)),
-            foundations: FOUNDATIONS
-                .iter()
-                .map(|parts| name_key(&name(parts)))
-                .collect(),
+            foundations: foundations(FOUNDATIONS),
             roots: vec![
                 RequestRoot {
                     name: name_key(&clean),
@@ -286,7 +273,7 @@ pub fn mixed_roots() -> Case {
                 },
             ],
         },
-        report: accepted_report(
+        accepted_report(
             fixture,
             vec![
                 RootObs {
@@ -299,8 +286,7 @@ pub fn mixed_roots() -> Case {
                 },
             ],
         ),
-        pin: PIN.as_bytes().to_vec(),
-    }
+    )
 }
 
 /// Build the case a feature scenario names.

@@ -1,8 +1,9 @@
 //! Settlement and decoding, bound to `tests/features/axiom_audit.feature`.
 //!
-//! The feature file is the readable specification: one scenario per corpus
-//! fixture, each naming the outcome settlement must produce. The steps here
-//! build the fixture pair, decide it, and compare the outcome exactly.
+//! The feature file is the readable specification: one scenario per distinct
+//! settlement outcome, each naming a representative corpus fixture. The other
+//! fixtures are decided by the unit and property tests. The steps here build
+//! the fixture pair, decide it, and compare the outcome exactly.
 //!
 //! A scenario that passes is evidence about this build of the settlement
 //! function over these fixtures. It is not evidence that the Lean worker
@@ -199,14 +200,20 @@ fn settlement_reports_tool_failure(state: &AuditState, breach: String) -> Result
     })?
 }
 
-/// Require the adapter to refuse the document as malformed.
-#[then("the adapter refuses it as malformed")]
-fn adapter_refuses_as_malformed(state: &AuditState) -> Result<(), String> {
+/// Require the adapter to refuse the document as malformed because of `field`.
+///
+/// The cause is asserted, not just the failure: the mutation under test is an
+/// unknown field, and a decoder that refused the document for another reason
+/// would still satisfy a bare `Malformed` check.
+#[then("the adapter refuses it as malformed, naming {field}")]
+fn adapter_refuses_as_malformed(state: &AuditState, field: String) -> Result<(), String> {
     state
         .decoded
         .with_ref(|decoded| match decoded {
-            Err(DecodeError::Malformed(_)) => Ok(()),
-            other => Err(format!("expected a malformed refusal, got {other:?}")),
+            Err(DecodeError::Malformed(message)) if message.contains(&field) => Ok(()),
+            other => Err(format!(
+                "expected a malformed refusal naming {field}, got {other:?}"
+            )),
         })
         .ok_or_else(|| "the adapter did not run".to_owned())?
 }

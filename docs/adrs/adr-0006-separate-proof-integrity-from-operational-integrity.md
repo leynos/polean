@@ -99,9 +99,10 @@ is broken. A template defect that emitted `prelude`, or a tampered proof
 package, would go undetected, and the result would look like any other. This is
 the cost of the decision. It is bounded because no external party can supply
 Lean, nothing public makes the ADR 0002 statement before 4.3.2, and development
-reports state the condition. One of the deferred checks is unusually cheap:
-pinning `Init` into the replay base is one line, so 4.3.2 could adopt it early
-if a template defect ever looks plausible.
+reports state the condition. The worker already pins `Init` into the replay
+base, so that part of 4.3.2 is in place; what remains deferred is fixing the
+whole base and classifying each module by where it resolved, which is what
+makes the base trustworthy rather than merely present.
 
 The first release still depends on 4.3.2. The sequence delays hardening without
 removing it.
@@ -110,11 +111,12 @@ removing it.
 
 The decision was implemented in 1.2.3 and measured on the pinned tuple.
 
-- The worker is `lean/PoleanAudit.lean`, 179 lines. It replays the requested
-  non-toolchain modules against the toolchain's `Init`, collects axioms with
+- The worker is `lean/PoleanAudit.lean`, 186 lines. It replays the requested
+  non-toolchain modules over a base of the toolchain's `Init` plus the
+  toolchain modules those imports directly use, collects axioms with
   `Lean.collectAxioms`, and prints one compact JSON report. It never sees the
   expected statement and emits no verdict.
-- `tests/toolchain/audit/settlement/` decides acceptance. Verus verifies 61
+- `tests/toolchain/audit/settlement/` decides acceptance. Verus verifies 64
   obligations over it, and the recognizer proof still verifies 89. Fifteen
   negative controls (five admission, ten settlement) fail at their named
   obligations.

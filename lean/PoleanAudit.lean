@@ -51,29 +51,34 @@ def maxNodes : Nat := 4096
 /-- The deepest ground statement tree the contract admits. -/
 def maxDepth : Nat := 60
 
-/-- Render a ground statement tree, refusing anything out of grammar or over
-    the bound. The node count is returned so a caller can bound the whole tree
-    rather than each branch. -/
-partial def treeBounded (depth : Nat) (e : Expr) : Option (Json × Nat) :=
-  if depth == 0 then
+/-- Render a ground statement tree, refusing anything out of grammar or over the
+    bound.
+
+    `budget` is how many nodes this subtree may still spend, so the node count
+    is bounded on the way down rather than summed on the way back up. That
+    matters because an `Expr` is a directed acyclic graph: a shared
+    sub-expression is visited once per path to it, and a small, deeply shared
+    term could otherwise expand to an exponential tree before any total was
+    compared with [`maxNodes`]. With the budget the traversal stops as soon as
+    the whole tree would exceed the bound, so it costs at most `maxNodes` node
+    visits however the graph is shared. -/
+partial def treeBounded (depth budget : Nat) (e : Expr) : Option (Json × Nat) :=
+  if depth == 0 || budget == 0 then
     none
   else
     match e with
     | .const n ls => do
       let ns ← ls.mapM levelNat
-      if ns.length > maxNodes then none else
-        return (Json.mkObj [("const", nm n), ("levels", toJson ns)], 1)
+      return (Json.mkObj [("const", nm n), ("levels", toJson ns)], 1)
     | .app f a => do
-      let (jf, nf) ← treeBounded (depth - 1) f
-      let (ja, na) ← treeBounded (depth - 1) a
-      let total := nf + na + 1
-      if total > maxNodes then none else
-        return (Json.mkObj [("app", Json.arr #[jf, ja])], total)
+      let (jf, nf) ← treeBounded (depth - 1) (budget - 1) f
+      let (ja, na) ← treeBounded (depth - 1) (budget - 1 - nf) a
+      return (Json.mkObj [("app", Json.arr #[jf, ja])], nf + na + 1)
     | _ => none
 
 /-- The statement tree for a declaration's type, or JSON `null`. -/
 def statementJson (e : Expr) : Json :=
-  match treeBounded maxDepth e with
+  match treeBounded maxDepth maxNodes e with
   | some (j, _) => j
   | none => Json.null
 
@@ -99,6 +104,7 @@ def charBytes (c : Char) : Nat :=
 
 /-- Truncate `s` to at most `maxBytes` UTF-8 bytes on a scalar boundary. -/
 def truncateUtf8 (maxBytes : Nat) (s : String) : String :=
+  if s.utf8ByteSize ≤ maxBytes then s else
   let rec go (cs : List Char) (used : Nat) (out : List Char) : List Char :=
     match cs with
     | [] => out.reverse
@@ -116,8 +122,9 @@ def emit (doc : Json) : IO UInt32 := do
   return 0
 
 unsafe def main (args : List String) : IO UInt32 := do
-  let modS :: rootS := args
+  let modS :: root0 :: rootRest := args
     | throw (IO.userError "usage: polean-audit <module> <root>...")
+  let rootS := root0 :: rootRest
   let sysroot ← findSysroot
   initSearchPath sysroot
   let lib := sysroot / "lib" / "lean"

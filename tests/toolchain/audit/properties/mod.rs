@@ -10,4 +10,6 @@
 //! are the ones a hand-written case misses: a length prefix that is dropped, a
 //! tag that is reused, a required field that a derive silently defaults.
 
-mod tests;
+mod contract;
+mod keys;
+mod support;

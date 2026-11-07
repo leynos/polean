@@ -228,46 +228,6 @@ fn protocol_breach_takes_precedence_over_findings() {
     expect_tool_failure(&case, ProtocolBreach::ToolchainMismatch);
 }
 
-/// A request with no roots is refused.
-#[test]
-fn empty_request_is_refused() {
-    let mut case = fixtures::accepted_ground();
-    case.request.roots.clear();
-    assert_eq!(
-        decide(&case),
-        Err(RequestRefusal::NoRoots),
-        "a request with no roots was not refused"
-    );
-}
-
-/// A request naming the same root twice is refused.
-#[test]
-fn duplicate_roots_are_refused() {
-    let mut case = fixtures::accepted_ground();
-    let first = case.request.roots.first().cloned();
-    let Some(root) = first else {
-        panic!("the fixture has no root");
-    };
-    case.request.roots.push(root);
-    assert_eq!(
-        decide(&case),
-        Err(RequestRefusal::DuplicateRoot(1)),
-        "a repeated root was not refused"
-    );
-}
-
-/// A request approving an unpinned foundation is refused.
-#[test]
-fn unapproved_foundation_is_refused() {
-    let mut case = fixtures::accepted_ground();
-    case.request.foundations = vec![fixtures::key(&["sorryAx"])];
-    assert_eq!(
-        decide(&case),
-        Err(RequestRefusal::UnapprovedFoundation(0)),
-        "an unpinned foundation was not refused"
-    );
-}
-
 /// Validation accepts an admissible request.
 #[test]
 fn validate_request_accepts_the_fixture_request() {

@@ -295,6 +295,8 @@ revision has applied them to the technical design.
   - [x] (2026-11-07) Proved the whole settlement obligation set in a scratch
         tree at `/tmp/epm2`: S0, S1, S2, S3, S5, S6, the four bridging lemmas,
         and the S7 witnesses. `verification results:: 61 verified, 0 errors`.
+        The ported proof later measured 64 after the review repair of
+        `decision/findings.rs` split out three helper functions.
   - [x] (2026-11-07) Ported the proof into `verus/audit_settlement.rs` with
         its specification, lemmas, and witnesses, and split the contracted
         `decision/mod.rs` into `scan.rs`, `request.rs`, `replay.rs`, and
@@ -303,7 +305,7 @@ revision has applied them to the technical design.
         two-tree staging in `scripts/check_verus_controls.py`, and added the
         ten settlement controls.
   - [x] (2026-11-07) `make verus` exits 0: the recognizer still verifies
-        `89 verified, 0 errors` and the settlement verifies `61 verified, 0
+        `89 verified, 0 errors` and the settlement verifies `64 verified, 0
         errors` with eight `autoderive` warnings. All 15 controls are rejected
         at their named obligations. `make test-scripts` is green with 170
         tests under the documented Python 3.14 fallback.
@@ -480,7 +482,7 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   are not re-exported. Impact: `mod witnesses;` carries
   `#[cfg(verus_keep_ghost)]`, so Cargo never compiles it and Verus always does.
 - Observation: the settlement proof verifies with
-  `verification results:: 61 verified, 0 errors` and eight warnings, all of
+  `verification results:: 64 verified, 0 errors` and eight warnings, all of
   them Verus's "autoderive Clone impl" notice on the pre-existing `types.rs`
   derivations. Evidence: `.verus/0.2026.09.06.8dea4a2` on the scratch tree in
   `/tmp/epm2`. Impact: the warnings are about the data types, not the proof,
@@ -623,6 +625,26 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   and shrinking the fixture — would contradict the plan's measurement and its
   stated bound. Date/Author: 2026-11-07, implementer, after the corpus found
   the disagreement.
+- D21. Decision: bound the worker's statement-tree traversal with a
+  remaining-node budget instead of summing node counts after both children
+  return. Rationale: an `Expr` is a directed acyclic graph, so a small, deeply
+  shared term can have exponentially many paths; checking the total only after
+  the recursion would let an adversarial module make the worker run for a very
+  long time. With the budget, a subtree is visited at most as many times as it
+  has nodes, so the walk costs at most 4,096 visits however the graph is
+  shared, and the admitted bound is unchanged. Date/Author: 2026-11-07,
+  implementer, after review.
+- D22. Decision: keep axiom collection on the imported environment, and record
+  why the replayed environment cannot be substituted yet. Rationale: the
+  obvious substitution, `Environment.ofKernelEnv kenv`, populates only
+  `base.private` and `base.public`; `Lean.collectAxioms` walks bodies through
+  `env.checked.get`, which that constructor leaves empty, so every root would
+  silently report no axioms and the corpus would fail for the wrong reason. A
+  correct single-source collection therefore needs a supported way to set the
+  checked environment, or a local collector, and re-verification of all
+  twenty-two entries. That is promotion work (roadmap 2.2.4); the divergence
+  and its evidence are recorded in the findings note. Date/Author: 2026-11-07,
+  implementer, after review proposed the change.
 
 ## Outcomes & retrospective
 
@@ -661,7 +683,7 @@ Design check. `make design-check` reports `json_schemas_checked: 7`,
 
 Delivered `verus/audit_settlement.rs` with its specification, lemmas, and
 witnesses. The root pulls in `tests/toolchain/audit/settlement/` with
-`#[path]`, so Cargo and Verus compile the same source. Verus verifies 61
+`#[path]`, so Cargo and Verus compile the same source. Verus verifies 64
 obligations over the settlement decision, and the recognizer proof still
 verifies 89.
 
@@ -770,6 +792,52 @@ Performance, measured on the shared development host under contention: fixture
 compilation took 0.66–4.94 s and an audit 1.1–14.9 s, with peak child RSS of
 425–799 MiB. The accepted report was 404 bytes and the maximal-policy report
 54,371 bytes. These are upper bounds, not budgets.
+
+### Review repairs (2026-11-07)
+
+A full CodeRabbit pass over the committed milestone raised twenty-five
+findings. Twenty-three were repaired and two were recorded rather than changed.
+
+- The worker's tree walk now carries a remaining-node budget (D21), so a shared
+  `Expr` DAG cannot expand exponentially before the bound is checked. A
+  source-level shared-DAG fixture is not expressible in the corpus grammar: the
+  corpus is ground statement trees, and a term that leaves the grammar is
+  reported as `null` for that reason rather than for its size. The guard is
+  therefore argued structurally, and the existing over-bound negatives pin the
+  bound itself.
+- Axiom collection stays on the imported environment (D22). The proposed
+  `Environment.ofKernelEnv` substitution would report every root as axiom-free,
+  because `collectAxioms` reads bodies through `env.checked.get`, which that
+  constructor leaves empty. The evidence is in the findings note.
+- The worker now refuses a call with no roots, and its `truncateUtf8` returns
+  early when the message already fits.
+- The decoder gained negative cases for a name component that is negative,
+  fractional, or above `u64`, and the tree module documents that its walkers
+  assume a bounded tree.
+- The manifest reader reports physical line numbers, and an `accepted` line
+  that also lists findings or a reason is now a fault in the oracle.
+- The property tests derive a near-name and near-tree pair by an edit a
+  length-free encoding cannot see, so A1 and A2 reach a collision instead of
+  waiting for one; the required-field test now compares the list with the
+  shared sample rather than with a literal.
+- The settlement's root-finding builder was split into `kind_code`,
+  `statement_code`, and a single `root_finding` constructor, and the three
+  refusal tests that duplicated the parameterised one were removed.
+- The Toolchain workflow now runs on `verus/**` and
+  `tests/admission/recognizer/kernel/**`, so a control anchor cannot drift
+  without the job that checks it.
+- Documentation was corrected where it described the replay base, the
+  settlement proof boundary, and the ordering rules; the roadmap's 4.2.2
+  dependency cycle was broken by moving the 4.3.2 gate to 5.2.1.
+
+The repairs were measured on the repaired tree. `make verus` exits 0 with
+`verification results:: 89 verified, 0 errors` for the recognizer and
+`64 verified, 0 errors` for the settlement, and all fifteen negative controls
+are rejected at their named obligations. The settlement count rose from 61
+because the split described above adds three verified helper functions; the
+`statement-comparison-dropped` control was re-anchored on the extracted
+`statement_code` body and now fails at an assertion in `decision/findings.rs`
+rather than at the former inline comparison.
 
 ## Context and orientation
 
@@ -1643,8 +1711,15 @@ These rules bind independent implementers.
   empty) or integers up to `u64::MAX`, because private names contain numbers.
   `githash` is compared with the commit in the `identity` entry of
   `toolchain-pins.json`.
-- Lists are sets. The worker's deterministic order keeps snapshots stable, and
-  consumers must not rely on it.
+- Order is part of the protocol where settlement compares positions. `roots`
+  follows the request's order, and an accepted replay must report exactly as
+  many roots as the request names, each at the same index. Findings are a
+  sequence: they are ordered by root and then by the position of the axiom in
+  the report, so a consumer that reorders either list changes the outcome.
+  `replay.modules` is compared as a set, and `axioms` is a set for acceptance,
+  because settlement looks each name up in the request's foundations. The
+  worker sorts axioms and lists modules deterministically so snapshots stay
+  stable, but only the two ordered lists above carry meaning.
 - There is deliberately no `accepted`, `verdict`, `ok`, or `statement_match`
   field. Any shape change means a new schema identifier, which is how 4.3.2
   adds provenance.
@@ -1716,3 +1791,6 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   their sources. Revision 2's design stands as the starting point for 4.3.2.
 - Revision 5 (2026-11-07): recorded the completed implementation, the measured
   results, and decisions D17 to D20. No scope change from revision 4.
+- Revision 6 (2026-11-07): recorded the review repairs, decisions D21 and D22,
+  and the ordering rules the wire protocol actually requires. No scope change
+  from revision 5.

@@ -59,14 +59,13 @@ is compiled by Cargo and verified by Verus. It proves the settlement
 obligations S0 to S7 over an abstract report: acceptance requires the pinned
 toolchain, the requested module and roots, an exact statement, and only
 approved foundations; a protocol breach outranks any finding; and a refusal is
-distinguished from a rejection. Verus reports 61 verified obligations, with the
+distinguished from a rejection. Verus reports 64 verified obligations, with the
 specification, lemmas, and witnesses in `audit_settlement_*.rs`.
 
 The settlement proof establishes what acceptance means for a report it is
 given. It does not establish that the Lean worker told the truth, that the wire
 decoder admitted the report faithfully, or that a report corresponds to any
-source policy. Those are separate claims, and only the first is inside the
-proof.
+source policy. Those are separate claims, and none of them is inside the proof.
 
 ## Negative controls
 

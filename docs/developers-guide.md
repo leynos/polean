@@ -279,10 +279,12 @@ under `src/` is involved: 2.2.4 owns promotion.
 The pieces:
 
 - `lean/PoleanAudit.lean` is the worker, built as the `polean-audit` executable
-  by `lean/lakefile.toml`. It replays the requested non-toolchain modules
-  against the toolchain's `Init`, collects axioms with `Lean.collectAxioms`,
-  and prints one compact JSON report. It never sees the expected statement and
-  emits no verdict.
+  by `lean/lakefile.toml`. It replays the requested non-toolchain modules over
+  a base of the toolchain's `Init` plus the toolchain modules those imports
+  directly use, collects axioms with `Lean.collectAxioms`, and prints one
+  compact JSON report. It never sees the expected statement and emits no
+  verdict. Making that base fixed, and classifying each module by where it
+  resolved, is roadmap 4.3.2.
 - `contracts/audit-request.schema.json` and `contracts/audit-report.schema.json`
   are the wire contracts. `tests/toolchain/audit/wire/` decodes them strictly:
   unknown and duplicate fields, missing nullable keys, out-of-range values, and

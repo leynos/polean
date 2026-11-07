@@ -93,7 +93,7 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
     the generated-module input model. Environment integrity is 4.3.2.
   - Recorded: the pinned worker replays non-toolchain modules and emits a
     bounded JSON report without seeing the expected statement. Rust settlement
-    decides acceptance, and Verus verifies 61 obligations over it with ten
+    decides acceptance, and Verus verifies 64 obligations over it with ten
     negative controls; the recognizer proof still verifies 89 with five. The
     twenty-five-module corpus matches its hand-written manifest in every case,
     including `sorryAx`, native-computation axioms, undeclared assumptions,

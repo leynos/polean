@@ -262,32 +262,23 @@ CONTROLS: tuple[Control, ...] = (
         kind="body",
         name="statement-comparison-dropped",
         path=SETTLEMENT_DIR / "findings.rs",
-        anchor="""        if let Some(statement) = &declaration.statement {
-            let have = statement.as_slice();
-            let want = pair.requested.expected.as_slice();
-            if have == want {
-                assert(have@ == want@);
-                assert(statement@ == pair.requested.expected@);
-            } else {
-                assert(have@ != want@);
-                assert(statement@ != pair.requested.expected@);
-                findings.push(Finding {
-                    root: Some(index),
-                    item: None,
-                    code: FindingCode::StatementMismatch,
-                });
-            }
-        } else {
-            findings.push(Finding {
-                root: Some(index),
-                item: None,
-                code: FindingCode::StatementMismatch,
-            });
-        }
+        anchor="""    if have == want {
+        assert(have@ == want@);
+        assert(statement@ == expected@);
+        assert(statement_is_spec(declaration, expected@));
+        None
+    } else {
+        assert(have@ != want@);
+        assert(statement@ != expected@);
+        assert(!statement_is_spec(declaration, expected@));
+        Some(FindingCode::StatementMismatch)
+    }
 """,
-        replacement="""        // NEGATIVE CONTROL: the statement key is never compared.
+        replacement="""    // NEGATIVE CONTROL: the statement key is never compared.
+    let _ = (have, want);
+    None
 """,
-        expects=("assertion failed", "decision/findings.rs"),
+        expects=("postcondition not satisfied", "decision/findings.rs"),
     ),
     Control(
         tree=SETTLEMENT,

@@ -44,6 +44,61 @@ struct RootPair<'a> {
     observed: &'a RootObs,
 }
 
+/// One finding about a whole root.
+const fn root_finding(index: usize, code: FindingCode) -> (finding: Finding)
+    ensures finding == (Finding { root: Some(index), item: None, code }),
+{
+    Finding {
+        root: Some(index),
+        item: None,
+        code,
+    }
+}
+
+/// The kind finding, when the declaration is not a theorem.
+const fn kind_code(declaration: &Decl) -> (result: Option<FindingCode>)
+    ensures result == (if !is_theorem_spec(declaration.kind) {
+        Some(FindingCode::WrongKind)
+    } else {
+        None
+    }),
+{
+    if is_theorem(declaration.kind) {
+        assert(is_theorem_spec(declaration.kind));
+        None
+    } else {
+        assert(!is_theorem_spec(declaration.kind));
+        Some(FindingCode::WrongKind)
+    }
+}
+
+/// The statement finding, when the declaration does not state `expected`.
+fn statement_code(declaration: &Decl, expected: &[u8]) -> (result: Option<FindingCode>)
+    ensures result == (if !statement_is_spec(declaration, expected@) {
+        Some(FindingCode::StatementMismatch)
+    } else {
+        None
+    }),
+{
+    let Some(statement) = &declaration.statement else {
+        assert(!statement_is_spec(declaration, expected@));
+        return Some(FindingCode::StatementMismatch);
+    };
+    let have = statement.as_slice();
+    let want = expected;
+    if have == want {
+        assert(have@ == want@);
+        assert(statement@ == expected@);
+        assert(statement_is_spec(declaration, expected@));
+        None
+    } else {
+        assert(have@ != want@);
+        assert(statement@ != expected@);
+        assert(!statement_is_spec(declaration, expected@));
+        Some(FindingCode::StatementMismatch)
+    }
+}
+
 /// Append the findings about one root.
 fn collect_root_findings(
     request: &AuditRequest,
@@ -56,60 +111,33 @@ fn collect_root_findings(
         + root_findings_spec(request, index as int, pair.observed),
 {
     let ghost initial: Seq<Finding> = findings@;
-    if let Some(declaration) = &pair.observed.decl {
-        if !is_theorem(declaration.kind) {
-            findings.push(Finding {
-                root: Some(index),
-                item: None,
-                code: FindingCode::WrongKind,
-            });
-        }
-        assert(findings@ == initial + (if !is_theorem_spec(declaration.kind) {
-            seq![Finding { root: Some(index), item: None, code: FindingCode::WrongKind }]
-        } else {
-            Seq::empty()
-        }));
-        if let Some(statement) = &declaration.statement {
-            let have = statement.as_slice();
-            let want = pair.requested.expected.as_slice();
-            if have == want {
-                assert(have@ == want@);
-                assert(statement@ == pair.requested.expected@);
-            } else {
-                assert(have@ != want@);
-                assert(statement@ != pair.requested.expected@);
-                findings.push(Finding {
-                    root: Some(index),
-                    item: None,
-                    code: FindingCode::StatementMismatch,
-                });
-            }
-        } else {
-            findings.push(Finding {
-                root: Some(index),
-                item: None,
-                code: FindingCode::StatementMismatch,
-            });
-        }
-        assert(findings@ == initial + (if !is_theorem_spec(declaration.kind) {
-            seq![Finding { root: Some(index), item: None, code: FindingCode::WrongKind }]
-        } else {
-            Seq::empty()
-        }) + (if statement_is_spec(declaration, pair.requested.expected@) {
-            Seq::empty()
-        } else {
-            seq![Finding { root: Some(index), item: None, code: FindingCode::StatementMismatch }]
-        }));
-        collect_axiom_findings(request, index, declaration, findings);
+    let Some(declaration) = &pair.observed.decl else {
+        findings.push(root_finding(index, FindingCode::RootAbsent));
         assert(findings@ == initial + root_findings_spec(request, index as int, pair.observed));
-    } else {
-        findings.push(Finding {
-            root: Some(index),
-            item: None,
-            code: FindingCode::RootAbsent,
-        });
-        assert(findings@ == initial + root_findings_spec(request, index as int, pair.observed));
+        return;
+    };
+    if let Some(code) = kind_code(declaration) {
+        findings.push(root_finding(index, code));
     }
+    assert(findings@ == initial + (if !is_theorem_spec(declaration.kind) {
+        seq![Finding { root: Some(index), item: None, code: FindingCode::WrongKind }]
+    } else {
+        Seq::empty()
+    }));
+    if let Some(code) = statement_code(declaration, pair.requested.expected.as_slice()) {
+        findings.push(root_finding(index, code));
+    }
+    assert(findings@ == initial + (if !is_theorem_spec(declaration.kind) {
+        seq![Finding { root: Some(index), item: None, code: FindingCode::WrongKind }]
+    } else {
+        Seq::empty()
+    }) + (if statement_is_spec(declaration, pair.requested.expected@) {
+        Seq::empty()
+    } else {
+        seq![Finding { root: Some(index), item: None, code: FindingCode::StatementMismatch }]
+    }));
+    collect_axiom_findings(request, index, declaration, findings);
+    assert(findings@ == initial + root_findings_spec(request, index as int, pair.observed));
 }
 
 /// Append the findings about one declaration's axioms.

@@ -1086,6 +1086,13 @@ def audit_controls(validators: dict[str, Draft202012Validator],
     ]
 
 
+class ManifestLineError(AssertionError):
+    """Report one audit manifest line that is not valid JSON."""
+
+    def __init__(self, number: int, error: json.JSONDecodeError) -> None:
+        super().__init__(f"{AUDIT_MANIFEST} line {number} is not JSON: {error}")
+
+
 def read_audit_manifest(repo: Repository) -> list[dict[str, Any]]:
     """Read the hand-written corpus manifest and hold it to the reviewed table.
 
@@ -1108,8 +1115,7 @@ def read_audit_manifest(repo: Repository) -> list[dict[str, Any]]:
         try:
             entry = json.loads(line)
         except json.JSONDecodeError as error:
-            raise AssertionError(
-                f"{AUDIT_MANIFEST} line {number} is not JSON: {error}") from error
+            raise ManifestLineError(number, error) from error
         require(isinstance(entry, dict),
                 f"{AUDIT_MANIFEST} line {number} is not an object")
         require(set(entry) == AUDIT_MANIFEST_KEYS,
@@ -1131,12 +1137,15 @@ def read_audit_manifest(repo: Repository) -> list[dict[str, Any]]:
         require(entry["reason"] == reason,
                 f"{AUDIT_MANIFEST} line {number} gives reason {entry['reason']!r}, "
                 f"reviewed as {reason!r}")
+        require(isinstance(entry["findings"], list),
+                f"{AUDIT_MANIFEST} line {number} has findings that are not a list")
         observed = []
         for finding in entry["findings"]:
             require(isinstance(finding, dict)
                     and set(finding) == {"root", "code"},
                     f"{AUDIT_MANIFEST} line {number} has a malformed finding")
-            require(finding["code"] in AUDIT_FINDING_CODES,
+            require(isinstance(finding["code"], str)
+                    and finding["code"] in AUDIT_FINDING_CODES,
                     f"{AUDIT_MANIFEST} line {number} names an unknown finding "
                     f"code {finding['code']!r}")
             require(finding["root"] is None
