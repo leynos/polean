@@ -22,7 +22,7 @@ mod tree;
 pub use self::{
     decode::{DecodeError, MAX_REPORT_BYTES, decode_report, decode_request},
     name::{Component, Name, is_native, name_key},
-    tree::{Tree, tree_key},
+    tree::{MAX_DEPTH, MAX_NODES, Tree, tree_key},
 };
 
 /// The commit the pinned Lean build reports.

@@ -11,5 +11,6 @@
 //! tag that is reused, a required field that a derive silently defaults.
 
 mod contract;
+mod documents;
 mod keys;
 mod support;
