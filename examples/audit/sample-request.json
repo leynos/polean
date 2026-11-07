@@ -1,0 +1,36 @@
+{
+  "schema_version": "polean.audit-request.v0",
+  "module": [
+    "AuditFixture",
+    "AcceptedFoundations"
+  ],
+  "roots": [
+    {
+      "name": [
+        "AuditFixture",
+        "AcceptedFoundations",
+        "root"
+      ],
+      "expected": {
+        "const": [
+          "AuditFixture",
+          "Goal"
+        ],
+        "levels": []
+      }
+    }
+  ],
+  "foundations": [
+    [
+      "propext"
+    ],
+    [
+      "Quot",
+      "sound"
+    ],
+    [
+      "Classical",
+      "choice"
+    ]
+  ]
+}

@@ -11,13 +11,13 @@ The module split proposed by the technical design is not yet implemented.
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib.rs`                      | Current Rust crate root and disposable scaffold identity.                                                                                              |
 | `tests/`                          | Rust integration tests for implemented public behaviour, including the test-only 1.2.2 admission spike.                                                |
-| `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple.                                                                                         |
+| `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple, including the audit settlement module.                                                  |
 | `tests/admission/`                | The 1.2.2 admission spike: closed decoder, profile walk, recognizer, properties, feature scenarios, and a compile-fail guard for the exhaustive walks. |
 | `examples/admission/`             | Admission corpus fixtures and their JSON Lines manifest; separate from the tenant-write example.                                                       |
 | `verus/`                          | Verification of the recognizer kernel: specification, lemmas, and proof entry point.                                                                   |
 | `tools/`                          | Pins for the Verus release, the Z3 solver, and the prover launcher; development-only.                                                                  |
 | `lean/`                           | Pinned Lean package: toolchain selection, Lake configuration, and the smoke library.                                                                   |
-| `contracts/`                      | Versioned profile, profile schema, request, policy, claims, result, and CLI contracts.                                                                 |
+| `contracts/`                      | Versioned profile, profile schema, request, policy, claims, result, CLI, and audit request and report contracts.                                       |
 | `examples/tenant-write/`          | Baseline Rego source, canonical IR, claims, requests, and mutations.                                                                                   |
 | `validation/`                     | Design-fixture checks, property checks, and witnesses; not the production checker.                                                                     |
 | `scripts/`                        | Digest-checked toolchain provisioning, with its pytest suite in `scripts/tests/`.                                                                      |

@@ -262,8 +262,40 @@ revision has applied them to the technical design.
   findings record.
 - [x] (2026-11-06) User review of this revision, and acceptance of ADR 0006.
 - [x] (2026-11-06) User approval of the plan.
-- [ ] EP-M1: contracts, corpus manifest, and settlement.
+- [x] EP-M1: contracts, corpus manifest, and settlement.
+  - [x] (2026-11-06) Wrote both JSON contracts, the two shared samples, the
+        22-entry corpus manifest, the strict decoder, the injective key
+        encoding, the settlement function, the fixture builders, the eleven
+        BDD scenarios, the property tests, and the design-check controls.
+  - [x] (2026-11-06) Repaired 26 Clippy findings, including ten
+        `manual_let_else` and five `shadow_reuse`. `cargo test --test toolchain
+        audit::` is green with 80 tests.
+  - [x] (2026-11-06) Repaired the three Whitaker faults from the first full
+        `make lint`: split `decision` into `types.rs` and `mod.rs`, and moved
+        `protocol_breach` and `convert_replay` into named helpers. `cargo
+        check --test toolchain` and `cargo test --test toolchain audit::` are
+        green again with 80 tests.
+  - [x] (2026-11-07) Repaired the two remaining Clippy findings from the first
+        full `make lint`: `rejected_breach` is now a `const fn`, and
+        `convert_rejected` takes `&RejectedReplayDocument`.
+  - [x] (2026-11-07) Ran the full gate sweep through `scrutineer`:
+        `make markdownlint`, `make typecheck`, `make lint`, `make test`, and
+        `make design-check` passed; `make check-fmt` failed only on a
+        `mdtablefix` prose reflow in this plan, which was repaired and
+        re-checked green. `sha256sum -c SHA256SUMS` verifies all 44 entries.
+  - [x] (2026-11-07) `make test-scripts` cannot run under the default target
+        because the `python3` on `PATH` is 3.12.15 and
+        `scripts/provision_tools.py` requires Python 3.14 with
+        `compression.zstd`. The documented `uv run --python 3.14 --with
+        pytest==9.1.1` fallback is green with 138 tests. Recorded as an
+        environment limitation, not a code fault.
 - [ ] EP-M2: Verus proof of settlement.
+  - [x] (2026-11-07) Proved the whole settlement obligation set in a scratch
+        tree at `/tmp/epm2`: S0, S1, S2, S3, S5, S6, the four bridging lemmas,
+        and the S7 witnesses. `verification results:: 61 verified, 0 errors`.
+  - [ ] Remaining: port the proof tree into `verus/`, generalise the Makefile
+        and `scripts/check_verus_controls.py`, add the controls, and run the
+        gates.
 - [ ] EP-M3: Lean worker and end-to-end corpus run.
 - [ ] EP-M4: documentation and roadmap completion.
 
@@ -293,6 +325,88 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
 - Observation: `docs/references.md`, named in the task's required reading, does
   not exist. Evidence: `ls docs/`. Impact: none. References stay in the
   technical design and this plan.
+- Observation: this worktree's `target/` was created without Cargo's
+  `CACHEDIR.TAG`, so `tests/admission/compile_fail` could not find the target
+  directory and `make test` failed on a pre-existing test. Evidence: the
+  failure named `no Cargo target directory above .../target/debug/build/...`,
+  and the main checkout has no `target/` at all. Impact: local only. Cargo
+  writes the marker when it creates the directory itself, as it does in CI, so
+  the repair was to write the standard marker into the untracked `target/`
+  rather than to change the test.
+- Observation: the first `wrong field type` negative passed for the wrong
+  reason. The mutation replaced the pin text inside the quotes, leaving a valid
+  string, so the decoder accepted it. Evidence: the failing case printed
+  `"githash":"5"`. Impact: the mutation now replaces the whole quoted value,
+  and the case is a real type fault.
+- Observation: the first full `make lint` found three Whitaker faults that
+  Clippy had not: `module_max_lines` on the 459-line `decision/mod.rs`, and
+  `bumpy_road_function` in `protocol_breach` and `convert_replay`. Evidence:
+  `/tmp/lint-1-2-3-demonstrate-type-and-axiom-auditing.out`, three `error:`
+  lines at `Makefile:41`. Impact: the module split in D18 became mandatory, and
+  both functions now delegate to named helpers. Behaviour is unchanged; the 80
+  audit tests still pass.
+- Observation: a scratch Verus probe of the settlement source, run before
+  EP-M2 began, verified all 42 functions with `0 errors` once each `while` loop
+  carried a `decreases` clause. Evidence: `.verus/0.2026.09.06.8dea4a2` on a
+  copy of `decision/` in `/tmp`. Impact: the "same source" plan holds, and the
+  proof needs no separate copy of the code.
+- Observation: Verus does not carry a `while` loop's negated guard past a
+  `break`, so `let Some(x) = keys.get(index) else { break; }` leaves the
+  post-loop state unable to prove `index == keys.len()`. Evidence: a probe
+  asserting the equality failed with the let-else and verified with
+  `let x = &keys[index]`. Impact: EP-M2 must rewrite the seven scan loops to
+  index under the loop guard, which needs one
+  `#[expect(clippy::indexing_slicing, reason = ...)]` per module. Behaviour is
+  unchanged.
+- Observation: `mdtablefix` writes its result to standard output unless
+  `--in-place` is given, so running it on a scratch copy and diffing reported
+  no change while `--check` reported six lines. Evidence: the first attempt
+  produced an empty diff; the second captured standard output. Impact: repairs
+  use `--in-place`, and `make check-fmt` is the authority.
+- Observation: Verus does not propagate a `match` discriminant fact on a
+  `&Option<T>` into a specification `match` on the value. Evidence: a probe
+  whose postcondition named `root_findings_spec` failed with
+  `match &pair.observed.decl { Some(d) => ... }` and verified once the body used
+  `if let Some(d) = &pair.observed.decl { ... } else { ... }`. Impact: every
+  `&Option` site in the settlement body uses `if let`, not `match`.
+- Observation: a derived `PartialEq` on a Verus datatype does not connect the
+  executable `==`/`!=` to the specification `==`/`!=`. Evidence: a probe
+  asserting `kind != DeclKind::Theorem` could not discharge a postcondition
+  written with `is_theorem_spec(kind)`. Impact: the body compares kinds through
+  an executable helper `is_theorem` whose postcondition is
+  `result == is_theorem_spec(kind)`, and the specification gained
+  `is_theorem_spec`.
+- Observation: a `proof fn` called from executable code must be wrapped in a
+  `proof { ... }` block, or Verus reports "cannot call function `X` with mode
+  proof". Evidence: the first `roots_findings_empty_iff` call in `settle`.
+  Impact: the call site is `proof { roots_findings_empty_iff(...); }`.
+- Observation: a `while` loop body cannot see the enclosing function's
+  preconditions. Evidence: `root_findings` needed
+  `report.roots.len() <= request.roots.len()` restated as a loop invariant.
+  Impact: every loop that relies on a precondition restates it as an invariant.
+- Observation: slice equality needs bound locals and an intermediate
+  `assert(x@ == y@)`. Evidence: `statement.as_slice() == expected.as_slice()`
+  alone did not yield `statement@ == expected@`; the working shape binds both
+  slices, asserts the view equality in the equal branch and the view inequality
+  in the unequal branch. Impact: `collect_root_findings` uses that shape.
+- Observation: a postcondition mentioning a `&mut` parameter must disambiguate
+  `old` and `final`. Evidence: `collect_root_findings` writes
+  `final(findings)@ == old(findings)@ + ...`. Impact: recorded as the house
+  style for mutable-parameter contracts.
+- Observation: a specification function that reads `q.roots@[i].expected@`
+  needs an explicit link to the executable value the body used. Evidence: the
+  final `collect_root_findings` postcondition failed until the function gained
+  `requires pair.requested == request.roots@[index as int]`. Impact: the
+  `RootPair` carrier is tied to the request by a precondition.
+- Observation: nested `forall`s over `.name@` need explicit triggers. Evidence:
+  `roots_names_match_spec` carries `#![trigger p.roots@[i].name@]`. Impact:
+  recorded in the specification.
+- Observation: the settlement proof verifies with
+  `verification results:: 61 verified, 0 errors` and eight warnings, all of
+  them Verus's "autoderive Clone impl" notice on the pre-existing `types.rs`
+  derivations. Evidence: `.verus/0.2026.09.06.8dea4a2` on the scratch tree in
+  `/tmp/epm2`. Impact: the warnings are about the data types, not the proof,
+  and are recorded rather than silenced.
 
 ## Decision log
 
@@ -367,12 +481,52 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   owns the deadline. The `run_bounded` helper and `ReplayBomb` fixture from
   revision 2 are dropped. The bomb result did not reproduce on re-run.
   Date/Author: 2026-11-06, plan author.
+- D18. Decision: split `audit/fixtures.rs` into `fixtures/mod.rs` and
+  `fixtures/cases.rs`, `audit/wire/decode.rs` into `wire/document.rs` and
+  `wire/decode.rs`, and `audit/settlement/decision/mod.rs` into
+  `decision/types.rs` and `decision/mod.rs`, to keep every module under 400
+  lines. Rationale: the splits are mechanical and leave the public paths
+  unchanged. The first plan revision kept `decision/mod.rs` whole, on the
+  argument that it is the exact text `verus/audit_settlement.rs` consumes
+  through `#[path]`; Whitaker's `module_max_lines` rejects that at 459 lines,
+  and a lint exemption for the one file under proof would be worse than the
+  split. `verus/audit_settlement.rs` now pulls in `decision/mod.rs`, which
+  pulls in `decision/types.rs` by the same ordinary module path Cargo uses, so
+  the verified text and the compiled text remain one source. Date/Author:
+  2026-11-06, plan author; revised after the first `make lint` run.
 
 ## Outcomes & retrospective
 
-Nothing has been implemented. Complete this section at each milestone and at
-the end. Before setting `COMPLETE`, reconcile every discovery with the upstream
-artefacts in `Conformance basis`.
+Nothing beyond EP-M1 has been implemented. Complete this section at each
+milestone and at the end. Before setting `COMPLETE`, reconcile every discovery
+with the upstream artefacts in `Conformance basis`.
+
+### EP-M1 outcome (2026-11-06)
+
+Delivered both contracts, the two shared samples, the 22-entry corpus manifest,
+the strict decoder and key encoding, the pure settlement function, the fixture
+set, the feature file, the property tests, and the design-check controls.
+
+Red evidence. The tests were written before the implementation, so their first
+red state was a compile failure; that is weaker than observing the assertions
+fail. To show the assertions bind, two seeded mutations were applied and the
+suite rerun.
+
+- Seed 1: `axiom_code` returned `None` for every axiom, so every dependency was
+  treated as approved.
+- Seed 2: `decode_report` skipped the `MAX_REPORT_BYTES` bound.
+
+Result: `test result: FAILED. 68 passed; 12 failed`, with the failures naming
+`SorryAxiom`, `NativeAxiom`, `UndeclaredAxiom`, `mixed_roots`, `axiom_root`,
+the four matching BDD scenarios, and
+`oversized_output_is_refused_before_parsing` (log
+`/tmp/red-audit-1-2-3-demonstrate-type-and-axiom-auditing.out`). Both seeds
+were reverted and the suite reran: `80 passed; 0 failed` (log
+`/tmp/green-audit-1-2-3-demonstrate-type-and-axiom-auditing.out`).
+
+Design check. `make design-check` reports `json_schemas_checked: 7`,
+`audit_contract_samples_checked: 2`, `audit_manifest_entries_checked: 22`,
+`audit_contract_controls_passed: 11`, and `negative_controls_passed: 19`.
 
 ## Context and orientation
 
