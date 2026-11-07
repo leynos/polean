@@ -289,13 +289,35 @@ revision has applied them to the technical design.
         `compression.zstd`. The documented `uv run --python 3.14 --with
         pytest==9.1.1` fallback is green with 138 tests. Recorded as an
         environment limitation, not a code fault.
-- [ ] EP-M2: Verus proof of settlement.
+- [x] EP-M2: Verus proof of settlement.
   - [x] (2026-11-07) Proved the whole settlement obligation set in a scratch
         tree at `/tmp/epm2`: S0, S1, S2, S3, S5, S6, the four bridging lemmas,
         and the S7 witnesses. `verification results:: 61 verified, 0 errors`.
-  - [ ] Remaining: port the proof tree into `verus/`, generalise the Makefile
-        and `scripts/check_verus_controls.py`, add the controls, and run the
-        gates.
+  - [x] (2026-11-07) Ported the proof into `verus/audit_settlement.rs` with
+        its specification, lemmas, and witnesses, and split the contracted
+        `decision/mod.rs` into `scan.rs`, `request.rs`, `replay.rs`, and
+        `findings.rs` (D19).
+  - [x] (2026-11-07) Generalised `VERUS_PROOF_FILES` in the Makefile and the
+        two-tree staging in `scripts/check_verus_controls.py`, and added the
+        ten settlement controls.
+  - [x] (2026-11-07) `make verus` exits 0: the recognizer still verifies
+        `89 verified, 0 errors` and the settlement verifies `61 verified, 0
+        errors` with eight `autoderive` warnings. All 15 controls are rejected
+        at their named obligations. `make test-scripts` is green with 170
+        tests under the documented Python 3.14 fallback.
+  - [x] (2026-11-07) Repaired two defects the first sweep found. The
+        specification and lemma modules are gated on `cfg(verus_keep_ghost)`
+        like the witnesses, because plain `rustc` erases every item in them and
+        `-D warnings` then failed on their unused imports. `is_theorem` now
+        reads `matches!(kind, DeclKind::Theorem)`, and the statement comparison
+        tests equality first, to satisfy `match_like_matches_macro` and
+        `if_not_else`. The `statement-comparison-dropped` control's anchor was
+        updated to the new branch order.
+  - [x] (2026-11-07) The second sweep is green on all seven targets:
+        `make check-fmt`, `make markdownlint`, `make typecheck`, `make lint`
+        (Whitaker, `cargo doc`, and Clippy), `make test` (204 passed, 7
+        ignored), `make design-check`, and `make test-scripts` with the Python
+        3.14 override (170 passed).
 - [ ] EP-M3: Lean worker and end-to-end corpus run.
 - [ ] EP-M4: documentation and roadmap completion.
 
@@ -401,6 +423,11 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
 - Observation: nested `forall`s over `.name@` need explicit triggers. Evidence:
   `roots_names_match_spec` carries `#![trigger p.roots@[i].name@]`. Impact:
   recorded in the specification.
+- Observation: an executable function written only for the proof is dead code
+  under plain `rustc`, which `-D warnings` turns into a lint failure. Evidence:
+  `cargo clippy -- -D warnings` reports the witnesses as never used once they
+  are not re-exported. Impact: `mod witnesses;` carries
+  `#[cfg(verus_keep_ghost)]`, so Cargo never compiles it and Verus always does.
 - Observation: the settlement proof verifies with
   `verification results:: 61 verified, 0 errors` and eight warnings, all of
   them Verus's "autoderive Clone impl" notice on the pre-existing `types.rs`
@@ -494,6 +521,18 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   pulls in `decision/types.rs` by the same ordinary module path Cargo uses, so
   the verified text and the compiled text remain one source. Date/Author:
   2026-11-06, plan author; revised after the first `make lint` run.
+- D19. Decision: split the contracted `decision/mod.rs` again, into `scan.rs`
+  (byte predicates), `request.rs` (admissibility), `replay.rs` (protocol
+  conformance), and `findings.rs` (rejection detail), leaving `mod.rs` to hold
+  `settle` alone; and add `verus/audit_settlement_witnesses.rs` beside the
+  specification and lemmas. Rationale: contracts and their supporting `assert`s
+  take the single file to 549 lines, over Whitaker's limit, and the split
+  follows the four questions the proof asks rather than an arbitrary line
+  count. The S7 witnesses are executable functions, not proof functions, so
+  they do not belong in the lemma file; they are gated on
+  `cfg(verus_keep_ghost)` because plain `rustc` would otherwise compile them
+  and report dead code. `decision` re-exports every item the tests import, so
+  no caller changes. Date/Author: 2026-11-07, implementer.
 
 ## Outcomes & retrospective
 

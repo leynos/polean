@@ -14,7 +14,7 @@ The module split proposed by the technical design is not yet implemented.
 | `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple, including the audit settlement module.                                                  |
 | `tests/admission/`                | The 1.2.2 admission spike: closed decoder, profile walk, recognizer, properties, feature scenarios, and a compile-fail guard for the exhaustive walks. |
 | `examples/admission/`             | Admission corpus fixtures and their JSON Lines manifest; separate from the tenant-write example.                                                       |
-| `verus/`                          | Verification of the recognizer kernel: specification, lemmas, and proof entry point.                                                                   |
+| `verus/`                          | Verification of the recognizer kernel and the audit settlement: specifications, lemmas, witnesses, and proof entry points.                             |
 | `tools/`                          | Pins for the Verus release, the Z3 solver, and the prover launcher; development-only.                                                                  |
 | `lean/`                           | Pinned Lean package: toolchain selection, Lake configuration, and the smoke library.                                                                   |
 | `contracts/`                      | Versioned profile, profile schema, request, policy, claims, result, CLI, and audit request and report contracts.                                       |
@@ -74,12 +74,12 @@ kernel-checked quantification, and it cannot stand in for the Lean development.
 Once the Rust frontend or Lean package exists, their checks belong in separate
 lanes with distinct result language.
 
-`verus/` and `tools/` support the recognizer proof, not production admission.
-They are not part of the E0 toolchain tuple in `toolchain-pins.json`, the
-installed release under `.verus/` is untracked, and `make verus` is an
-on-demand check rather than a commit gate. The admission spike in
-`tests/admission/` is test-only: its IR is a throwaway type, and production
-ingestion and admission remain roadmap 2.1.1 and 2.1.2 work.
+`verus/` and `tools/` support the recognizer and settlement proofs, not
+production admission. They are not part of the E0 toolchain tuple in
+`toolchain-pins.json`, the installed release under `.verus/` is untracked, and
+`make verus` is an on-demand check rather than a commit gate. The admission
+spike in `tests/admission/` is test-only: its IR is a throwaway type, and
+production ingestion and admission remain roadmap 2.1.1 and 2.1.2 work.
 
 Update [documentation contents](contents.md) when adding, removing, or renaming
 durable documents. Prefer Make targets for contributor entry points. Generated

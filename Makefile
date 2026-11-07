@@ -119,7 +119,7 @@ $(error PROVER_TOOLS_REF missing or malformed; expected "ref: <40-hex>" in $(PRO
 endif
 override PROVER_TOOLS_SOURCE := git+https://github.com/leynos/rust-prover-tools.git@$(PROVER_TOOLS_REF)
 override PROVER_TOOLS := uv tool run --from "$(PROVER_TOOLS_SOURCE)" prover-tools
-VERUS_PROOF_FILE ?= verus/admission_recognizer.rs
+VERUS_PROOF_FILES ?= verus/admission_recognizer.rs verus/audit_settlement.rs
 VERUS_FLAGS ?=
 VERUS_Z3_PATH := $(CURDIR)/.verus/z3/z3
 override VERUS_VERSION := $(shell awk 'NR == 1 && /^[0-9A-Za-z.]+$$/ { print; exit }' tools/verus/VERSION 2>/dev/null)
@@ -138,18 +138,21 @@ install-verus: ## Install the pinned Verus release and its pinned Z3 solver
 
 verus: verus-proof verus-controls ## Run the Verus proof and its negative controls
 
-verus-proof: ## Run the Verus proof entry point
+verus-proof: ## Run every Verus proof entry point
 	@test -x "$(VERUS_BIN)" || { \
 		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
 		exit 1; \
 	}
-	set -- $(VERUS_FLAGS); \
-	for flag in "$$@"; do set -- "$$@" "--extra-arg=$$flag"; shift; done; \
-	VERUS_Z3_PATH="$(VERUS_Z3_PATH)" $(PROVER_TOOLS) verus run --repo-root . \
-		--verus-bin "$(VERUS_BIN)" --no-install-missing \
-		--proof-file "$(VERUS_PROOF_FILE)" "$$@"
+	@set -e; for proof in $(VERUS_PROOF_FILES); do \
+		echo "== $$proof"; \
+		set -- $(VERUS_FLAGS); \
+		for flag in "$$@"; do set -- "$$@" "--extra-arg=$$flag"; shift; done; \
+		VERUS_Z3_PATH="$(VERUS_Z3_PATH)" $(PROVER_TOOLS) verus run --repo-root . \
+			--verus-bin "$(VERUS_BIN)" --no-install-missing \
+			--proof-file "$$proof" "$$@"; \
+	done
 
-verus-controls: ## Show the proof rejects mutated kernel bodies and weakened specs
+verus-controls: ## Show each proof rejects mutated bodies and weakened specs
 	@test -x "$(VERUS_BIN)" || { \
 		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
 		exit 1; \

@@ -3,19 +3,19 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Show that the kernel proof is sensitive to the code and the specification.
+"""Show that each Verus proof is sensitive to the code and the specification.
 
 A passing verifier run establishes that the proof discharges the obligations it
 is given. It does not establish that those obligations respond to a defect. This
 script supplies the missing negative evidence with two kinds of control:
 
-* a **body control** removes one rule from the executable kernel, leaving the
+* a **body control** removes one rule from the executable code, leaving the
   specification unchanged, and requires Verus to reject the result; and
-* a **specification control** weakens one definition that the exclusion
-  theorems rest on, leaving the kernel unchanged, and requires Verus to reject
-  the exclusion obligation that depended on it.
+* a **specification control** weakens one definition that the proof rests on,
+  leaving the executable code unchanged, and requires Verus to reject the
+  obligation that depended on it.
 
-Each control is a textual edit to a copy of the proof sources in a scratch
+Each control is a textual edit to a copy of one proof tree in a scratch
 directory. The pinned Verus binary runs the unmodified copy first; the copy must
 verify with zero errors, so a control cannot appear to work because the baseline
 is already broken. Every edit's anchor must occur exactly once, so a control
@@ -44,12 +44,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 #: Runs the verifier on a staged proof tree and returns its completed process.
-Runner = Callable[[Path, Path, Path], subprocess.CompletedProcess[str]]
+Runner = Callable[[Path, Path, Path, Path], subprocess.CompletedProcess[str]]
 
 ROOT = Path(__file__).resolve().parents[1]
 KERNEL_DIR = Path("tests/admission/recognizer/kernel")
+SETTLEMENT_DIR = Path("tests/toolchain/audit/settlement/decision")
 PROOF_DIR = Path("verus")
-PROOF_FILE = PROOF_DIR / "admission_recognizer.rs"
 VERSION_FILE = Path("tools/verus/VERSION")
 
 #: The summary Verus prints once it has checked every function in the file.
@@ -57,6 +57,33 @@ RESULTS = re.compile(r"verification results:: (\d+) verified, (\d+) errors")
 
 #: Verus errors name the function whose obligation failed.
 ERROR = re.compile(r"^error", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class ProofTree:
+    """One verified entry point and the source directories it includes.
+
+    ``sources`` are copied into the scratch tree at their repository-relative
+    paths, because each proof reaches its modules through relative ``#[path]``
+    attributes and the directory shape is part of the proof input.
+    """
+
+    name: str
+    entry: Path
+    sources: tuple[Path, ...]
+
+
+ADMISSION = ProofTree(
+    name="admission",
+    entry=PROOF_DIR / "admission_recognizer.rs",
+    sources=(PROOF_DIR, KERNEL_DIR),
+)
+SETTLEMENT = ProofTree(
+    name="settlement",
+    entry=PROOF_DIR / "audit_settlement.rs",
+    sources=(PROOF_DIR, SETTLEMENT_DIR),
+)
+TREES: tuple[ProofTree, ...] = (ADMISSION, SETTLEMENT)
 
 
 @dataclass(frozen=True)
@@ -68,6 +95,7 @@ class Control:
     it, so a control cannot pass on an unrelated failure elsewhere in the proof.
     """
 
+    tree: ProofTree
     kind: str
     name: str
     path: Path
@@ -78,6 +106,7 @@ class Control:
 
 CONTROLS: tuple[Control, ...] = (
     Control(
+        tree=ADMISSION,
         kind="body",
         name="metadata-rule-dropped",
         path=KERNEL_DIR / "trivia.rs",
@@ -91,6 +120,7 @@ CONTROLS: tuple[Control, ...] = (
         expects=("postcondition not satisfied", "kernel/trivia.rs"),
     ),
     Control(
+        tree=ADMISSION,
         kind="body",
         name="empty-gap-rule-dropped",
         path=KERNEL_DIR / "mod.rs",
@@ -123,6 +153,7 @@ CONTROLS: tuple[Control, ...] = (
         expects=("invariant not satisfied", "kernel/mod.rs"),
     ),
     Control(
+        tree=ADMISSION,
         kind="body",
         name="line-feed-rule-dropped",
         path=KERNEL_DIR / "mod.rs",
@@ -157,6 +188,7 @@ CONTROLS: tuple[Control, ...] = (
         expects=("assertion failed", "kernel/mod.rs"),
     ),
     Control(
+        tree=ADMISSION,
         kind="spec",
         name="body-byte-admits-nul",
         path=PROOF_DIR / "admission_spec.rs",
@@ -175,6 +207,7 @@ CONTROLS: tuple[Control, ...] = (
         ),
     ),
     Control(
+        tree=ADMISSION,
         kind="spec",
         name="comment-ok-admits-metadata",
         path=PROOF_DIR / "admission_spec.rs",
@@ -188,6 +221,185 @@ CONTROLS: tuple[Control, ...] = (
             "admission_lemmas/metadata.rs",
             "false",
         ),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="acceptance-swallowed",
+        path=SETTLEMENT_DIR / "mod.rs",
+        anchor="""            if findings.is_empty() {
+                assert(acceptable_spec(request, report, pin@));
+                Ok(Settlement::Accepted)
+            } else {
+""",
+        replacement="""            if findings.is_empty() {
+                assert(acceptable_spec(request, report, pin@));
+                Ok(Settlement::Rejected(findings))
+            } else {
+""",
+        expects=("postcondition not satisfied", "decision/mod.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="replay-accepted-check-dropped",
+        path=SETTLEMENT_DIR / "replay.rs",
+        anchor="""    match &report.replay {
+        Replay::Rejected => rejected_breach(report),
+        Replay::Accepted(modules) => accepted_breach(request, report, modules.as_slice()),
+    }
+""",
+        replacement="""    match &report.replay {
+        Replay::Rejected => rejected_breach(report),
+        // NEGATIVE CONTROL: an accepted replay is never checked.
+        Replay::Accepted(_) => None,
+    }
+""",
+        expects=("postcondition not satisfied", "decision/replay.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="statement-comparison-dropped",
+        path=SETTLEMENT_DIR / "findings.rs",
+        anchor="""        if let Some(statement) = &declaration.statement {
+            let have = statement.as_slice();
+            let want = pair.requested.expected.as_slice();
+            if have == want {
+                assert(have@ == want@);
+                assert(statement@ == pair.requested.expected@);
+            } else {
+                assert(have@ != want@);
+                assert(statement@ != pair.requested.expected@);
+                findings.push(Finding {
+                    root: Some(index),
+                    item: None,
+                    code: FindingCode::StatementMismatch,
+                });
+            }
+        } else {
+            findings.push(Finding {
+                root: Some(index),
+                item: None,
+                code: FindingCode::StatementMismatch,
+            });
+        }
+""",
+        replacement="""        // NEGATIVE CONTROL: the statement key is never compared.
+""",
+        expects=("assertion failed", "decision/findings.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="coverage-name-comparison-dropped",
+        path=SETTLEMENT_DIR / "replay.rs",
+        anchor="""        if observed.name != requested.name {
+            assert(report.roots@[index as int].name@ != request.roots@[index as int].name@);
+            return true;
+        }
+""",
+        replacement="""        // NEGATIVE CONTROL: the root names are never compared.
+""",
+        expects=("invariant not satisfied", "decision/replay.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="root-loop-stops-early",
+        path=SETTLEMENT_DIR / "findings.rs",
+        anchor="""    let mut index = 0;
+    while index < report.roots.len()
+        invariant
+            index <= report.roots.len(),
+            report.roots.len() <= request.roots.len(),
+            findings@ == roots_findings_spec(request, report, index as nat),
+""",
+        replacement="""    let mut index = 0;
+    // NEGATIVE CONTROL: the root loop stops one root early.
+    while index + 1 < report.roots.len()
+        invariant
+            index <= report.roots.len(),
+            report.roots.len() <= request.roots.len(),
+            findings@ == roots_findings_spec(request, report, index as nat),
+""",
+        expects=("postcondition not satisfied", "decision/findings.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="axiom-loop-stops-early",
+        path=SETTLEMENT_DIR / "findings.rs",
+        anchor="""    let mut item = 0;
+    while item < declaration.axioms.len()
+""",
+        replacement="""    let mut item = 0;
+    // NEGATIVE CONTROL: the axiom loop stops one axiom early.
+    while item + 1 < declaration.axioms.len()
+""",
+        expects=("postcondition not satisfied", "decision/findings.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="foundations-ignored",
+        path=SETTLEMENT_DIR / "scan.rs",
+        anchor="""    contains(request.foundations.as_slice(), name)
+""",
+        replacement="""    // NEGATIVE CONTROL: the request's foundations are ignored.
+    let _ = contains(request.foundations.as_slice(), name);
+    false
+""",
+        expects=("postcondition not satisfied", "decision/scan.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="body",
+        name="breach-reported-as-rejection",
+        path=SETTLEMENT_DIR / "mod.rs",
+        anchor="""    if let Some(breach) = protocol_breach(request, report, pin) {
+        return Ok(Settlement::ToolFailure(breach));
+    }
+""",
+        replacement="""    if let Some(breach) = protocol_breach(request, report, pin) {
+        // NEGATIVE CONTROL: a protocol breach is reported as a rejection.
+        let _ = breach;
+        return Ok(Settlement::Rejected(Vec::new()));
+    }
+""",
+        expects=("postcondition not satisfied", "decision/mod.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="spec",
+        name="sorry-pinned",
+        path=PROOF_DIR / "audit_settlement_spec.rs",
+        anchor="""pub open spec fn pinned_spec(name: Seq<u8>) -> bool {
+    name == K_PROPEXT@ || name == K_QUOT@ || name == K_CHOICE@
+}
+""",
+        replacement="""pub open spec fn pinned_spec(name: Seq<u8>) -> bool {
+    name == K_PROPEXT@ || name == K_QUOT@ || name == K_CHOICE@ || name == K_SORRY@
+}
+""",
+        expects=("assertion failed", "audit_settlement_lemmas.rs"),
+    ),
+    Control(
+        tree=SETTLEMENT,
+        kind="spec",
+        name="valid-request-weakened",
+        path=PROOF_DIR / "audit_settlement_spec.rs",
+        anchor="""pub open spec fn valid_request_spec(q: &AuditRequest) -> bool {
+    q.roots@.len() > 0 && roots_distinct_spec(q) && foundations_pinned_spec(q)
+}
+""",
+        replacement="""pub open spec fn valid_request_spec(q: &AuditRequest) -> bool {
+    // NEGATIVE CONTROL: no request is admissible.
+    let _ = q;
+    false
+}
+""",
+        expects=("assertion failed", "audit_settlement_witnesses.rs"),
     ),
 )
 
@@ -237,25 +449,28 @@ def apply_control(root: Path, control: Control) -> str:
     return source.replace(control.anchor, control.replacement, 1)
 
 
-def stage(root: Path, scratch: Path) -> None:
-    """Copy the proof sources into ``scratch``, preserving their relative paths.
+def stage(root: Path, scratch: Path, tree: ProofTree) -> None:
+    """Copy one proof tree's sources into ``scratch`` at their relative paths.
 
-    The proof entry point includes the kernel with a relative ``#[path]``, and
-    the kernel includes the specification and lemmas the same way, so the
-    directory shape is part of the proof input.
+    The proof entry point includes its modules with relative ``#[path]``
+    attributes, and those modules include the specification and lemmas the same
+    way, so the directory shape is part of the proof input.
     """
-    for source in (root / PROOF_DIR, root / KERNEL_DIR):
-        destination = scratch / source.relative_to(root)
-        shutil.copytree(source, destination)
+    for source in tree.sources:
+        destination = scratch / source
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(root / source, destination)
 
 
-def run_verus(verus: Path, z3: Path, scratch: Path) -> subprocess.CompletedProcess[str]:
+def run_verus(
+    verus: Path, z3: Path, scratch: Path, entry: Path
+) -> subprocess.CompletedProcess[str]:
     """Run the pinned Verus binary on the staged proof entry point."""
     environment = dict(os.environ)
     environment["VERUS_Z3_PATH"] = str(z3)
     try:
         return subprocess.run(
-            [str(verus), str(PROOF_FILE)],
+            [str(verus), str(entry)],
             cwd=scratch,
             env=environment,
             capture_output=True,
@@ -309,8 +524,37 @@ def require_rejection(
     return " + ".join(control.expects)
 
 
+def check_tree(
+    root: Path, tree: ProofTree, verus: Path, z3: Path, *, runner: Runner
+) -> list[str]:
+    """Run one tree's baseline and every control in a fresh scratch tree."""
+    controls = tuple(control for control in CONTROLS if control.tree == tree)
+    lines: list[str] = []
+    with tempfile.TemporaryDirectory(
+        prefix=f"polean-verus-controls-{tree.name}-"
+    ) as directory:
+        scratch = Path(directory)
+        stage(root, scratch, tree)
+        require_baseline(runner(verus, z3, scratch, tree.entry))
+        staged_baseline = {
+            path: (scratch / path).read_text(encoding="utf-8")
+            for path in {control.path for control in controls}
+        }
+        for control in controls:
+            for path, text in staged_baseline.items():
+                (scratch / path).write_text(text, encoding="utf-8")
+            (scratch / control.path).write_text(
+                apply_control(root, control), encoding="utf-8"
+            )
+            obligation = require_rejection(
+                control, runner(verus, z3, scratch, tree.entry)
+            )
+            lines.append(f"{control.kind}:{control.name}: rejected at {obligation}")
+    return lines
+
+
 def check(root: Path, verus: Path, z3: Path, *, runner: Runner) -> list[str]:
-    """Run the baseline and every control in a fresh scratch tree.
+    """Run every proof tree's baseline and controls.
 
     `runner` is the dependency that invokes the verifier, so a test can observe
     the staged tree without replacing a module global. :func:`main` supplies
@@ -320,22 +564,8 @@ def check(root: Path, verus: Path, z3: Path, *, runner: Runner) -> list[str]:
     first control that does not behave as required.
     """
     lines: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="polean-verus-controls-") as directory:
-        scratch = Path(directory)
-        stage(root, scratch)
-        require_baseline(runner(verus, z3, scratch))
-        staged_baseline = {
-            path: (scratch / path).read_text(encoding="utf-8")
-            for path in {control.path for control in CONTROLS}
-        }
-        for control in CONTROLS:
-            for path, text in staged_baseline.items():
-                (scratch / path).write_text(text, encoding="utf-8")
-            (scratch / control.path).write_text(
-                apply_control(root, control), encoding="utf-8"
-            )
-            obligation = require_rejection(control, runner(verus, z3, scratch))
-            lines.append(f"{control.kind}:{control.name}: rejected at {obligation}")
+    for tree in TREES:
+        lines.extend(check_tree(root, tree, verus, z3, runner=runner))
     return lines
 
 

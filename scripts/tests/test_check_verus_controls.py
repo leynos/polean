@@ -172,24 +172,37 @@ def test_require_rejection_rejects_a_run_without_an_error() -> None:
         controls.require_rejection(control, completed(101, "interrupted\n"))
 
 
-def test_check_runs_the_baseline_before_the_controls(tmp_path: Path) -> None:
-    """Each control runs on a tree restored to the baseline text."""
-    paths = {control.path for control in controls.CONTROLS}
-    snapshots: list[dict[str, str]] = []
+def test_check_runs_each_tree_baseline_before_its_controls(tmp_path: Path) -> None:
+    """Each control runs on a tree restored to that tree's baseline text."""
+    snapshots: list[tuple[Path, dict[str, str]]] = []
+    seen: dict[Path, int] = {}
 
     def fake_run(
-        _verus: Path, _z3: Path, scratch: Path
+        _verus: Path, _z3: Path, scratch: Path, entry: Path
     ) -> subprocess.CompletedProcess[str]:
         """Record the staged files, then report the verifier's verdict."""
+        tree = next(tree for tree in controls.TREES if tree.entry == entry)
+        paths = {
+            control.path for control in controls.CONTROLS if control.tree == tree
+        }
         snapshots.append(
-            {
-                path.as_posix(): (scratch / path).read_text(encoding="utf-8")
-                for path in paths
-            }
+            (
+                entry,
+                {
+                    path.as_posix(): (scratch / path).read_text(encoding="utf-8")
+                    for path in paths
+                },
+            )
         )
-        if len(snapshots) == 1:
+        seen[entry] = seen.get(entry, 0) + 1
+        if seen[entry] == 1:
             return completed(0, "verification results:: 59 verified, 0 errors\n")
-        evidence = " ".join(name for control in controls.CONTROLS for name in control.expects)
+        evidence = " ".join(
+            name
+            for control in controls.CONTROLS
+            if control.tree == tree
+            for name in control.expects
+        )
         return completed(
             1,
             f"error: rejected {evidence}\nverification results:: 58 verified, 1 errors\n",
@@ -199,30 +212,62 @@ def test_check_runs_the_baseline_before_the_controls(tmp_path: Path) -> None:
         ROOT, tmp_path / "verus", tmp_path / "z3", runner=fake_run
     )
     assert len(lines) == len(controls.CONTROLS), "one evidence line per control"
-    assert len(snapshots) == len(controls.CONTROLS) + 1, (
-        "the baseline runs once before the controls"
+    assert len(snapshots) == len(controls.CONTROLS) + len(controls.TREES), (
+        "each tree's baseline runs once before its controls"
     )
-    baseline = snapshots[0]
-    for control, snapshot in zip(controls.CONTROLS, snapshots[1:], strict=True):
-        changed = {
-            path: text for path, text in snapshot.items() if text != baseline[path]
-        }
-        own = control.path.as_posix()
-        assert set(changed) == {own}, (
-            f"control {control.name} must change only {own} from the baseline"
-        )
-        assert control.replacement in changed[own], (
-            f"control {control.name} must write its replacement to {own}"
-        )
+    for tree in controls.TREES:
+        tree_controls = [
+            control for control in controls.CONTROLS if control.tree == tree
+        ]
+        tree_snapshots = [
+            snapshot for entry, snapshot in snapshots if entry == tree.entry
+        ]
+        baseline = tree_snapshots[0]
+        for control, snapshot in zip(tree_controls, tree_snapshots[1:], strict=True):
+            changed = {
+                path: text for path, text in snapshot.items() if text != baseline[path]
+            }
+            own = control.path.as_posix()
+            assert set(changed) == {own}, (
+                f"control {control.name} must change only {own} from the baseline"
+            )
+            assert control.replacement in changed[own], (
+                f"control {control.name} must write its replacement to {own}"
+            )
     assert lines[0].startswith("body:"), "the first evidence line names a body control"
 
 
-def test_stage_preserves_the_relative_paths(tmp_path: Path) -> None:
-    """The proof's relative includes resolve in the staged tree."""
-    controls.stage(ROOT, tmp_path)
-    assert (tmp_path / controls.PROOF_FILE).is_file(), "the proof entry point is staged"
+def test_every_tree_has_body_and_specification_controls() -> None:
+    """Each proof is shown sensitive to both its code and its specification."""
+    for tree in controls.TREES:
+        kinds = {control.kind for control in controls.CONTROLS if control.tree == tree}
+        assert kinds == {"body", "spec"}, (
+            f"the {tree.name} proof must cover both kinds of defect"
+        )
+
+
+def test_stage_preserves_the_admission_relative_paths(tmp_path: Path) -> None:
+    """The admission proof's relative includes resolve in the staged tree."""
+    controls.stage(ROOT, tmp_path, controls.ADMISSION)
+    assert (tmp_path / controls.ADMISSION.entry).is_file(), (
+        "the proof entry point is staged"
+    )
     assert (tmp_path / controls.KERNEL_DIR / "mod.rs").is_file(), "the kernel is staged"
     assert (tmp_path / controls.PROOF_DIR / "admission_spec.rs").is_file(), (
+        "the specification is staged"
+    )
+
+
+def test_stage_preserves_the_settlement_relative_paths(tmp_path: Path) -> None:
+    """The settlement proof's relative includes resolve in the staged tree."""
+    controls.stage(ROOT, tmp_path, controls.SETTLEMENT)
+    assert (tmp_path / controls.SETTLEMENT.entry).is_file(), (
+        "the proof entry point is staged"
+    )
+    assert (tmp_path / controls.SETTLEMENT_DIR / "mod.rs").is_file(), (
+        "the decision module is staged"
+    )
+    assert (tmp_path / controls.PROOF_DIR / "audit_settlement_spec.rs").is_file(), (
         "the specification is staged"
     )
 
