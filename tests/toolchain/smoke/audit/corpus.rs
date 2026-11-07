@@ -1,0 +1,236 @@
+//! The end-to-end audit corpus.
+//!
+//! Each fixture is compiled with the pinned Lean, audited by the real worker,
+//! decoded by the strict wire adapter, and settled against a hand-written
+//! request. The outcome must equal the hand-written manifest line.
+//!
+//! Nothing here proves the worker truthful. A matching corpus shows the
+//! worker and settlement agree with the plan on these twenty-two cases; the
+//! settlement proof separately shows what acceptance means if the report is
+//! true. Neither substitutes for the other.
+//!
+//! The two canonical snapshots pin the report shape for an accepted
+//! foundations case and a rejected native case. The replay `message` is
+//! excluded: it quotes the kernel's diagnostic, which is not part of the
+//! contract.
+
+use std::process::Output;
+
+use super::{
+    manifest::{self, Outcome},
+    requests::{self, Entry},
+    runner::Corpus,
+};
+use crate::{
+    audit::{
+        settlement::decision::settle,
+        wire::{DecodeError, PIN, decode_report},
+    },
+    scratch::{check, check_eq},
+};
+
+/// The fixtures to compile, dependencies before dependants.
+const FIXTURES: &[&str] = &[
+    "AuditFixture.Goal",
+    "AuditFixture.Claim",
+    "AuditFixture.SorryBase",
+    "AuditFixture.ReachBase",
+    "AuditFixture.ForgeBase",
+    "AuditFixture.AcceptedGround",
+    "AuditFixture.AcceptedFoundations",
+    "AuditFixture.AcceptedClaimShape",
+    "AuditFixture.MaximalPolicy",
+    "AuditFixture.InitSentinel",
+    "AuditFixture.MixedRoots",
+    "AuditFixture.Sorry",
+    "AuditFixture.SorryImported",
+    "AuditFixture.Native",
+    "AuditFixture.Undeclared",
+    "AuditFixture.ReachImported",
+    "AuditFixture.NarrowedFoundations",
+    "AuditFixture.WrongStatement",
+    "AuditFixture.WrongPolicyLiteral",
+    "AuditFixture.Unfolded",
+    "AuditFixture.AxiomRoot",
+    "AuditFixture.DefRoot",
+    "AuditFixture.RootAbsent",
+    "AuditFixture.ForgeInit",
+    "AuditFixture.ForgeImported",
+];
+
+/// The fixtures whose canonical report is snapshotted.
+const SNAPSHOTTED: &[&str] = &["AcceptedFoundations", "Native"];
+
+/// Every manifest entry must have a request, even without provisioned tools.
+#[test]
+fn every_manifest_entry_has_a_request() -> Result<(), String> {
+    let manifest = manifest::load()?;
+    for expected in &manifest {
+        let entry = requests::entry(&expected.fixture)?;
+        check_eq!(
+            entry.module,
+            expected.module.join("."),
+            "{}: the manifest module and the request module disagree",
+            expected.fixture
+        );
+    }
+    Ok(())
+}
+
+/// Every fixture settles to its manifest line at the real process boundary.
+///
+/// Every fixture is run even after one diverges, so a single run names the
+/// whole blast radius of a worker fault rather than only its first symptom.
+#[test]
+#[ignore = "needs make tools; run make toolchain-smoke"]
+fn corpus_matches_manifest() -> Result<(), String> {
+    let manifest = manifest::load()?;
+    let corpus = Corpus::prepare(FIXTURES)?;
+    let mut failures = Vec::new();
+    for expected in &manifest {
+        if let Err(error) = settle_one(&corpus, expected) {
+            failures.push(error);
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n\n"))
+    }
+}
+
+/// Run one manifest line and require the settlement to match it.
+///
+/// # Errors
+///
+/// Returns a diagnostic naming the fixture, the difference, and both streams.
+fn settle_one(corpus: &Corpus, expected: &manifest::Expectation) -> Result<(), String> {
+    let entry = requests::entry(&expected.fixture)?;
+    if expected.fixture == "InitSentinel" {
+        check!(
+            !corpus.sentinel_present()?,
+            "InitSentinel: the sentinel exists before the audit"
+        );
+    }
+    let output = run(corpus, &entry)?;
+    let outcome = classify(&entry, &output)?;
+    manifest::check(expected, &outcome).map_err(|error| {
+        format!(
+            "{error}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
+    if expected.fixture == "InitSentinel" {
+        check!(
+            !corpus.sentinel_present()?,
+            "InitSentinel: the audit ran an initializer"
+        );
+    }
+    if SNAPSHOTTED.contains(&expected.fixture.as_str()) {
+        assert_canonical(&expected.fixture, &output.stdout)?;
+    }
+    Ok(())
+}
+
+/// The positive control: `lean --run` does run the sentinel initializer.
+#[test]
+#[ignore = "needs make tools; run make toolchain-smoke"]
+fn sentinel_fires_when_initializers_run() -> Result<(), String> {
+    let corpus = Corpus::prepare(&["AuditFixture.Goal", "AuditFixture.InitSentinel"])?;
+    check!(
+        !corpus.sentinel_present()?,
+        "the sentinel exists before the positive control runs"
+    );
+    let output = corpus.sentinel_probe()?;
+    if !output.status.success() {
+        return Err(format!(
+            "lean --run on SentinelProbe failed with {:?}\nstderr:\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    check!(
+        corpus.sentinel_present()?,
+        "lean --run did not create the sentinel; the fixture cannot detect execution"
+    );
+    Ok(())
+}
+
+/// Run the entry's program and return its captured output.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the process cannot be started.
+fn run(corpus: &Corpus, entry: &Entry) -> Result<Output, String> {
+    if entry.fixture == "WorkerGarbled" {
+        return corpus.garbled();
+    }
+    corpus.worker(&entry.module, &entry.roots)
+}
+
+/// Classify a worker run into the manifest's vocabulary.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the request is refused, which would mean the
+/// corpus itself is inadmissible.
+fn classify(entry: &Entry, output: &Output) -> Result<Outcome, String> {
+    if !output.status.success() {
+        return Ok(Outcome::ToolFailure("worker_failed"));
+    }
+    match decode_report(&output.stdout) {
+        Err(DecodeError::Malformed(_)) => Ok(Outcome::ToolFailure("malformed_report")),
+        Err(DecodeError::OutputOverflow) => Ok(Outcome::ToolFailure("output_overflow")),
+        Ok(report) => {
+            let settled = settle(&entry.request, &report, PIN.as_bytes())
+                .map_err(|refusal| format!("{}: request refused: {refusal:?}", entry.fixture))?;
+            Ok(manifest::outcome(settled))
+        }
+    }
+}
+
+/// Render the canonical report and compare it with the committed snapshot.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the output is not JSON or cannot be rendered.
+fn assert_canonical(fixture: &str, bytes: &[u8]) -> Result<(), String> {
+    let text = canonical(bytes)?;
+    snapshot(fixture, &text);
+    Ok(())
+}
+
+/// Compare the rendered report with the committed snapshot.
+///
+/// This is a separate function so the assertion lives outside a
+/// `Result`-returning function, where the repository's lint policy forbids it.
+fn snapshot(fixture: &str, text: &str) {
+    match fixture {
+        "AcceptedFoundations" => insta::assert_snapshot!("canonical_accepted_foundations", text),
+        "Native" => insta::assert_snapshot!("canonical_native", text),
+        _ => (),
+    }
+}
+
+/// Pretty-print a report, excluding the replay diagnostic.
+///
+/// `message` quotes the kernel's rejection text. It is bounded, never parsed,
+/// and deliberately outside the snapshot so a kernel wording change does not
+/// look like a contract change.
+///
+/// # Errors
+///
+/// Returns a diagnostic when `bytes` is not JSON or cannot be rendered.
+fn canonical(bytes: &[u8]) -> Result<String, String> {
+    let mut document: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|error| format!("the worker's report is not valid JSON: {error}"))?;
+    if let Some(replay) = document
+        .get_mut("replay")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        replay.remove("message");
+    }
+    serde_json::to_string_pretty(&document)
+        .map_err(|error| format!("cannot render the canonical report: {error}"))
+}

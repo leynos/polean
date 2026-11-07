@@ -192,7 +192,11 @@ fn spine(depth: usize) -> String {
 fn over_node_bound() -> String { report_with_statement(&balanced(13)) }
 
 /// A report whose statement exceeds the depth bound but not the node bound.
-fn over_depth_bound() -> String { report_with_statement(&spine(30)) }
+///
+/// The spine has 60 applications, so its depth is 61 while its node count is
+/// 61. It is also the deepest encoding `serde_json` must parse for this test,
+/// which checks that the bound is reachable inside the parser's nesting limit.
+fn over_depth_bound() -> String { report_with_statement(&spine(60)) }
 
 /// Compose a request from a module, roots, and foundations.
 fn request(module: &str, roots: &str) -> String {

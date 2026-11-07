@@ -19,6 +19,8 @@
 mod bdd;
 mod fixtures;
 mod properties;
-mod settlement;
+// The smoke corpus settles real worker output, so it consumes the same wire
+// adapter and settlement function the unit tests do.
+pub(crate) mod settlement;
 mod tests;
-mod wire;
+pub(crate) mod wire;

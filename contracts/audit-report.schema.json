@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Polean v0 audit report",
-  "description": "One observation of a Lean job, emitted by the trusted worker. The report carries no verdict and no comparison result: Rust settlement alone decides acceptance. Structural validation is necessary, not sufficient. The decoder additionally enforces a 4,096-node and depth-60 statement bound, a byte bound on the replay message, and a whole-report size bound, none of which JSON Schema can express.",
+  "description": "One observation of a Lean job, emitted by the trusted worker. The report carries no verdict and no comparison result: Rust settlement alone decides acceptance. Structural validation is necessary, not sufficient. The decoder additionally enforces a 4,096-node and depth-60 statement bound — depth counted as one level per constant or application, the same way the worker counts it — a byte bound on the replay message, and a whole-report size bound, none of which JSON Schema can express.",
   "type": "object",
   "properties": {
     "schema_version": {

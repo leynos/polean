@@ -1,0 +1,57 @@
+---
+source: tests/toolchain/smoke/audit/corpus.rs
+expression: text
+---
+{
+  "githash": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+  "module": [
+    "AuditFixture",
+    "AcceptedFoundations"
+  ],
+  "replay": {
+    "modules": [
+      [
+        "AuditFixture",
+        "Goal"
+      ],
+      [
+        "AuditFixture",
+        "AcceptedFoundations"
+      ]
+    ],
+    "status": "accepted"
+  },
+  "roots": [
+    {
+      "declaration": {
+        "axioms": [
+          [
+            "propext"
+          ],
+          [
+            "Classical",
+            "choice"
+          ],
+          [
+            "Quot",
+            "sound"
+          ]
+        ],
+        "kind": "theorem",
+        "statement": {
+          "const": [
+            "AuditFixture",
+            "Goal"
+          ],
+          "levels": []
+        }
+      },
+      "name": [
+        "AuditFixture",
+        "AcceptedFoundations",
+        "root"
+      ]
+    }
+  ],
+  "schema_version": "polean.audit-report.v0"
+}

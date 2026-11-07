@@ -20,6 +20,8 @@ use std::{
 
 use rstest::rstest;
 
+mod audit;
+
 use crate::{
     ambient,
     engine::ENTRYPOINT,

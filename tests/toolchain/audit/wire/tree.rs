@@ -7,9 +7,9 @@
 //! never share a key.
 //!
 //! The decoder bounds a tree at [`MAX_NODES`] nodes and [`MAX_DEPTH`] levels,
-//! counted the way JSON nests them: one for a constant and two for an
-//! application. Settlement does not re-check the bound, because the adapter
-//! refuses an over-bound tree before a report reaches it.
+//! counted as one per constant and one per application. Settlement does not
+//! re-check the bound, because the adapter refuses an over-bound tree before a
+//! report reaches it.
 
 use super::name::{Name, name_key};
 
@@ -22,11 +22,13 @@ const APP_TAG: u8 = 0x41;
 /// The largest tree the decoder admits, in nodes.
 pub const MAX_NODES: usize = 4_096;
 
-/// The largest tree the decoder admits, in JSON nesting levels.
+/// The largest tree the decoder admits, in levels.
 ///
-/// `serde_json` refuses nesting beyond 127. An application spends two levels,
-/// one for its object and one for the two-element array, so the deepest tree
-/// admitted here stays well inside that limit.
+/// The bound matches the worker's, so a report the worker emits is never
+/// refused for depth alone. `serde_json` refuses JSON nesting beyond 128, and
+/// an application spends two levels, so a tree of this depth nests
+/// `2 * MAX_DEPTH + 1` levels, which leaves room for the report's own
+/// envelope.
 pub const MAX_DEPTH: usize = 60;
 
 /// A ground statement tree.
@@ -83,11 +85,17 @@ pub fn nodes(tree: &Tree) -> usize {
     }
 }
 
-/// The JSON nesting depth of a tree's encoding.
+/// The depth of a tree, counting one level per application.
+///
+/// This is the depth the worker bounds, so the two agree on which trees are
+/// admissible. It is not the JSON nesting depth: an application spends two
+/// JSON levels, one for its object and one for the two-element array, so a
+/// tree of depth `d` nests `2 * d + 1` levels. [`MAX_DEPTH`] is chosen so that
+/// figure stays inside `serde_json`'s limit.
 #[must_use]
 pub fn depth(tree: &Tree) -> usize {
     match tree {
         Tree::Const { .. } => 1,
-        Tree::App(left, right) => 2 + depth(left).max(depth(right)),
+        Tree::App(left, right) => 1 + depth(left).max(depth(right)),
     }
 }

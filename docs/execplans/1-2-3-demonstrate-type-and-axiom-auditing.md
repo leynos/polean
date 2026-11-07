@@ -318,7 +318,45 @@ revision has applied them to the technical design.
         (Whitaker, `cargo doc`, and Clippy), `make test` (204 passed, 7
         ignored), `make design-check`, and `make test-scripts` with the Python
         3.14 override (170 passed).
-- [ ] EP-M3: Lean worker and end-to-end corpus run.
+- [x] EP-M3: Lean worker and end-to-end corpus run.
+  - [x] (2026-11-07) Added `lean/PoleanAudit.lean` and the `polean-audit`
+        `[[lean_exe]]` table. `defaultTargets` and `PoleanSmoke` are unchanged.
+  - [x] (2026-11-07) Wrote the twenty-five modules under
+        `examples/audit/lean/AuditFixture/`, outside the Lake package — twenty
+        audited fixtures and five support modules (`Goal`, `Claim`,
+        `SorryBase`, `ReachBase`, `ForgeBase`) — plus the two programs that are
+        not report producers (`Garbled`, `SentinelProbe`).
+  - [x] (2026-11-07) Added `tests/toolchain/smoke/audit/` with the manifest
+        reader, the hand-written request table, the scratch-tree runner, and
+        the corpus test. `Corpus::prepare` builds the worker with
+        `lake --dir lean build polean-audit`, compiles each fixture with
+        `lean -o --root`, and runs every process with an empty environment
+        apart from `LEAN_SYSROOT` and `LEAN_PATH`.
+  - [x] (2026-11-07) Added `examples/audit/**` and `contracts/audit-*` to both
+        path lists in `.github/workflows/toolchain.yml`.
+  - [x] (2026-11-07) Found and repaired one real defect before the corpus went
+        green (D20): the decoder counted tree depth as JSON nesting levels while
+        the worker counted applications, so `MaximalPolicy` was refused at depth
+        76 against a bound of 60. The decoder now counts as the worker does. The
+        depth-negative fixture moved from `spine(30)` to `spine(60)`.
+  - [x] (2026-11-07) `make toolchain-smoke` is green: `9 passed; 0 failed` in
+        581.28 s, covering the four OPA scenarios, the two version reports, the
+        Lean library build, the sentinel positive control, and the corpus (log
+        `/tmp/smoke-polean-1-2-3-demonstrate-type-and-axiom-auditing.out`).
+  - [x] (2026-11-07) `cargo test --test toolchain audit::wire` is green with 37
+        tests, including the refused over-depth and over-node reports.
+  - [x] (2026-11-07) Added the two insta snapshots of the canonical report at
+        `tests/toolchain/smoke/audit/snapshots/`, with `replay.message`
+        removed.
+  - [x] (2026-11-07) Applied the four seeded mutations to the worker in place,
+        ran the corpus under each, and restored the worker byte for byte
+        (`sha256 4d0d60b7…`). Results are in the EP-M3 outcome.
+  - [x] (2026-11-07) The commit-gate sweep through `scrutineer` is green on the
+        repaired candidate: `make check-fmt`, `make markdownlint`,
+        `make typecheck`, `make lint` (Whitaker, `cargo doc`, and Clippy),
+        `make test` (74 + 27 + 2 + 101 passed, 9 ignored, doc-tests 1, 682 s),
+        `make design-check`, `make test-scripts` (170 passed), and
+        `make toolchain-smoke` (9 passed in 778.49 s).
 - [ ] EP-M4: documentation and roadmap completion.
 
 ## Surprises & discoveries
@@ -434,6 +472,33 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   derivations. Evidence: `.verus/0.2026.09.06.8dea4a2` on the scratch tree in
   `/tmp/epm2`. Impact: the warnings are about the data types, not the proof,
   and are recorded rather than silenced.
+- Observation: the decoder and the worker disagreed about what a tree's depth
+  is. `wire/tree.rs` counted JSON nesting, one level for a constant and two for
+  an application, while the worker counted applications. Evidence: the first
+  green-looking corpus run failed at `MaximalPolicy` with
+  `statement tree exceeds depth 60`; the same statement measures 38 levels by
+  application and 76 by JSON nesting. Impact: a correctly rendered, in-bound
+  report was refused, so no accepted fixture with a nested literal could pass.
+  The decoder now counts as the worker does (D20).
+- Observation: `INSTA_UPDATE=always` writes a new snapshot but still fails the
+  assertion that created it. Evidence: the first corpus run reported
+  `updated snapshot …` and then `FAILED` with the same `+new results` diff.
+  Impact: creating a snapshot needs `INSTA_FORCE_PASS=1` in the same run, and
+  the run after that must be unforced so a stale snapshot fails.
+- Observation: `insta` writes a snapshot beside the source file that asserts
+  it, so the corpus snapshots land in `tests/toolchain/smoke/audit/snapshots/`
+  rather than in the existing `tests/toolchain/snapshots/`. Evidence: the path
+  printed by the first run. Impact: none; the location is deterministic and is
+  committed with the test.
+- Observation: the worker's statement for a structural literal is larger than
+  reading the source suggests. `Holds [r1, r2]` with two actions on the first
+  rule is 47 nodes and 8 levels by application, because each `List.cons` is
+  three applications and each rule is three applications of `Rule.mk`.
+  Evidence: the `AcceptedClaimShape` snapshot and the `MaximalPolicy` count of
+  1,765 nodes against the plan's 1,705. Impact: the request table in
+  `smoke/audit/requests.rs` builds these trees from `List.cons`, `List.nil`, and
+  `Rule.mk` rather than transcribing a report, so the expected statement is an
+  independent claim about what Lean elaborates.
 
 ## Decision log
 
@@ -533,12 +598,24 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   `cfg(verus_keep_ghost)` because plain `rustc` would otherwise compile them
   and report dead code. `decision` re-exports every item the tests import, so
   no caller changes. Date/Author: 2026-11-07, implementer.
+- D20. Decision: count a statement tree's depth in applications, one level per
+  constant and one per application, in both the worker and the decoder; keep
+  the bound at 60. Rationale: the two sides must agree on which trees are
+  admissible, and the bound is only useful if a report the worker emits is
+  never refused for depth alone. The plan's own arithmetic is in application
+  levels: an application spends two JSON levels, so 60 levels is 121 JSON
+  levels, inside `serde_json`'s limit of 128. The decoder had implemented the
+  JSON-level reading, which halves the admitted depth to 30 applications and
+  refuses `MaximalPolicy` at 38. The alternative — keeping JSON-level counting
+  and shrinking the fixture — would contradict the plan's measurement and its
+  stated bound. Date/Author: 2026-11-07, implementer, after the corpus found
+  the disagreement.
 
 ## Outcomes & retrospective
 
-Nothing beyond EP-M1 has been implemented. Complete this section at each
-milestone and at the end. Before setting `COMPLETE`, reconcile every discovery
-with the upstream artefacts in `Conformance basis`.
+Complete this section at each milestone and at the end. Before setting
+`COMPLETE`, reconcile every discovery with the upstream artefacts in
+`Conformance basis`.
 
 ### EP-M1 outcome (2026-11-06)
 
@@ -566,6 +643,61 @@ were reverted and the suite reran: `80 passed; 0 failed` (log
 Design check. `make design-check` reports `json_schemas_checked: 7`,
 `audit_contract_samples_checked: 2`, `audit_manifest_entries_checked: 22`,
 `audit_contract_controls_passed: 11`, and `negative_controls_passed: 19`.
+
+### EP-M3 outcome (2026-11-07)
+
+Delivered the Lean worker, the twenty-five fixture and support modules, and the
+end-to-end corpus that compiles them with the pinned toolchain, audits them
+with the real worker, decodes the report through the strict adapter, and settles
+it against a hand-written request. All twenty-two manifest lines match, the sentinel
+positive control fires, and `make toolchain-smoke` is green.
+
+What the corpus establishes, and what it does not. A matching line shows that
+on these twenty-two cases the worker, the adapter, and the settlement agree
+with the plan that was written before the worker existed, so they cannot be
+agreeing only with each other. It does not show the worker truthful in general:
+the settlement proof is what makes acceptance mean something if a report is
+true.
+
+Mutation evidence. Each mutation was applied to `lean/PoleanAudit.lean` in
+place, the corpus rerun, and the worker restored to its original bytes
+(`sha256 4d0d60b71995bf44dd1c70b7bdafdbac57a07f868cea06254b8fbc3cdb207649`).
+The corpus now runs every fixture before reporting, so one run names the whole
+blast radius. Logs: `/tmp/mut1b-…`, `/tmp/mut2-…`, `/tmp/mut3-…`, `/tmp/mut4-…`.
+
+- M1, axioms from the root's type instead of `collectAxioms`. Detected by eight
+  fixtures: `MixedRoots`, `Sorry`, `SorryImported`, `Native`, `Undeclared`,
+  `ReachImported`, and `NarrowedFoundations` all became `accepted`, and
+  `AxiomRoot` lost its `undeclared_axiom`. The plan required `SorryImported` and
+  `ReachImported`; both failed as required.
+- M2, replay replaced by the un-replayed base environment. Detected by eighteen
+  fixtures. Every accepted fixture became `rejected` with `root_absent`, and
+  `ForgeInit` and `ForgeImported` reported `root_absent` where the manifest
+  requires `kernel_rejected`, as the plan required. `RootAbsent`,
+  `ModuleAbsent`, and `WorkerGarbled` still matched, which is right: their
+  expected outcome does not depend on the replay.
+- M3, statement rendered as its head constant only. Detected by
+  `AcceptedClaimShape` and `MaximalPolicy`, which became `statement_mismatch`.
+  The plan named `WrongPolicyLiteral`, and that expectation is wrong: a fixture
+  whose report must be rejected anyway cannot detect a renderer that loses
+  detail, because losing detail keeps it rejected. Only a fixture that must be
+  accepted can. The deviation is recorded rather than repaired, because the
+  milestone's requirement — that a lossy renderer is caught — is met.
+- M4, every declaration kind reported as `theorem`. Detected by `AxiomRoot`,
+  which kept one finding instead of two, and `DefRoot`, which was accepted.
+  Both failed as the plan required.
+
+Red evidence. `smoke::audit::corpus_matches_manifest` failed before the worker
+existed, first as a compile failure and then, once the fixtures and the harness
+existed but the worker did not, because `Corpus::prepare` could not build the
+`polean-audit` target.
+
+Repair found by the corpus. One real defect, D20: the decoder and the worker
+counted tree depth differently, and `MaximalPolicy` was refused at depth 76
+against a bound of 60. The corpus found it on its first complete run. The
+decoder, its documentation, the report schema's description, and the
+depth-negative fixture were corrected together, and
+`cargo test --test toolchain audit::wire` is green with 37 tests.
 
 ## Context and orientation
 

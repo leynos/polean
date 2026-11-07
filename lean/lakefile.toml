@@ -6,3 +6,7 @@ warningAsError = true
 
 [[lean_lib]]
 name = "PoleanSmoke"
+
+[[lean_exe]]
+name = "polean-audit"
+root = "PoleanAudit"
