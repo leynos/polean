@@ -711,9 +711,11 @@ pinned toolchain, the requested module and roots, an exact statement, and only
 approved foundations; a protocol breach outranks any finding; and a refusal is
 distinguished from a rejection. The ten settlement controls in
 `scripts/check_verus_controls.py` each fail with the expected diagnostic, and
-the five admission controls still do. The check is textual, so it shows each
-edit is detected and located; it does not identify which obligation failed
-first.
+the five admission controls still do. The expected items are matched as
+independent substrings of the combined output, so a control shows its edit is
+detected and that the expected failure kind and source path both appear; it
+does not show they belong to the same diagnostic, and it does not identify
+which obligation failed first.
 
 What the proof does not establish. It says what acceptance means for a report
 it is given. It does not say the worker told the truth, that the wire decoder

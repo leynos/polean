@@ -499,11 +499,12 @@ def require_rejection(
 ) -> str:
     """Require Verus to reject the edited proof with the expected diagnostic.
 
-    The match is textual: each expected item must appear somewhere in the
-    combined output, which names the failure kind and the source path but not
-    the individual obligation. A control therefore shows that its edit is
-    detected and located, not that the first failing obligation is the one the
-    specification intended to defend.
+    The match is textual and each expected item is searched for independently
+    over the combined output. A control therefore shows that its edit was
+    detected and that the expected failure kind and source path both appear
+    somewhere; it does not show the two belong to the same diagnostic, and it
+    does not show the first failing obligation is the one the specification
+    intended to defend.
     """
     output = control_run.stdout + control_run.stderr
     if control_run.returncode == 0:
