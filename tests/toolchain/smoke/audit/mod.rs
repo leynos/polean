@@ -9,7 +9,8 @@
 //! `requests` holds the hand-written request for each fixture, including the
 //! expected statement trees. `runner` builds the worker and compiles the
 //! fixtures in a scratch tree. `manifest` reads the committed expectations and
-//! compares them with a run.
+//! compares them with a run. `render` builds and runs the Lean-side tests of the
+//! statement renderer's bounds, which the corpus cannot reach.
 //!
 //! These tests are `#[ignore]`d because they need `make tools`. The one
 //! exception, `corpus::every_manifest_entry_has_a_request`, reads files only
@@ -17,5 +18,6 @@
 
 mod corpus;
 mod manifest;
+mod render;
 mod requests;
 mod runner;

@@ -62,7 +62,7 @@ impl Corpus {
         let lean = lean_root.join("bin").join("lean");
         let lake = lean_root.join("bin").join("lake");
         let package = repository.join("lean");
-        let worker = built_worker(&lake, &package, &repository)?;
+        let worker = built_target(&lake, &package, &repository, "polean-audit")?;
         let scratch = Scratch::try_new("audit-corpus")
             .map_err(|error| format!("cannot create the audit scratch directory: {error}"))?;
         let out = scratch.path().join("out");
@@ -181,23 +181,31 @@ impl Corpus {
 /// Serializes `lake build`, which writes `.lake/build` in the package.
 static BUILD_LOCK: Mutex<()> = Mutex::new(());
 
-/// Build the audit worker with the pinned Lake.
+/// Build one Lake target with the pinned Lake.
+///
+/// The lock is held across the build, so the corpus tests and the renderer
+/// tests cannot write the same `.lake/build` directory at once.
 ///
 /// # Errors
 ///
 /// Returns a diagnostic naming the package and both streams when the build
 /// fails, or when another test panicked while holding the build lock.
-fn build_worker(lake: &Path, package: &Path, repository: &Path) -> Result<(), String> {
+pub(super) fn build_target(
+    lake: &Path,
+    package: &Path,
+    repository: &Path,
+    target: &str,
+) -> Result<(), String> {
     let _guard = BUILD_LOCK
         .lock()
-        .map_err(|_| "the audit worker build lock is poisoned".to_owned())?;
+        .map_err(|_| "the Lake build lock is poisoned".to_owned())?;
     let package_text = package.display().to_string();
-    let arguments = ["--dir", package_text.as_str(), "build", "polean-audit"];
+    let arguments = ["--dir", package_text.as_str(), "build", target];
     let output = capture(lake, &arguments, &[], repository)?;
     require_success(lake, &arguments, &output)
 }
 
-/// Build the audit worker and return the binary the build should have written.
+/// Build `target` and return the binary the build should have written.
 ///
 /// A successful `lake build` that writes no binary would otherwise be noticed
 /// only when the first fixture failed to run, with an error about the fixture
@@ -207,16 +215,21 @@ fn build_worker(lake: &Path, package: &Path, repository: &Path) -> Result<(), St
 ///
 /// Returns a diagnostic when the build fails, or when it reports success but
 /// the binary is absent.
-fn built_worker(lake: &Path, package: &Path, repository: &Path) -> Result<PathBuf, String> {
-    build_worker(lake, package, repository)?;
-    let worker = package.join(".lake/build/bin/polean-audit");
-    if !path_exists(&worker)? {
+pub(super) fn built_target(
+    lake: &Path,
+    package: &Path,
+    repository: &Path,
+    target: &str,
+) -> Result<PathBuf, String> {
+    build_target(lake, package, repository, target)?;
+    let binary = package.join(".lake/build/bin").join(target);
+    if !path_exists(&binary)? {
         return Err(format!(
             "the build reported success but {} is absent; the target did not build",
-            worker.display()
+            binary.display()
         ));
     }
-    Ok(worker)
+    Ok(binary)
 }
 
 /// Run a process with an empty environment plus `environment`.
@@ -244,7 +257,11 @@ fn capture(
 /// # Errors
 ///
 /// Returns a diagnostic naming the command, its exit code, and both streams.
-fn require_success(program: &Path, arguments: &[&str], output: &Output) -> Result<(), String> {
+pub(super) fn require_success(
+    program: &Path,
+    arguments: &[&str],
+    output: &Output,
+) -> Result<(), String> {
     if output.status.success() {
         return Ok(());
     }

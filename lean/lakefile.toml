@@ -7,6 +7,14 @@ warningAsError = true
 [[lean_lib]]
 name = "PoleanSmoke"
 
+[[lean_lib]]
+name = "PoleanRenderer"
+roots = ["PoleanAudit.Render"]
+
 [[lean_exe]]
 name = "polean-audit"
 root = "PoleanAudit"
+
+[[lean_exe]]
+name = "polean-audit-render-tests"
+root = "PoleanAuditRenderTests"
