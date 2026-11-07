@@ -658,7 +658,12 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   plan to completion, and the overrun was not separately escalated while the
   estimate was being passed. This entry records the fact for the assessment and
   for anyone planning a comparable audit; it is not a retroactive approval.
-  Date/Author: 2026-11-07, implementer, after the hosted assessment raised it.
+  Disposition: the hosted assessment escalated the missed trigger, and the
+  sponsor's standing instruction to deliver the approved plan to completion is
+  what the escalation rests on. No scope beyond the approved plan was added;
+  the estimate was wrong, not the scope. If the sponsor wants the trigger
+  treated differently, that supersedes this entry. Date/Author: 2026-11-07,
+  implementer, after the hosted assessment raised it.
 
 ## Outcomes & retrospective
 
@@ -987,10 +992,24 @@ returned five qualifications. All five were actioned.
   every plan claim that said "named obligation" now say "expected diagnostic"
   and state what the match does and does not establish.
 
-The assessment also asked for `make verus` on the repaired head; its output is
-retained in the delivery ledger. The two proof results and the fifteen controls
-are still author-reported from that run, not independently reproduced by the
-assessor.
+The repairs landed as `ffb86ef`, and the eleven-target gate sweep on that head
+was green, including `make verus` — which the assessment asked for — with the
+recognizer at 89 verified, settlement at 64 verified, and fifteen of fifteen
+controls rejected. Its output is retained in the delivery ledger. The two proof
+results and the fifteen controls are still author-reported from that run, not
+independently reproduced by the assessor.
+
+#### Assessment round 1 follow-up (2026-11-07)
+
+The follow-up reply asked for the A1 mutation evidence this plan's verification
+plan requires. Removing the text length prefix from `name_key` in a scratch
+working tree failed `name_keys_round_trip` with the minimal input
+`Some([Text("")])` against `None`, and failed `tree_keys_round_trip` with
+`Const { name: [Text("")], levels: [] }`; five other key properties still
+passed, because a lossy encoder remains injective on the sampled cases. The
+unmodified encoder then passed all seven key properties. The transcript is
+retained in the delivery ledger. The scope-tolerance disposition is recorded in
+D23.
 
 ## Context and orientation
 
