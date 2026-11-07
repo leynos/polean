@@ -6,6 +6,10 @@ Accepted. Accepted with the revised
 [1.2.3 ExecPlan](../execplans/1-2-3-demonstrate-type-and-axiom-auditing.md) on
 2026-11-06.
 
+Proof integrity and operational integrity are separate properties with separate
+owners: 1.2.3 demonstrates what a settled audit report means, and 4.3.2 owns
+defending the environment that produced it.
+
 ## Date
 
 2026-11-06.

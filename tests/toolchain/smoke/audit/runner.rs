@@ -62,14 +62,7 @@ impl Corpus {
         let lean = lean_root.join("bin").join("lean");
         let lake = lean_root.join("bin").join("lake");
         let package = repository.join("lean");
-        build_worker(&lake, &package, &repository)?;
-        let worker = package.join(".lake/build/bin/polean-audit");
-        if !path_exists(&worker)? {
-            return Err(format!(
-                "the build reported success but {} is absent; the target did not build",
-                worker.display()
-            ));
-        }
+        let worker = built_worker(&lake, &package, &repository)?;
         let scratch = Scratch::try_new("audit-corpus")
             .map_err(|error| format!("cannot create the audit scratch directory: {error}"))?;
         let out = scratch.path().join("out");
@@ -202,6 +195,28 @@ fn build_worker(lake: &Path, package: &Path, repository: &Path) -> Result<(), St
     let arguments = ["--dir", package_text.as_str(), "build", "polean-audit"];
     let output = capture(lake, &arguments, &[], repository)?;
     require_success(lake, &arguments, &output)
+}
+
+/// Build the audit worker and return the binary the build should have written.
+///
+/// A successful `lake build` that writes no binary would otherwise be noticed
+/// only when the first fixture failed to run, with an error about the fixture
+/// rather than the build.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the build fails, or when it reports success but
+/// the binary is absent.
+fn built_worker(lake: &Path, package: &Path, repository: &Path) -> Result<PathBuf, String> {
+    build_worker(lake, package, repository)?;
+    let worker = package.join(".lake/build/bin/polean-audit");
+    if !path_exists(&worker)? {
+        return Err(format!(
+            "the build reported success but {} is absent; the target did not build",
+            worker.display()
+        ));
+    }
+    Ok(worker)
 }
 
 /// Run a process with an empty environment plus `environment`.

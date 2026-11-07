@@ -58,8 +58,15 @@ const FIXTURES: &[&str] = &[
     "AuditFixture.ForgeImported",
 ];
 
-/// The fixtures whose canonical report is snapshotted.
-const SNAPSHOTTED: &[&str] = &["AcceptedFoundations", "Native"];
+/// The fixtures whose canonical report is snapshotted, with the snapshot name.
+///
+/// One table, because deciding to compare and naming the snapshot have to
+/// agree: two copies of the list could drift, leaving a snapshot that is never
+/// checked or a fixture that is compared against another's snapshot.
+const SNAPSHOTS: &[(&str, &str)] = &[
+    ("AcceptedFoundations", "canonical_accepted_foundations"),
+    ("Native", "canonical_native"),
+];
 
 /// The fixture whose initializer writes a sentinel only when it runs.
 ///
@@ -136,8 +143,11 @@ fn settle_one(corpus: &Corpus, expected: &manifest::Expectation) -> Result<(), S
             "InitSentinel: the audit ran an initializer"
         );
     }
-    if SNAPSHOTTED.contains(&expected.fixture.as_str()) {
-        assert_canonical(&expected.fixture, &output.stdout)?;
+    if let Some((_, name)) = SNAPSHOTS
+        .iter()
+        .find(|(fixture, _)| *fixture == expected.fixture.as_str())
+    {
+        assert_canonical(name, &output.stdout)?;
     }
     Ok(())
 }
@@ -199,14 +209,14 @@ fn classify(entry: &Entry, output: &Output) -> Result<Outcome, String> {
     }
 }
 
-/// Render the canonical report and compare it with the committed snapshot.
+/// Render the canonical report and compare it with the named snapshot.
 ///
 /// # Errors
 ///
 /// Returns a diagnostic when the output is not JSON or cannot be rendered.
-fn assert_canonical(fixture: &str, bytes: &[u8]) -> Result<(), String> {
+fn assert_canonical(name: &str, bytes: &[u8]) -> Result<(), String> {
     let text = canonical(bytes)?;
-    snapshot(fixture, &text);
+    compare(name, &text);
     Ok(())
 }
 
@@ -214,12 +224,8 @@ fn assert_canonical(fixture: &str, bytes: &[u8]) -> Result<(), String> {
 ///
 /// This is a separate function so the assertion lives outside a
 /// `Result`-returning function, where the repository's lint policy forbids it.
-fn snapshot(fixture: &str, text: &str) {
-    match fixture {
-        "AcceptedFoundations" => insta::assert_snapshot!("canonical_accepted_foundations", text),
-        "Native" => insta::assert_snapshot!("canonical_native", text),
-        _ => (),
-    }
+fn compare(name: &str, text: &str) {
+    insta::assert_snapshot!(name, text);
 }
 
 /// Pretty-print a report, excluding the replay diagnostic.

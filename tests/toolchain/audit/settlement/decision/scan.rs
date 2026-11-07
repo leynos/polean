@@ -51,7 +51,7 @@ pub(super) fn contains(keys: &[Key], name: &[u8]) -> (result: bool)
     let mut index = 0;
     while index < keys.len()
         invariant
-            0 <= index <= keys.len(),
+            index <= keys.len(),
             forall|i: int| 0 <= i < index ==> keys@[i]@ != name@,
         decreases keys.len() - index,
     {

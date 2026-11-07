@@ -7,6 +7,8 @@
 //! and the Rust decoder read the same bytes, so a schema and a decoder that
 //! drift apart fail on one side or the other.
 
+use rstest::rstest;
+
 use super::{
     Component,
     Name,
@@ -45,43 +47,20 @@ fn constant(parts: &[&str], levels: &[u32]) -> Tree {
 /// An application of one tree to another.
 fn app(left: Tree, right: Tree) -> Tree { Tree::App(Box::new(left), Box::new(right)) }
 
-/// The key of `["propext"]`, which settlement pins.
-#[test]
-fn name_key_reproduces_the_propext_literal() {
+/// Each pinned key is the encoding of the real name it depends on.
+///
+/// Settlement compares keys against these literals, so a broken encoding would
+/// make every axiom look undeclared rather than wrong.
+#[rstest]
+#[case::propext(&["propext"], &K_PROPEXT)]
+#[case::quot_sound(&["Quot", "sound"], &K_QUOT)]
+#[case::classical_choice(&["Classical", "choice"], &K_CHOICE)]
+#[case::sorry(&["sorryAx"], &K_SORRY)]
+fn name_key_reproduces_the_pinned_literal(#[case] parts: &[&str], #[case] expected: &[u8]) {
     assert_eq!(
-        name_key(&text(&["propext"])),
-        K_PROPEXT.to_vec(),
-        "the pinned propext key is not the encoding of the real name"
-    );
-}
-
-/// The key of `["Quot", "sound"]`, which settlement pins.
-#[test]
-fn name_key_reproduces_the_quot_literal() {
-    assert_eq!(
-        name_key(&text(&["Quot", "sound"])),
-        K_QUOT.to_vec(),
-        "the pinned Quot.sound key is not the encoding of the real name"
-    );
-}
-
-/// The key of `["Classical", "choice"]`, which settlement pins.
-#[test]
-fn name_key_reproduces_the_choice_literal() {
-    assert_eq!(
-        name_key(&text(&["Classical", "choice"])),
-        K_CHOICE.to_vec(),
-        "the pinned Classical.choice key is not the encoding of the real name"
-    );
-}
-
-/// The key of `["sorryAx"]`, which settlement diagnoses.
-#[test]
-fn name_key_reproduces_the_sorry_literal() {
-    assert_eq!(
-        name_key(&text(&["sorryAx"])),
-        K_SORRY.to_vec(),
-        "the pinned sorryAx key is not the encoding of the real name"
+        name_key(&text(parts)),
+        expected.to_vec(),
+        "the pinned key of {parts:?} is not the encoding of the real name"
     );
 }
 
@@ -151,8 +130,9 @@ fn tree_keys_distinguish_application_order() {
 /// The shared report sample decodes into the values settlement compares.
 #[test]
 fn decode_report_accepts_the_shared_sample() {
-    let Ok(report) = decode_report(SAMPLE_REPORT.as_bytes()) else {
-        panic!("the shared report sample did not decode");
+    let report = match decode_report(SAMPLE_REPORT.as_bytes()) {
+        Ok(report) => report,
+        Err(error) => panic!("the shared report sample did not decode: {error:?}"),
     };
     assert_eq!(
         report.githash,
@@ -189,8 +169,9 @@ fn decode_report_accepts_the_shared_sample() {
 /// The shared request sample decodes into the values settlement compares.
 #[test]
 fn decode_request_accepts_the_shared_sample() {
-    let Ok(request) = decode_request(SAMPLE_REQUEST.as_bytes()) else {
-        panic!("the shared request sample did not decode");
+    let request = match decode_request(SAMPLE_REQUEST.as_bytes()) {
+        Ok(request) => request,
+        Err(error) => panic!("the shared request sample did not decode: {error:?}"),
     };
     assert_eq!(
         request.module,

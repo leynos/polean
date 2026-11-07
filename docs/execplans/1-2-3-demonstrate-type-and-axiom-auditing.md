@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: COMPLETE (revision 6). The user approved this plan and accepted
+Status: COMPLETE (revision 7). The user approved this plan and accepted
 [ADR 0006](../adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
 on 2026-11-06. Implementation finished on 2026-11-07; promotion into the
 product is roadmap 2.2.4 and operational integrity is roadmap 4.3.2.
@@ -859,6 +859,45 @@ findings. All four were actioned.
   module of their own rather than claiming the harness is now within the limit.
 - `sha256sum -c SHA256SUMS` covers 46 entries, including the two new modules.
 
+### Review round 6 (2026-11-07)
+
+A third CodeRabbit CLI pass, over `35bbdd8`, raised sixteen findings. Fifteen
+were actioned and one is declined because it contradicts an accepted decision.
+
+- The wire decoder now enforces `uniqueItems` on `foundations`, which the
+  request schema already stated. Without it the decoder admitted a document the
+  contract refuses, so the A3 agreement was one-sided. A request mutation, a
+  negative case, and a contract control cover it; `validate_request` is
+  unchanged.
+- The first contract control is retitled "audit request rejects an empty roots
+  list". It tested that mutation all along, but its label described the
+  unmutated sample, which is the opposite of what the second value checks.
+- `require` and `check_schema` gain NumPy-style parameter and raise sections,
+  so the diagnostic each raises is documented rather than inferred.
+- ADR 0006's status carries a one-sentence decision summary.
+- The embedded Gherkin in this plan is replaced by a pointer to
+  `tests/features/axiom_audit.feature`. The copy had drifted from the
+  executable specification, and a copy that is not run will drift again.
+- The findings record says the `DupRoot` entry modules' own sources were not
+  retained, so the section documents the three copies rather than claiming a
+  complete build.
+- The `spine(60)` comment now gives the arithmetic: 60 applications and 61
+  leaves, so depth 61 and 121 nodes, not 61 nodes.
+- `lean/PoleanAudit.lean` documents the `unsafe` boundary at `main` — it is
+  `Lean.withImportModules` that is unsafe — and records why `treeBounded`'s
+  `Nat` truncation can only refuse a tree, never admit one.
+- The trivially true `0 <=` is dropped from `contains`'s loop invariant in
+  `scan.rs`; `make verus` re-checks the settlement at 64 verified.
+- The four pinned-literal key tests become one `#[rstest]` case, the two decoder
+  panics include the error, three positive controls stop the negative suite
+  passing for a decoder that refuses everything, the corpus snapshot table is
+  single and its comparison fails loudly, and the worker build and its
+  existence check are one `built_worker` helper.
+- Declined: `serde` remains `=1.0.229`. ADR 0003, "Why every dev-dependency
+  carries an exact pin", records that caret requirements would make an intended
+  tuple change indistinguishable from an incidental one; relaxing that is a
+  separate decision. The finding asks for a change the accepted ADR forbids.
+
 ## Context and orientation
 
 Polean is a design scaffold. `src/lib.rs` holds a project name and a status
@@ -1444,67 +1483,9 @@ The behavioural specification is `tests/features/axiom_audit.feature`. It runs
 against recorded reports through the decoder and settlement, while the corpus
 exercises the real worker.
 
-```gherkin
-Feature: Settle a Lean audit report against an expected proposition and approved foundations
-
-  Background:
-    Given a request for one theorem root with its expected statement and all pinned foundations
-
-  Scenario: A clean report is accepted
-    Given a report whose root is a theorem with the expected statement and only approved axioms
-    When the report is settled
-    Then the settlement is accepted
-
-  Scenario: A root that depends on sorryAx is rejected
-    Given a report whose root depends on sorryAx
-    When the report is settled
-    Then the settlement is rejected with finding sorry_axiom
-
-  Scenario: A root that depends on a native computation axiom is rejected
-    Given a report whose root depends on an axiom with a _native name component
-    When the report is settled
-    Then the settlement is rejected with finding native_axiom
-
-  Scenario: A root that depends on an undeclared assumption is rejected
-    Given a report whose root depends on an axiom outside the request
-    When the report is settled
-    Then the settlement is rejected with finding undeclared_axiom
-
-  Scenario: A statement that differs from the request is rejected
-    Given a report whose root statement differs from the expected tree
-    When the report is settled
-    Then the settlement is rejected with finding statement_mismatch
-
-  Scenario: A kernel replay rejection is rejected
-    Given a report whose replay was rejected by the kernel
-    When the report is settled
-    Then the settlement is rejected with finding kernel_rejected
-
-  Scenario: A mixed report keeps per-root evidence
-    Given a report with one clean root and one root depending on sorryAx
-    When the report is settled
-    Then only the second root has finding sorry_axiom
-
-  Scenario: Narrowed foundations are enforced
-    Given a request omitting propext and a report using propext
-    When the report is settled
-    Then the settlement is rejected with finding undeclared_axiom
-
-  Scenario: A request that approves sorryAx is refused
-    Given a request listing sorryAx as a foundation
-    When the request is validated
-    Then it is refused before any worker runs
-
-  Scenario: A report that omits a requested root is a tool failure
-    Given a report that answers no requested root despite an accepted replay
-    When the report is settled
-    Then the settlement is a tool failure
-
-  Scenario: Garbled worker output is a tool failure
-    Given worker output that is not a single audit report
-    When the output is decoded and settled
-    Then the settlement is a tool failure
-```
+The feature file is the authority for those scenarios; they are deliberately
+not copied here, because an embedded copy drifts from the executable
+specification whenever either changes.
 
 Red-Green-Refactor evidence to record for each milestone:
 
@@ -1816,3 +1797,6 @@ added. The worker uses only the pinned Lean's own `Lean` library.
 - Revision 6 (2026-11-07): recorded the review repairs, decisions D21 and D22,
   and the ordering rules the wire protocol actually requires. No scope change
   from revision 5.
+- Revision 7 (2026-11-07): recorded review round 6, including the decoder's
+  enforcement of the request contract's `uniqueItems` and the reason `serde`
+  keeps its exact pin. No scope change from revision 6.

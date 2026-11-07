@@ -61,7 +61,14 @@ def maxDepth : Nat := 60
     term could otherwise expand to an exponential tree before any total was
     compared with [`maxNodes`]. With the budget the traversal stops as soon as
     the whole tree would exceed the bound, so it costs at most `maxNodes` node
-    visits however the graph is shared. -/
+    visits however the graph is shared.
+
+    Both subtractions are `Nat` subtraction, which truncates at zero rather than
+    failing. That is safe only because of the guard: `depth` and `budget` are
+    positive whenever a child is visited, and if a returned count ever exceeded
+    the remaining budget, `budget - 1 - nf` would truncate to zero and the next
+    call would refuse. Truncation can therefore only make the walk reject a
+    tree, never admit one. -/
 partial def treeBounded (depth budget : Nat) (e : Expr) : Option (Json × Nat) :=
   if depth == 0 || budget == 0 then
     none
@@ -121,6 +128,14 @@ def emit (doc : Json) : IO UInt32 := do
   IO.println (Json.compress doc)
   return 0
 
+/-- The worker's entry point.
+
+    Marked `unsafe` because `Lean.withImportModules` is: it loads a module's
+    compiled `.olean` files into the environment without re-checking them, which
+    is precisely the replay this worker observes and reports. Nothing read
+    through that boundary is trusted here; the report is data for the Rust
+    settlement, which decides, and a fault in the worker can make a report wrong
+    but cannot make an audit pass. Every other step is ordinary `IO`. -/
 unsafe def main (args : List String) : IO UInt32 := do
   let modS :: root0 :: rootRest := args
     | throw (IO.userError "usage: polean-audit <module> <root>...")

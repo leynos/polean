@@ -17,6 +17,8 @@
 //! The document types live in [`super::document`]; this module holds the byte
 //! bounds, the entry points, and the conversion into settlement values.
 
+use std::collections::BTreeSet;
+
 use super::{
     document::{
         AcceptedReplayDocument,
@@ -110,20 +112,23 @@ pub fn decode_report(bytes: &[u8]) -> Result<AuditReport, DecodeError> {
 /// Returns [`DecodeError::OutputOverflow`] when `bytes` exceeds
 /// [`MAX_REQUEST_BYTES`], and [`DecodeError::Malformed`] for the same classes
 /// of fault as [`decode_report`], plus a request name component that is
-/// numeric, empty, or outside the argument grammar.
+/// numeric, empty, or outside the argument grammar, and a foundation that is
+/// declared more than once.
 pub fn decode_request(bytes: &[u8]) -> Result<AuditRequest, DecodeError> {
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err(DecodeError::OutputOverflow);
     }
     let document: RequestDocument = serde_json::from_slice(bytes)
         .map_err(|error| DecodeError::Malformed(format!("request is not valid JSON: {error}")))?;
+    let foundations = document
+        .foundations
+        .into_iter()
+        .map(|name| convert_request_name(name).map(|key| name_key(&key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    unique_foundations(&foundations)?;
     Ok(AuditRequest {
         module: name_key(&convert_request_name(document.module)?),
-        foundations: document
-            .foundations
-            .into_iter()
-            .map(|name| convert_request_name(name).map(|key| name_key(&key)))
-            .collect::<Result<Vec<_>, _>>()?,
+        foundations,
         roots: document
             .roots
             .into_iter()
@@ -135,6 +140,28 @@ pub fn decode_request(bytes: &[u8]) -> Result<AuditRequest, DecodeError> {
             })
             .collect::<Result<Vec<_>, _>>()?,
     })
+}
+
+/// Refuse a request that declares the same foundation twice.
+///
+/// The request schema states `uniqueItems`, and settlement reads the list as
+/// the approved set. Enforcing it here keeps a document the schema rejects from
+/// reaching settlement, so the decoder and the contract agree about which
+/// requests exist.
+///
+/// # Errors
+///
+/// Returns [`DecodeError::Malformed`] when two entries encode to the same key.
+fn unique_foundations(foundations: &[Key]) -> Result<(), DecodeError> {
+    let mut seen = BTreeSet::new();
+    for foundation in foundations {
+        if !seen.insert(foundation.as_slice()) {
+            return Err(DecodeError::Malformed(
+                "a foundation is declared more than once".to_owned(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Convert one contract component.

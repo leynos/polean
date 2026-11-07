@@ -333,7 +333,9 @@ theorem Fx.InitShadow.root : Absurd := Quot.sound
 
 `DupRootA` imports the forged and the honest copy, in that order. `DupRootB`
 reverses the order, and `DupRootC` imports an axiom copy first. Compile each
-copy separately.
+copy separately. The three entry modules are one-line imports of the copies
+below; their own sources were not retained, so this section records the copies
+rather than a complete build.
 
 ```lean
 import Fx.Expected

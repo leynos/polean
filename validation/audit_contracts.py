@@ -72,7 +72,8 @@ def audit_controls(validators: dict[str, Draft202012Validator],
     The report contract deliberately has no verdict field, so the first control
     is the one that keeps a worker from choosing its own outcome. The rest cover
     the required nullable fields, the closed declaration-kind set, the ground
-    tree's two exclusive forms, and the integer range a name component may use.
+    tree's two exclusive forms, the integer range a name component may use, and
+    the set semantics of the approved foundations.
     """
 
     def request_accepted(document: dict[str, Any]) -> bool:
@@ -89,6 +90,9 @@ def audit_controls(validators: dict[str, Draft202012Validator],
     extra_entry["expected"] = []
     empty_component = copy.deepcopy(request_sample)
     empty_component["module"] = ["AuditFixture", ""]
+    duplicate_foundation = copy.deepcopy(request_sample)
+    first_foundation = duplicate_foundation["foundations"][0]
+    duplicate_foundation["foundations"] = [first_foundation, first_foundation]
     root_without_expected = copy.deepcopy(request_sample)
     del root_without_expected["roots"][0]["expected"]
 
@@ -111,12 +115,14 @@ def audit_controls(validators: dict[str, Draft202012Validator],
     rejected_without_message["replay"] = {"status": "rejected"}
 
     return [
-        ("audit request accepts the reviewed sample",
+        ("audit request rejects an empty roots list",
          request_accepted(request_sample), request_accepted(no_roots)),
         ("audit request rejects an unreviewed top-level entry",
          request_accepted(request_sample), request_accepted(extra_entry)),
         ("audit request rejects an empty name component",
          request_accepted(request_sample), request_accepted(empty_component)),
+        ("audit request rejects a repeated foundation",
+         request_accepted(request_sample), request_accepted(duplicate_foundation)),
         ("audit request rejects a root without an expected statement",
          request_accepted(request_sample), request_accepted(root_without_expected)),
         ("audit report rejects a verdict field",

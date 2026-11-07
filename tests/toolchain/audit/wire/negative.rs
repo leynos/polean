@@ -193,9 +193,10 @@ fn over_node_bound() -> String { report_with_statement(&balanced(13)) }
 
 /// A report whose statement exceeds the depth bound but not the node bound.
 ///
-/// The spine has 60 applications, so its depth is 61 while its node count is
-/// 61. It is also the deepest encoding `serde_json` must parse for this test,
-/// which checks that the bound is reachable inside the parser's nesting limit.
+/// The spine has 60 applications and 61 leaves, so its depth is 61 while its
+/// node count is 121. It is also the deepest encoding `serde_json` must parse
+/// for this test, which checks that the bound is reachable inside the parser's
+/// nesting limit.
 fn over_depth_bound() -> String { report_with_statement(&spine(60)) }
 
 /// Compose a request from a module, roots, and foundations.
@@ -272,6 +273,15 @@ fn extra_request_entry() -> String {
     valid_request().replace(r#""roots":"#, r#""unexpected":[],"roots":"#)
 }
 
+/// A request that declares the same foundation twice.
+///
+/// The contract says `uniqueItems`, so the repeated entry is a document the
+/// schema refuses; the decoder must refuse it too rather than hand settlement a
+/// list it reads as a set.
+fn duplicate_foundation() -> String {
+    valid_request().replace(REQUEST_FOUNDATIONS, r#"[["propext"],["propext"]]"#)
+}
+
 /// Every report mutation the decoder must refuse as malformed.
 #[rstest]
 #[case("unknown field", unknown_field as ReportMutation)]
@@ -318,6 +328,7 @@ fn malformed_reports_are_refused(#[case] label: &str, #[case] mutate: ReportMuta
 #[case("leading digit component", leading_digit_component as RequestMutation)]
 #[case("root without expected", root_without_expected as RequestMutation)]
 #[case("extra top-level entry", extra_request_entry as RequestMutation)]
+#[case("duplicate foundation", duplicate_foundation as RequestMutation)]
 fn malformed_requests_are_refused(#[case] label: &str, #[case] mutate: RequestMutation) {
     let document = mutate();
     assert!(
@@ -326,6 +337,42 @@ fn malformed_requests_are_refused(#[case] label: &str, #[case] mutate: RequestMu
             Err(DecodeError::Malformed(_))
         ),
         "{label} was not refused as malformed\n{document}"
+    );
+}
+
+/// The valid report decodes, so each refusal above is about its mutation.
+///
+/// A negatives-only suite passes for a decoder that refuses everything, which
+/// would leave the corpus's accepted cases to fail for a reason this module
+/// hides. The three controls are the floor: the unmutated report, the
+/// unmutated request, and a spine at exactly the depth bound, which is the
+/// largest document the recursion may accept.
+#[test]
+fn valid_report_decodes() {
+    assert!(
+        decode_report(valid_report().as_bytes()).is_ok(),
+        "the valid report was refused\n{}",
+        valid_report()
+    );
+}
+
+/// The valid request decodes, so each refusal above is about its mutation.
+#[test]
+fn valid_request_decodes() {
+    assert!(
+        decode_request(valid_request().as_bytes()).is_ok(),
+        "the valid request was refused\n{}",
+        valid_request()
+    );
+}
+
+/// A spine at exactly the depth bound decodes, so the bound admits its edge.
+#[test]
+fn deepest_admitted_spine_decodes() {
+    let document = report_with_statement(&spine(59));
+    assert!(
+        decode_report(document.as_bytes()).is_ok(),
+        "a spine at the depth bound was refused\n{document}"
     );
 }
 
