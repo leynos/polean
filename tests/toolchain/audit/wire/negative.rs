@@ -218,7 +218,7 @@ fn empty_module() -> String { request("[]", &format!("[{REQUEST_ROOT}]")) }
 fn empty_root_name() -> String {
     request(
         REQUEST_MODULE,
-        &format!(r#"[{{"name":[],"expected":{{"const":["AuditFixture","Goal"],"levels":[]}}}}]"#),
+        r#"[{"name":[],"expected":{"const":["AuditFixture","Goal"],"levels":[]}}]"#,
     )
 }
 
@@ -226,9 +226,7 @@ fn empty_root_name() -> String {
 fn numeric_expected_component() -> String {
     request(
         REQUEST_MODULE,
-        &format!(
-            r#"[{{"name":["AuditFixture","AcceptedGround","root"],"expected":{{"const":["AuditFixture",7],"levels":[]}}}}]"#
-        ),
+        r#"[{"name":["AuditFixture","AcceptedGround","root"],"expected":{"const":["AuditFixture",7],"levels":[]}}]"#,
     )
 }
 

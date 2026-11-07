@@ -293,8 +293,7 @@ fn validate_request_and_settle_name_the_same_refusal(#[case] refusal: RequestRef
     match refusal {
         RequestRefusal::NoRoots => case.request.roots.clear(),
         RequestRefusal::DuplicateRoot(_) => {
-            let root = case.request.roots.first().cloned();
-            let Some(root) = root else {
+            let Some(root) = case.request.roots.first().cloned() else {
                 panic!("the fixture has no root");
             };
             case.request.roots.push(root);
