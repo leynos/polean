@@ -1011,6 +1011,12 @@ unmodified encoder then passed all seven key properties. The transcript is
 retained in the delivery ledger. The scope-tolerance disposition is recorded in
 D23.
 
+The proof follow-up found that `scripts/check_verus_controls.py` still
+described its match as naming the failing obligation, in the module doc and in
+`Control.expects`. Both now say the substrings are searched for independently
+over the combined output, so a match shows the failure kind and source path
+both appear rather than that they belong to one diagnostic.
+
 ## Context and orientation
 
 Polean is a design scaffold. `src/lib.rs` holds a project name and a status

@@ -12,8 +12,8 @@ script supplies the missing negative evidence with two kinds of control:
 * a **body control** removes one rule from the executable code, leaving the
   specification unchanged, and requires Verus to reject the result; and
 * a **specification control** weakens one definition that the proof rests on,
-  leaving the executable code unchanged, and requires Verus to reject the
-  obligation that depended on it.
+  leaving the executable code unchanged, and requires Verus to report the
+  expected failure kind and source path.
 
 Each control is a textual edit to a copy of one proof tree in a scratch
 directory. The pinned Verus binary runs the unmodified copy first; the copy must
@@ -90,9 +90,11 @@ TREES: tuple[ProofTree, ...] = (ADMISSION, SETTLEMENT)
 class Control:
     """One negative control: an edit and the failure a verifier must report.
 
-    ``expects`` is a tuple of substrings that must all appear in the verifier
-    output. Together they name the failing obligation and the file that holds
-    it, so a control cannot pass on an unrelated failure elsewhere in the proof.
+    ``expects`` is a tuple of substrings that must all appear somewhere in the
+    verifier output. They are searched for independently over the combined
+    output, so a match shows the expected failure kind and source path both
+    appear; it does not show the two belong to the same diagnostic, and it does
+    not name an individual obligation. See :func:`require_rejection`.
     """
 
     tree: ProofTree
@@ -544,10 +546,10 @@ def check_tree(
             (scratch / control.path).write_text(
                 apply_control(root, control), encoding="utf-8"
             )
-            obligation = require_rejection(
+            diagnostic = require_rejection(
                 control, runner(verus, z3, scratch, tree.entry)
             )
-            lines.append(f"{control.kind}:{control.name}: rejected at {obligation}")
+            lines.append(f"{control.kind}:{control.name}: rejected at {diagnostic}")
     return lines
 
 
