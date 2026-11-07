@@ -54,9 +54,11 @@ Treat these as two separate properties.
 
 **Proof integrity:** Lean's kernel checked exactly the requested proposition,
 with complete theorem-root coverage and only approved transitive axioms.
-Roadmap 1.2.3 demonstrates it, and 2.2.4 promotes it. It holds under the
-generated-module input model in technical design §2.1, and does not detect a
-violation of that model.
+Roadmap 1.2.3 demonstrates settlement over the worker's report, and 2.2.4
+promotes it. Under the generated-module input model in technical design §2.1,
+the result establishes proof integrity only if the worker reports replay,
+statements, and transitive axioms accurately and completely. Settlement does
+not verify the report, and does not detect a violation of that model.
 
 **Operational integrity:** the Lean environment that answered is the one the
 evidence names, with no shadowed module, forged privileged name, or altered

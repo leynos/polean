@@ -258,18 +258,22 @@ record both depend on it staying fixed.
 `verus/admission_recognizer.rs`, which compiles the recognizer kernel through
 `#[path]`, and `verus/audit_settlement.rs`, which compiles the settlement
 decision through `#[path]`. It then replays the negative controls that
-`scripts/check_verus_controls.py` holds, so a proof that passes but no longer
-detects its named defect fails the target. Both are on-demand: `make all` and
-CI do not need a solver, a network connection, or several gigabytes of disk for
-Verus. The recognizer proof establishes the kernel's byte-level soundness for
-sources of any length. Its completeness result is stated only for a
-canonical-token predicate, which is a sufficient condition for a successful
-recognition rather than a characterisation of every input it accepts. The
-settlement proof establishes what acceptance means for a report settlement is
-given; it does not establish that the worker told the truth. Neither proof
-establishes that the AST walk maps Regorus faithfully, that the renderer
-chooses the right tokens, or that Rego means what the model means. Those remain
-tested or open as the record describes.
+`scripts/check_verus_controls.py` holds. Each control requires a non-zero Verus
+exit, an error, and the expected output substrings, and each substring is
+searched for independently over the combined output. A passing control shows
+that its edit was detected and that the expected failure kind and source path
+appear somewhere; it does not show that the intended obligation rejected the
+defect. Both are on-demand: `make all` and CI do not need a solver, a network
+connection, or several gigabytes of disk for Verus. The recognizer proof
+establishes the kernel's byte-level soundness for sources of any length. Its
+completeness result is stated only for a canonical-token predicate, which is a
+sufficient condition for a successful recognition rather than a
+characterisation of every input it accepts. The settlement proof establishes
+what acceptance means for a report settlement is given; it does not establish
+that the worker told the truth. Neither proof establishes that the AST walk
+maps Regorus faithfully, that the renderer chooses the right tokens, or that
+Rego means what the model means. Those remain tested or open as the record
+describes.
 
 ## The audit corpus (1.2.3)
 
@@ -312,11 +316,14 @@ otherwise a `kind`, a `statement` tree, and the transitive `axioms`. A
 `statement` of `null` means the type was outside the tree grammar or over
 bound, which settlement treats as a mismatch rather than as agreement.
 
-Settlement, not the report, decides. `accepted` means the kernel replayed the
-module, every requested root is a theorem of exactly the expected statement,
-and every axiom is an approved foundation. `rejected` carries findings naming
-the root and, for an axiom, its position. `tool_failure` means the report did
-not answer the request at all.
+Settlement, not the report, decides. `accepted` means the report says the
+kernel replayed the module, every requested root is a theorem of exactly the
+expected statement, and every reported axiom is an approved foundation. That
+conclusion depends on an accurate and complete worker report; settlement does
+not verify the report itself. `rejected` carries findings naming the root and,
+for an axiom, its position, except that a rejected replay yields one
+`KernelRejected` finding with no root or item. `tool_failure` means the report
+did not answer the request at all.
 
 ### Adding a fixture
 
@@ -329,7 +336,9 @@ not answer the request at all.
    report.
 4. Add the module to `FIXTURES` in `tests/toolchain/smoke/audit/corpus.rs`,
    dependencies first.
-5. Run `make toolchain-smoke`.
+5. Run `make toolchain-smoke` and review the canonical snapshot diff with
+   `cargo insta review` rather than accepting it unread.
+6. Run `make design-check`.
 
 Do not widen the grammar or the bounds to make a fixture pass. A new policy
 atom or input distinction needs model semantics, abstraction analysis,
@@ -339,8 +348,9 @@ fixtures, claims or proof updates, and source-runtime conformance coverage.
 
 A Lean pin change moves five things that the audit corpus holds fixed:
 
-- `PIN` in `tests/toolchain/audit/wire/mod.rs` is the pinned githash, and the
-  decoder refuses a report that names another.
+- `PIN` in `tests/toolchain/audit/wire/mod.rs` is the pinned githash. The
+  decoder accepts any non-empty `githash`; settlement reports
+  `ToolchainMismatch` as a tool failure when it differs from the supplied pin.
 - `githash` in `examples/audit/sample-report.json` must equal `PIN`.
   `decode_report_accepts_the_shared_sample` compares them, so changing only
   `PIN` fails `make test`.

@@ -25,9 +25,13 @@ keeps the evidence, so that hardening does not start from nothing.
 - All fixtures compile from source. Crafted binary `.olean` files are out of
   scope here, as upstream warns they can attack any tool that loads them.
 
-This record establishes that these attacks exist on the pinned tuple, and that
-a small prototype rejected those shown. It does not establish that the list is
-complete, or that the prototype is a sufficient defence.
+This record establishes that these attacks exist on the pinned tuple, and what
+the small prototype reported for each. It does not establish that every attack
+was rejected: for `StatementForge` the prototype reports the job module behind
+the statement without refusing it, so that case still needs a later provenance
+check, and `Bomb` was not re-run against the prototype. Nor does the record
+establish that the list is complete, or that the prototype is a sufficient
+defence.
 
 ## Results
 
