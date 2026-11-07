@@ -374,6 +374,10 @@ revision has applied them to the technical design.
   - [x] (2026-11-07) Added `Observed again during 1.2.3` to the findings record.
   - [x] (2026-11-07) Refreshed `SHA256SUMS` after reviewing the two changed
         entries, and marked roadmap 1.2.3 done with a `Recorded:` bullet.
+  - [x] (2026-11-08) Round-8 review repairs: the renderer's extraction and
+        direct bound tests, whole-document wire properties, the control
+        checker's explicit control set, the Lean module docstrings, and the
+        documentation qualifications.
 
 ## Surprises & discoveries
 
@@ -664,6 +668,18 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   the estimate was wrong, not the scope. If the sponsor wants the trigger
   treated differently, that supersedes this entry. Date/Author: 2026-11-07,
   implementer, after the hosted assessment raised it.
+- D24. Decision: keep settlement's foundation and axiom identity as the opaque
+  `Key = Vec<u8>` and translate Lean names to keys only at the wire adapter;
+  decline to introduce a second domain representation inside the proved code.
+  Rationale: the settlement proof is about keys, not names, and the wire module
+  owns the mapping. A1 proves each encoder injective, the key round-trip
+  properties pin the decoder against the encoder, and the wire tests pin the
+  four literal foundation keys to the names the pin admits, so the translation
+  is tested at the boundary where it lives. Moving names into the proved code
+  would add a translation obligation that still rests on the same encoding and
+  on the worker's report, without new assurance. The reviewer's suggestion is
+  promotion work (roadmap 2.2.4) if a domain name type is wanted where policy
+  semantics live. Date/Author: 2026-11-08, implementer, after review raised it.
 
 ## Outcomes & retrospective
 
@@ -1018,6 +1034,56 @@ described its match as naming the failing obligation, in the module doc and in
 `Control.expects`. Both now say the substrings are searched for independently
 over the combined output, so a match shows the failure kind and source path
 both appear rather than that they belong to one diagnostic.
+
+### Review round 8 (2026-11-08)
+
+The hosted CodeRabbit review over `8eef662` returned seven inline findings and
+six failed pre-merge checks. All were actioned; the repairs are `39ced36` to
+`a9c75dd`.
+
+- The request decoder refused nothing for an empty `roots`, although the
+  schema sets `minItems: 1`. Settlement would have refused it as `NoRoots`, but
+  a document the contract rejects must not reach settlement. It is now
+  `Malformed`, the schema description says so, and a wire negative covers it.
+- ADR 0002's addendum now separates the command contract — permitted by
+  roadmap 4.2.2 — from the public assurance statement, which 4.3.2 gates and
+  5.2.1 carries. ADR 0006 and the guide's `accepted` say that acceptance is a
+  decision over the worker's report and depends on that report being accurate
+  and complete.
+- The guide's control paragraph now states what a passing control shows: a
+  non-zero exit, an error, and each expected substring present somewhere in the
+  combined output. It no longer claims the intended obligation rejected the
+  defect. Its `rejected` paragraph records that a rejected replay yields one
+  `KernelRejected` finding with no root or item, and its `PIN` bullet moves the
+  identity check to settlement.
+- The findings record no longer says every listed attack was rejected.
+  `StatementForge` was reported and needs a later provenance check, and `Bomb`
+  was not re-run against the prototype.
+- The renderer moved to `lean/PoleanAudit/Render.lean` so it can be imported by
+  a test executable; the worker's top-level `main` makes the worker itself
+  unimportable. `polean-audit-render-tests` drives `treeBounded` over nine
+  cases, including a self-applying chain of 40 doublings whose expanded tree is
+  2^41 - 1 nodes, and `tests/toolchain/smoke/audit/render.rs` runs it under a
+  ten-second deadline. The guarded executable finishes in about 40 ms. Removing
+  the `budget == 0` guard and re-running under `timeout 5` exited 124, so a
+  bypassed budget fails as a reported timeout rather than hanging the gate; the
+  guard was then restored and the nine checks passed again.
+- `tests/toolchain/audit/properties/documents.rs` closes the conversion gap
+  between the key properties and the contract properties: generated requests
+  and reports decode to exactly the keys their parts encode to, and generated
+  trees straddle the node bound (2,047, 4,095, 8,191 nodes) and the depth bound
+  (57 to 61 applications) with the refusal exactly at the edge. Seventeen
+  property tests pass.
+- `check` now passes each tree's controls to `check_tree`, so the selection is
+  the caller's and a tree with no controls is a `ControlError` rather than a
+  silent pass. Two tests cover an independently supplied tree and the empty
+  set; the seventy-four script tests pass.
+- The guide's fixture procedure gains the reviewed snapshot update
+  (`cargo insta review`) and `make design-check`.
+- All 28 Lean headers became `/-! -/` module docstrings after their imports.
+  The corpus and the sentinel control were re-run afterwards and pass.
+
+The `Domain Architecture` pre-merge item is declined; D24 records why.
 
 ## Context and orientation
 
@@ -1938,3 +2004,8 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   properties, the worker-failure output check, the corrected worker assurance
   claim, the witness and control qualifications, and decision D23 on the
   exceeded scope tolerance. No scope change from revision 8.
+- Revision 10 (2026-11-08): recorded review round 8: the renderer's extraction
+  and direct bound tests, whole-document wire properties, the control checker's
+  explicit control set, the Lean module docstrings, the documentation
+  qualifications, and decision D24 declining a second key representation. No
+  scope change from revision 9.
