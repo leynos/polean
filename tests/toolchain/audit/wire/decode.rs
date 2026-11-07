@@ -119,14 +119,23 @@ pub fn decode_report(bytes: &[u8]) -> Result<AuditReport, DecodeError> {
 /// Returns [`DecodeError::OutputOverflow`] when `bytes` exceeds
 /// [`MAX_REQUEST_BYTES`], and [`DecodeError::Malformed`] for the same classes
 /// of fault as [`decode_report`], plus a request name component that is
-/// numeric, empty, or outside the argument grammar, and a foundation that is
-/// declared more than once.
+/// numeric, empty, or outside the argument grammar, a request that names no
+/// roots, and a foundation that is declared more than once.
+///
+/// An empty root list is malformed because the contract's `roots` carries
+/// `minItems: 1`. Settlement refuses it too, as `RequestRefusal::NoRoots`,
+/// but a document the schema refuses should not reach settlement at all.
 pub fn decode_request(bytes: &[u8]) -> Result<AuditRequest, DecodeError> {
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err(DecodeError::OutputOverflow);
     }
     let document: RequestDocument = serde_json::from_slice(bytes)
         .map_err(|error| DecodeError::Malformed(format!("request is not valid JSON: {error}")))?;
+    if document.roots.is_empty() {
+        return Err(DecodeError::Malformed(
+            "a request must name at least one root".to_owned(),
+        ));
+    }
     let foundations = document
         .foundations
         .into_iter()

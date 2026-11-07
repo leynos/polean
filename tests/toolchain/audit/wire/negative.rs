@@ -220,6 +220,13 @@ fn valid_request() -> String { request(REQUEST_MODULE, &format!("[{REQUEST_ROOT}
 /// A request naming a root component that is not an argument token.
 fn empty_root_component() -> String { valid_request().replace(r#""root"]"#, r#"""]"#) }
 
+/// A request that names no roots.
+///
+/// The contract's `roots` carries `minItems: 1`, so an empty list is a document
+/// the schema refuses. Settlement would refuse it as `NoRoots`, but the decoder
+/// refuses it first so a malformed request never reaches settlement.
+fn no_roots() -> String { request(REQUEST_MODULE, "[]") }
+
 /// A request whose module has no components.
 fn empty_module() -> String { request("[]", &format!("[{REQUEST_ROOT}]")) }
 
@@ -330,6 +337,7 @@ fn malformed_reports_are_refused(#[case] label: &str, #[case] mutate: ReportMuta
 /// Every request mutation the decoder must refuse as malformed.
 #[rstest]
 #[case("empty root component", empty_root_component as RequestMutation)]
+#[case("no roots", no_roots as RequestMutation)]
 #[case("empty module", empty_module as RequestMutation)]
 #[case("empty root name", empty_root_name as RequestMutation)]
 #[case("numeric expected component", numeric_expected_component as RequestMutation)]

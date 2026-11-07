@@ -11,6 +11,7 @@
       "$ref": "#/$defs/requestName"
     },
     "roots": {
+      "description": "The requested roots. At least one is required; the decoder refuses an empty list before settlement sees it.",
       "type": "array",
       "minItems": 1,
       "items": {
