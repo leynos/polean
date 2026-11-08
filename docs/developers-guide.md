@@ -331,14 +331,17 @@ did not answer the request at all.
    what it needs.
 2. Add its line to `examples/audit/manifest.json`, naming the settlement and
    the exact findings in order.
-3. Add its request to `tests/toolchain/smoke/audit/requests.rs`, building the
+3. Add the same line to `AUDIT_CORPUS` in `validation/audit_contracts.py`. That
+   tuple is the reviewed authority the manifest is checked against, so editing
+   the manifest alone fails `make design-check`.
+4. Add its request to `tests/toolchain/smoke/audit/requests.rs`, building the
    expected statement from Lean's term encoding rather than copying it from a
    report.
-4. Add the module to `FIXTURES` in `tests/toolchain/smoke/audit/corpus.rs`,
+5. Add the module to `FIXTURES` in `tests/toolchain/smoke/audit/corpus.rs`,
    dependencies first.
-5. Run `make toolchain-smoke` and review the canonical snapshot diff with
+6. Run `make toolchain-smoke` and review the canonical snapshot diff with
    `cargo insta review` rather than accepting it unread.
-6. Run `make design-check`.
+7. Run `make design-check`.
 
 Do not widen the grammar or the bounds to make a fixture pass. A new policy
 atom or input distinction needs model semantics, abstraction analysis,
