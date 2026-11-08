@@ -877,8 +877,9 @@ The repairs were measured on the repaired tree. `make verus` exits 0 with
 are rejected with a non-zero exit and their expected output substrings. The
 settlement count rose from 61 because the split described above adds three
 verified helper functions; the `statement-comparison-dropped` control was
-re-anchored on the extracted `statement_code` body and now fails at an
-assertion in `decision/findings.rs` rather than at the former inline comparison.
+re-anchored on the extracted `statement_code` body, and its run exits non-zero
+with `postcondition not satisfied` and `decision/findings.rs` both present in
+the combined output rather than the former inline comparison's location.
 
 ### Review round 5 (2026-11-07)
 
