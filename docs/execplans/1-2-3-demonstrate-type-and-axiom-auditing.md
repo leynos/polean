@@ -1114,7 +1114,15 @@ exit and the expected output substrings, which is what
 `check_verus_controls.py` requires. The control script's evidence line also said
 `rejected at`, which reads as location, and now says
 `rejected; output contained`. The CLI test follows the new label and the 172
-script tests pass.
+script tests pass. A third concern, that `statement-comparison-dropped` fails
+at an assertion in `decision/findings.rs`, is now stated as the matched output
+the checker sees (`c9627af`).
+
+The hosted review of this work is paused. CodeRabbit auto-paused after the ten
+commits, and a `@coderabbitai resume` request sits in the managed queue with an
+ETA of about eleven hours behind roughly thirty earlier requests. Until it
+posts, the head carries `Review paused` and the pre-merge table still describes
+`8eef662`. The repository's three workflows pass on each head that was pushed.
 
 ## Context and orientation
 
