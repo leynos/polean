@@ -1044,7 +1044,9 @@ six failed pre-merge checks. All were actioned; the repairs are `39ced36` to
 - The request decoder refused nothing for an empty `roots`, although the
   schema sets `minItems: 1`. Settlement would have refused it as `NoRoots`, but
   a document the contract rejects must not reach settlement. It is now
-  `Malformed`, the schema description says so, and a wire negative covers it.
+  `Malformed`, the schema's `roots` and top-level descriptions say so, and a
+  wire negative covers it. Settlement keeps `RequestRefusal::NoRoots`, so a
+  request that bypassed the decoder is still refused.
 - ADR 0002's addendum now separates the command contract — permitted by
   roadmap 4.2.2 — from the public assurance statement, which 4.3.2 gates and
   5.2.1 carries. ADR 0006 and the guide's `accepted` say that acceptance is a
