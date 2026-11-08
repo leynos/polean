@@ -1,21 +1,15 @@
-//! The strict-decoding negatives: every malformed shape is a `tool_failure`.
+//! Report mutations: every malformed report is refused as `Malformed`.
 //!
-//! Each case is a mutation of a valid document that a lenient decoder would
-//! accept. The point is not that the mutation is unusual, but that the adapter
-//! refuses it *before* settlement, so a malformed report can never be read as
-//! a rejection or an acceptance. `serde`'s derive with `deny_unknown_fields`
-//! does the field work; the extra cases cover the bounds JSON Schema cannot
-//! state and the presence checks a derive would otherwise default away.
+//! Each case is a mutation of [`valid_report`] that a lenient decoder would
+//! accept, and each must be refused before settlement can read it as a
+//! rejection or an acceptance.
 
 use rstest::rstest;
 
-use super::{DecodeError, MAX_REPORT_BYTES, decode_report, decode_request};
+use super::super::{DecodeError, MAX_REPORT_BYTES, decode_report};
 
 /// A mutation of a valid report, built fresh for each case.
 type ReportMutation = fn() -> String;
-
-/// A mutation of a valid request, built fresh for each case.
-type RequestMutation = fn() -> String;
 
 /// The module the valid report answers for.
 const MODULE: &str = r#"["AuditFixture","AcceptedGround"]"#;
@@ -29,20 +23,11 @@ const ROOT: &str = r#"{"name":["AuditFixture","AcceptedGround","root"],"declarat
 /// A constant statement tree.
 const LEAF: &str = r#"{"const":["AuditFixture","Goal"],"levels":[]}"#;
 
-/// The request contract's valid module.
-const REQUEST_MODULE: &str = r#"["AuditFixture","AcceptedGround"]"#;
-
-/// The request contract's valid root.
-const REQUEST_ROOT: &str = r#"{"name":["AuditFixture","AcceptedGround","root"],"expected":{"const":["AuditFixture","Goal"],"levels":[]}}"#;
-
-/// The request contract's valid foundations.
-const REQUEST_FOUNDATIONS: &str = r#"[["propext"]]"#;
-
 /// Compose a report from a replay and a roots array.
 fn report(replay: &str, roots: &str) -> String {
     format!(
         r#"{{"schema_version":"polean.audit-report.v0","githash":"{}","module":{MODULE},"replay":{replay},"roots":{roots}}}"#,
-        super::PIN
+        super::super::PIN
     )
 }
 
@@ -106,7 +91,10 @@ fn duplicate_field() -> String {
 /// substitution that leaves the quotes in place would still be a string, and
 /// the case would pass for the wrong reason.
 fn wrong_type() -> String {
-    valid_report().replace(&format!(r#""githash":"{}""#, super::PIN), r#""githash":5"#)
+    valid_report().replace(
+        &format!(r#""githash":"{}""#, super::super::PIN),
+        r#""githash":5"#,
+    )
 }
 
 /// A report whose `githash` is the empty string.
@@ -114,7 +102,10 @@ fn wrong_type() -> String {
 /// The contract requires at least one character, so the empty value must be
 /// malformed rather than reach settlement as a toolchain mismatch.
 fn empty_githash() -> String {
-    valid_report().replace(&format!(r#""githash":"{}""#, super::PIN), r#""githash":"""#)
+    valid_report().replace(
+        &format!(r#""githash":"{}""#, super::super::PIN),
+        r#""githash":"""#,
+    )
 }
 
 /// A report followed by a second document.
@@ -207,45 +198,6 @@ fn over_node_bound() -> String { report_with_statement(&balanced(13)) }
 /// nesting limit.
 fn over_depth_bound() -> String { report_with_statement(&spine(60)) }
 
-/// Compose a request from a module, roots, and foundations.
-fn request(module: &str, roots: &str) -> String {
-    format!(
-        r#"{{"schema_version":"polean.audit-request.v0","module":{module},"roots":{roots},"foundations":{REQUEST_FOUNDATIONS}}}"#
-    )
-}
-
-/// The valid request.
-fn valid_request() -> String { request(REQUEST_MODULE, &format!("[{REQUEST_ROOT}]")) }
-
-/// A request naming a root component that is not an argument token.
-fn empty_root_component() -> String { valid_request().replace(r#""root"]"#, r#"""]"#) }
-
-/// A request that names no roots.
-///
-/// The contract's `roots` carries `minItems: 1`, so an empty list is a document
-/// the schema refuses. Settlement would refuse it as `NoRoots`, but the decoder
-/// refuses it first so a malformed request never reaches settlement.
-fn no_roots() -> String { request(REQUEST_MODULE, "[]") }
-
-/// A request whose module has no components.
-fn empty_module() -> String { request("[]", &format!("[{REQUEST_ROOT}]")) }
-
-/// A request whose root name has no components.
-fn empty_root_name() -> String {
-    request(
-        REQUEST_MODULE,
-        r#"[{"name":[],"expected":{"const":["AuditFixture","Goal"],"levels":[]}}]"#,
-    )
-}
-
-/// A request whose expected tree names a constant with a numeric component.
-fn numeric_expected_component() -> String {
-    request(
-        REQUEST_MODULE,
-        r#"[{"name":["AuditFixture","AcceptedGround","root"],"expected":{"const":["AuditFixture",7],"levels":[]}}]"#,
-    )
-}
-
 /// A report whose name component is a number that does not fit `u64`.
 ///
 /// `ComponentDocument` is untagged, so the refusal is a generic "no variant
@@ -263,38 +215,6 @@ fn negative_component() -> String {
 /// A report whose name component is a fractional number.
 fn fractional_component() -> String {
     report_with_statement(r#"{"const":["AuditFixture",1.5],"levels":[]}"#)
-}
-
-/// A request whose module holds a numeric component.
-fn numeric_module_component() -> String {
-    valid_request().replace(REQUEST_MODULE, r#"["AuditFixture",7]"#)
-}
-
-/// A request whose module begins with a digit.
-fn leading_digit_component() -> String {
-    valid_request().replace(REQUEST_MODULE, r#"["AuditFixture","9Goal"]"#)
-}
-
-/// A request whose root has no `expected` key.
-fn root_without_expected() -> String {
-    request(
-        REQUEST_MODULE,
-        r#"[{"name":["AuditFixture","AcceptedGround","root"]}]"#,
-    )
-}
-
-/// A request with a top-level entry the contract does not name.
-fn extra_request_entry() -> String {
-    valid_request().replace(r#""roots":"#, r#""unexpected":[],"roots":"#)
-}
-
-/// A request that declares the same foundation twice.
-///
-/// The contract says `uniqueItems`, so the repeated entry is a document the
-/// schema refuses; the decoder must refuse it too rather than hand settlement a
-/// list it reads as a set.
-fn duplicate_foundation() -> String {
-    valid_request().replace(REQUEST_FOUNDATIONS, r#"[["propext"],["propext"]]"#)
 }
 
 /// Every report mutation the decoder must refuse as malformed.
@@ -334,29 +254,6 @@ fn malformed_reports_are_refused(#[case] label: &str, #[case] mutate: ReportMuta
     );
 }
 
-/// Every request mutation the decoder must refuse as malformed.
-#[rstest]
-#[case("empty root component", empty_root_component as RequestMutation)]
-#[case("no roots", no_roots as RequestMutation)]
-#[case("empty module", empty_module as RequestMutation)]
-#[case("empty root name", empty_root_name as RequestMutation)]
-#[case("numeric expected component", numeric_expected_component as RequestMutation)]
-#[case("numeric module component", numeric_module_component as RequestMutation)]
-#[case("leading digit component", leading_digit_component as RequestMutation)]
-#[case("root without expected", root_without_expected as RequestMutation)]
-#[case("extra top-level entry", extra_request_entry as RequestMutation)]
-#[case("duplicate foundation", duplicate_foundation as RequestMutation)]
-fn malformed_requests_are_refused(#[case] label: &str, #[case] mutate: RequestMutation) {
-    let document = mutate();
-    assert!(
-        matches!(
-            decode_request(document.as_bytes()),
-            Err(DecodeError::Malformed(_))
-        ),
-        "{label} was not refused as malformed\n{document}"
-    );
-}
-
 /// The valid report decodes, so each refusal above is about its mutation.
 ///
 /// A negatives-only suite passes for a decoder that refuses everything, which
@@ -370,16 +267,6 @@ fn valid_report_decodes() {
         decode_report(valid_report().as_bytes()).is_ok(),
         "the valid report was refused\n{}",
         valid_report()
-    );
-}
-
-/// The valid request decodes, so each refusal above is about its mutation.
-#[test]
-fn valid_request_decodes() {
-    assert!(
-        decode_request(valid_request().as_bytes()).is_ok(),
-        "the valid request was refused\n{}",
-        valid_request()
     );
 }
 
