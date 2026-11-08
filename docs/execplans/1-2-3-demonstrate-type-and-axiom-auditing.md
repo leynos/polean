@@ -306,8 +306,10 @@ revision has applied them to the technical design.
         ten settlement controls.
   - [x] (2026-11-07) `make verus` exits 0: the recognizer still verifies
         `89 verified, 0 errors` and the settlement verifies `64 verified, 0
-        errors` with eight `autoderive` warnings. All 15 controls are rejected
-        with a diagnostic naming the expected failure kind and source path.
+        errors` with eight `autoderive` warnings. All 15 controls are rejected,
+        each with a non-zero exit and its expected output substrings present
+        somewhere in the combined output; that shows the failure kind and
+        source path appear, not that one diagnostic carries both.
         `make test-scripts` is green with 170
         tests under the documented Python 3.14 fallback.
   - [x] (2026-11-07) Repaired two defects the first sweep found. The
@@ -872,11 +874,11 @@ findings. Twenty-three were repaired and two were recorded rather than changed.
 The repairs were measured on the repaired tree. `make verus` exits 0 with
 `verification results:: 89 verified, 0 errors` for the recognizer and
 `64 verified, 0 errors` for the settlement, and all fifteen negative controls
-are rejected with the expected diagnostic. The settlement count rose from 61
-because the split described above adds three verified helper functions; the
-`statement-comparison-dropped` control was re-anchored on the extracted
-`statement_code` body and now fails at an assertion in `decision/findings.rs`
-rather than at the former inline comparison.
+are rejected with a non-zero exit and their expected output substrings. The
+settlement count rose from 61 because the split described above adds three
+verified helper functions; the `statement-comparison-dropped` control was
+re-anchored on the extracted `statement_code` body and now fails at an
+assertion in `decision/findings.rs` rather than at the former inline comparison.
 
 ### Review round 5 (2026-11-07)
 
@@ -1316,8 +1318,8 @@ discharge one.
   encoding link.
 
 Non-vacuity for the proof as a whole: `scripts/check_verus_controls.py` gains
-controls that must each be rejected with a diagnostic naming the expected
-failure kind and source path.
+controls that must each be rejected with a non-zero exit and expected output
+substrings for the failure kind and source path.
 
 - Body controls: always reject; drop the `replay accepted` check, since empty
   roots make `forall` vacuous; compare no statement key; drop the name
@@ -1521,8 +1523,8 @@ update `scripts/tests/`, including the pinned CLI assertions in
 Requirements: accepts, rejects, undeclared, exact coverage.
 
 Acceptance: `make verus` exits 0, with both proofs reporting `0 errors` and
-every control rejected with the expected diagnostic. `make test-scripts`
-passes. Then `make check-fmt`, `make lint`, and `make test`.
+every control rejected with a non-zero exit and its expected output substrings.
+`make test-scripts` passes. Then `make check-fmt`, `make lint`, and `make test`.
 
 Conformance check:
 
