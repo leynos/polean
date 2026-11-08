@@ -1085,6 +1085,23 @@ six failed pre-merge checks. All were actioned; the repairs are `39ced36` to
 
 The `Domain Architecture` pre-merge item is declined; D24 records why.
 
+The first gate sweep over `61d9a38` failed `make lint`. The new empty-`roots`
+case took `tests/toolchain/audit/wire/negative.rs` to 405 lines, past the
+Whitaker `module-max-lines` ceiling of 400. The module became `negative/mod.rs`,
+`negative/report.rs`, and `negative/request.rs`; the repaired sweep then found
+four Clippy findings of its own — `needless_pass_by_value` on `serialized`,
+three `shadow_unrelated` renames, and `let_underscore_must_use` on the deadline
+kill and wait — all repaired in `a5ecf98`. The document property test failed
+once during that repair because `expected_foundations` still read the undeduped
+`foundations`; the property caught the mistake, which is the behaviour it
+exists to have. The sweep was re-run from the first gate afterwards and all
+nine gates passed on `a5ecf98`: `check-fmt` 2 s, `markdownlint` 2 s,
+`typecheck` 7 s, `lint` 12 s, `test` 169 s with 226 passed and 10 ignored,
+`design-check` 1 s with 19 negative controls, 13 audit controls and 2 boundary
+seams, `test-scripts` 172 passed, `verus` 141 s with 89 and 64 verified and no
+errors, and `toolchain-smoke` 118 s with all 10 ignored smoke tests passing,
+including the new renderer deadline test.
+
 ## Context and orientation
 
 Polean is a design scaffold. `src/lib.rs` holds a project name and a status
