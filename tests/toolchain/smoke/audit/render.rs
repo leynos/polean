@@ -96,14 +96,14 @@ fn bounded(program: &Path, cwd: &Path, deadline: Duration) -> Result<Output, Str
             Ok(Some(_)) => break,
             Ok(None) => {}
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                drop(child.kill());
+                drop(child.wait());
                 return Err(format!("cannot wait for {}: {error}", program.display()));
             }
         }
         if started.elapsed() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
+            drop(child.kill());
+            drop(child.wait());
             return Err(format!(
                 "{} did not finish within {deadline:?}; the renderer's node budget is not \
                  bounding its walk",

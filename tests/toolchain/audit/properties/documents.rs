@@ -126,8 +126,8 @@ fn tree_json(tree: &Tree) -> Value {
 }
 
 /// Serialize a generated document, which must always succeed.
-fn serialized(document: Value) -> Vec<u8> {
-    match serde_json::to_vec(&document) {
+fn serialized(document: &Value) -> Vec<u8> {
+    match serde_json::to_vec(document) {
         Ok(bytes) => bytes,
         Err(error) => panic!("a generated document must serialize: {error}"),
     }
@@ -135,16 +135,16 @@ fn serialized(document: Value) -> Vec<u8> {
 
 /// A request document over a module, roots, and foundations.
 fn request_document(module: &Name, roots: &[(Name, Tree)], foundations: &[Name]) -> Vec<u8> {
-    let roots: Vec<Value> = roots
+    let roots_json: Vec<Value> = roots
         .iter()
         .map(|(name, tree)| json!({"name": name_json(name), "expected": tree_json(tree)}))
         .collect();
-    let foundations: Vec<Value> = foundations.iter().map(name_json).collect();
-    serialized(json!({
+    let foundations_json: Vec<Value> = foundations.iter().map(name_json).collect();
+    serialized(&json!({
         "schema_version": "polean.audit-request.v0",
         "module": name_json(module),
-        "roots": roots,
-        "foundations": foundations,
+        "roots": roots_json,
+        "foundations": foundations_json,
     }))
 }
 
@@ -160,17 +160,17 @@ fn declaration_json(root: &GeneratedRoot) -> Value {
 
 /// A report document with an accepted replay over `modules`.
 fn report_document(module: &Name, modules: &[Name], roots: &[GeneratedRoot]) -> Vec<u8> {
-    let modules: Vec<Value> = modules.iter().map(name_json).collect();
-    let roots: Vec<Value> = roots
+    let modules_json: Vec<Value> = modules.iter().map(name_json).collect();
+    let roots_json: Vec<Value> = roots
         .iter()
         .map(|root| json!({"name": name_json(&root.name), "declaration": declaration_json(root)}))
         .collect();
-    serialized(json!({
+    serialized(&json!({
         "schema_version": "polean.audit-report.v0",
         "githash": PIN,
         "module": name_json(module),
-        "replay": {"status": "accepted", "modules": modules},
-        "roots": roots,
+        "replay": {"status": "accepted", "modules": modules_json},
+        "roots": roots_json,
     }))
 }
 
@@ -190,11 +190,11 @@ fn statement_document(tree: &Tree) -> Vec<u8> {
 ///
 /// The decoder refuses a repeated foundation and independent draws can repeat
 /// one, so deduplication keeps the document one the contract admits.
-fn distinct(names: Vec<Name>) -> Vec<Name> {
+fn distinct(names: &[Name]) -> Vec<Name> {
     let mut kept: Vec<Name> = Vec::new();
     for name in names {
-        if !kept.contains(&name) {
-            kept.push(name);
+        if !kept.contains(name) {
+            kept.push(name.clone());
         }
     }
     kept
@@ -236,8 +236,8 @@ fn valid_requests_decode_to_their_keys() {
         strategy_vec(request_name_strategy(), 0..3),
     );
     check(strategy, |(module, roots, foundations)| {
-        let foundations = distinct(foundations);
-        let bytes = request_document(&module, &roots, &foundations);
+        let unique = distinct(&foundations);
+        let bytes = request_document(&module, &roots, &unique);
         let request = decode_request(&bytes).map_err(|error| {
             TestCaseError::fail(format!("a generated request was refused: {error:?}"))
         })?;
@@ -250,8 +250,7 @@ fn valid_requests_decode_to_their_keys() {
             })
             .collect();
         prop_assert_eq!(&request.roots, &expected_roots);
-        let expected_foundations: Vec<Vec<u8>> =
-            foundations.iter().map(|name| name_key(name)).collect();
+        let expected_foundations: Vec<Vec<u8>> = unique.iter().map(|name| name_key(name)).collect();
         prop_assert_eq!(&request.foundations, &expected_foundations);
         Ok(())
     });
@@ -368,7 +367,7 @@ fn malformed_tree_shapes_are_refused() {
             }
             _ => json!({"const": ["AuditFixture", "Goal"], "levels": ["zero"]}),
         };
-        let bytes = serialized(json!({
+        let bytes = serialized(&json!({
             "schema_version": "polean.audit-report.v0",
             "githash": PIN,
             "module": name_json(&path(&["AuditFixture", "AcceptedGround"])),
