@@ -563,7 +563,10 @@ def check_tree(
             diagnostic = require_rejection(
                 control, runner(verus, z3, scratch, tree.entry)
             )
-            lines.append(f"{control.kind}:{control.name}: rejected at {diagnostic}")
+            lines.append(
+                f"{control.kind}:{control.name}: rejected; "
+                f"output contained {diagnostic}"
+            )
     return lines
 
 

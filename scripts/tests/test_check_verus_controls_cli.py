@@ -146,7 +146,9 @@ def test_runs_the_baseline_and_every_control(fake_tools: Path) -> None:
     lines = result.stdout.splitlines()
     assert len(lines) == len(controls.CONTROLS), "one evidence line per control"
     for control, line in zip(controls.CONTROLS, lines, strict=True):
-        assert line.startswith(f"{control.kind}:{control.name}: rejected at"), line
+        assert line.startswith(
+            f"{control.kind}:{control.name}: rejected; output contained"
+        ), line
     recorded = calls(fake_tools)
     assert len(recorded) == len(controls.CONTROLS) + len(controls.TREES), (
         "each tree's baseline runs once before its controls"

@@ -1106,6 +1106,15 @@ seams, `test-scripts` 172 passed, `verus` 141 s with 89 and 64 verified and no
 errors, and `toolchain-smoke` 118 s with all 10 ignored smoke tests passing,
 including the new renderer deadline test.
 
+Two evidence-description concerns from the hosted assessments survived
+`a9c75dd`. Five statements in this plan still said a control is rejected with a
+diagnostic naming the failure kind and source path; they now say a non-zero
+exit and the expected output substrings, which is what
+`check_verus_controls.py` requires. The control script's evidence line also said
+`rejected at`, which reads as location, and now says
+`rejected; output contained`. The CLI test follows the new label and the 172
+script tests pass.
+
 ## Context and orientation
 
 Polean is a design scaffold. `src/lib.rs` holds a project name and a status
