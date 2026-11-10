@@ -268,7 +268,7 @@ connection, or several gigabytes of disk for Verus. The recognizer proof
 establishes the kernel's byte-level soundness for sources of any length. Its
 completeness result is stated only for a canonical-token predicate, which is a
 sufficient condition for a successful recognition rather than a
-characterisation of every input it accepts. The settlement proof establishes
+characterization of every input it accepts. The settlement proof establishes
 what acceptance means for a report settlement is given; it does not establish
 that the worker told the truth. Neither proof establishes that the AST walk
 maps Regorus faithfully, that the renderer chooses the right tokens, or that
