@@ -1,14 +1,19 @@
-//! Settlement and decoding, bound to `tests/features/axiom_audit.feature`.
+//! The audit workflow, bound to `tests/features/axiom_audit.feature`.
 //!
 //! The feature file is the readable specification: one scenario per distinct
-//! settlement outcome, each naming a representative corpus fixture. The other
-//! fixtures are decided by the unit and property tests. The steps here build
-//! the fixture pair, decide it, and compare the outcome exactly.
+//! settlement outcome, each naming a representative corpus fixture. Each
+//! scenario runs the real `polean-audit` worker over that fixture, decodes its
+//! report with the strict wire adapter, and settles the decoded report against
+//! the request the corpus asks. The scenario therefore exercises the boundary
+//! it describes rather than a hand-built pair at the settlement seam.
 //!
-//! A scenario that passes is evidence about this build of the settlement
-//! function over these fixtures. It is not evidence that the Lean worker
-//! produced the reports, and it is not evidence that the source policy belongs
-//! to an admitted profile.
+//! A scenario that passes is evidence about this build of the worker, the
+//! decoder, and the settlement function over these fixtures. It is not evidence
+//! that the worker is truthful, and it is not evidence that the source policy
+//! belongs to an admitted profile.
+//!
+//! The direct fixture-pair checks stay in `tests/toolchain/audit/tests.rs` as
+//! unit tests, where a settlement outcome can be isolated from the worker.
 //!
 //! The state is a `Slot`-bearing struct rather than a `&mut` world fixture, for
 //! the same reason as [`crate::bdd`]: `rstest-bdd` 0.6.0 documents a rustc
@@ -36,21 +41,24 @@ mod fixture {
     pub fn state() -> AuditState { AuditState::default() }
 }
 
+use std::sync::OnceLock;
+
 pub use fixture::state;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 
-use super::{
-    fixtures::{self, Case},
+use super::{requests, runner::Corpus};
+use crate::audit::{
     settlement::decision::{
         AuditReport,
+        AuditRequest,
         FindingCode,
         ProtocolBreach,
         RequestRefusal,
         Settlement,
         settle,
     },
-    wire::{DecodeError, decode_report},
+    wire::{DecodeError, PIN, decode_report},
 };
 
 /// Cargo recompiles this target when the specification changes.
@@ -58,13 +66,42 @@ use super::{
 /// `#[scenario]` reads the feature file itself, which Cargo cannot fingerprint,
 /// so without this reference an edited feature file can leave a previously
 /// expanded binary in place.
-const _: [&str; 1] = [include_str!("../../features/axiom_audit.feature")];
+const _: [&str; 1] = [include_str!("../../../features/axiom_audit.feature")];
+
+/// The fixtures the feature scenarios name, dependencies before dependants.
+const SOURCES: &[&str] = &[
+    "AuditFixture.Goal",
+    "AuditFixture.AcceptedGround",
+    "AuditFixture.AcceptedFoundations",
+    "AuditFixture.Sorry",
+    "AuditFixture.Native",
+    "AuditFixture.Undeclared",
+    "AuditFixture.WrongStatement",
+    "AuditFixture.AxiomRoot",
+    "AuditFixture.RootAbsent",
+    "AuditFixture.ForgeInit",
+];
+
+/// The corpus, built once per process and shared by every scenario.
+///
+/// Each scenario is a separate test, so without the cache every one of them
+/// would rebuild the worker and recompile the fixtures. The corpus lives for
+/// the rest of the process, which is the whole test binary.
+fn corpus() -> Result<&'static Corpus, String> {
+    static CORPUS: OnceLock<Result<Corpus, String>> = OnceLock::new();
+    CORPUS
+        .get_or_init(|| Corpus::prepare(SOURCES))
+        .as_ref()
+        .map_err(String::clone)
+}
 
 /// The state one scenario accumulates.
 #[derive(Default, ScenarioState)]
 struct AuditState {
-    /// The request and report pair the scenario decides.
-    case: Slot<Case>,
+    /// The request the corpus asks for the selected fixture.
+    request: Slot<AuditRequest>,
+    /// The report the worker produced, as the adapter decoded it.
+    report: Slot<AuditReport>,
     /// The outcome of the most recent settlement.
     settlement: Slot<Result<Settlement, RequestRefusal>>,
     /// A document the adapter is asked to decode.
@@ -73,17 +110,33 @@ struct AuditState {
     decoded: Slot<Result<AuditReport, DecodeError>>,
 }
 
-/// Select the corpus fixture the scenario names.
+/// Run the worker over the named fixture and decode its report.
 #[given("the audit fixture {fixture}")]
-fn audit_fixture(state: &AuditState, fixture: String) { state.case.set(fixtures::case(&fixture)); }
+fn audit_fixture(state: &AuditState, fixture: String) -> Result<(), String> {
+    let entry = requests::entry(&fixture)?;
+    let output = corpus()?.worker(&entry.module, &entry.roots)?;
+    if !output.status.success() {
+        return Err(format!(
+            "{fixture}: the worker failed with {:?}\nstdout:\n{}\nstderr:\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let report = decode_report(&output.stdout)
+        .map_err(|error| format!("{fixture}: the worker's report did not decode: {error:?}"))?;
+    state.request.set(entry.request);
+    state.report.set(report);
+    Ok(())
+}
 
-/// Make the selected report name a different toolchain.
+/// Make the decoded report name a different toolchain.
 #[given("the report names another toolchain")]
 fn report_names_another_toolchain(state: &AuditState) -> Result<(), String> {
     state
-        .case
-        .with_mut(|case| case.report.githash = b"0000000000000000000000000000000000000000".to_vec())
-        .ok_or_else(|| "no fixture was selected before the mutation".to_owned())
+        .report
+        .with_mut(|report| report.githash = b"0000000000000000000000000000000000000000".to_vec())
+        .ok_or_else(|| "no fixture was run before the mutation".to_owned())
 }
 
 /// Select a report carrying a field the contract does not name.
@@ -100,13 +153,18 @@ fn report_with_unknown_field(state: &AuditState) {
     );
 }
 
-/// Decide the selected fixture pair.
+/// Decide the decoded report against the corpus request.
 #[when("the settlement decides the report")]
 fn settlement_decides(state: &AuditState) -> Result<(), String> {
     let outcome = state
-        .case
-        .with_ref(|case| settle(&case.request, &case.report, &case.pin))
-        .ok_or_else(|| "no fixture was selected before settlement".to_owned())?;
+        .request
+        .with_ref(|request| {
+            state
+                .report
+                .with_ref(|report| settle(request, report, PIN.as_bytes()))
+        })
+        .flatten()
+        .ok_or_else(|| "no fixture was run before settlement".to_owned())?;
     state.settlement.set(outcome);
     Ok(())
 }
@@ -244,6 +302,7 @@ fn protocol_breach(name: &str) -> Result<ProtocolBreach, String> {
 }
 
 /// A theorem of the expected proposition is accepted.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A theorem of the expected proposition is accepted"
@@ -251,6 +310,7 @@ fn protocol_breach(name: &str) -> Result<ProtocolBreach, String> {
 fn accepted_ground_is_accepted(#[from(state)] _state: AuditState) {}
 
 /// A theorem depending only on approved foundations is accepted.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A theorem depending only on approved foundations is accepted"
@@ -258,6 +318,7 @@ fn accepted_ground_is_accepted(#[from(state)] _state: AuditState) {}
 fn accepted_foundations_is_accepted(#[from(state)] _state: AuditState) {}
 
 /// A theorem depending on `sorry` is rejected.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A theorem depending on sorry is rejected"
@@ -265,6 +326,7 @@ fn accepted_foundations_is_accepted(#[from(state)] _state: AuditState) {}
 fn sorry_is_rejected(#[from(state)] _state: AuditState) {}
 
 /// A theorem depending on a native axiom is rejected.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A theorem depending on a native axiom is rejected"
@@ -272,6 +334,7 @@ fn sorry_is_rejected(#[from(state)] _state: AuditState) {}
 fn native_is_rejected(#[from(state)] _state: AuditState) {}
 
 /// A theorem depending on an undeclared axiom is rejected.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A theorem depending on an undeclared axiom is rejected"
@@ -279,6 +342,7 @@ fn native_is_rejected(#[from(state)] _state: AuditState) {}
 fn undeclared_is_rejected(#[from(state)] _state: AuditState) {}
 
 /// A theorem of another proposition is rejected.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A theorem of another proposition is rejected"
@@ -286,6 +350,7 @@ fn undeclared_is_rejected(#[from(state)] _state: AuditState) {}
 fn wrong_statement_is_rejected(#[from(state)] _state: AuditState) {}
 
 /// An axiom root is rejected for its kind and its dependency.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "An axiom root is rejected for its kind and its dependency"
@@ -293,6 +358,7 @@ fn wrong_statement_is_rejected(#[from(state)] _state: AuditState) {}
 fn axiom_root_is_rejected(#[from(state)] _state: AuditState) {}
 
 /// A root the environment does not hold is rejected.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A root the environment does not hold is rejected"
@@ -300,6 +366,7 @@ fn axiom_root_is_rejected(#[from(state)] _state: AuditState) {}
 fn root_absent_is_rejected(#[from(state)] _state: AuditState) {}
 
 /// A rejected replay is a completed audit that rejects.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A rejected replay is a completed audit that rejects"
@@ -307,6 +374,7 @@ fn root_absent_is_rejected(#[from(state)] _state: AuditState) {}
 fn rejected_replay_is_rejected(#[from(state)] _state: AuditState) {}
 
 /// A report naming another toolchain is a tool failure.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A report naming another toolchain is a tool failure"
@@ -314,6 +382,7 @@ fn rejected_replay_is_rejected(#[from(state)] _state: AuditState) {}
 fn toolchain_mismatch_is_a_tool_failure(#[from(state)] _state: AuditState) {}
 
 /// A malformed report is refused before settlement.
+#[ignore = "needs make tools; run make toolchain-smoke"]
 #[scenario(
     path = "tests/features/axiom_audit.feature",
     name = "A malformed report is refused before settlement"

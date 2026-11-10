@@ -9,14 +9,16 @@
 //! `requests` holds the hand-written request for each fixture, including the
 //! expected statement trees. `runner` builds the worker and compiles the
 //! fixtures in a scratch tree. `manifest` reads the committed expectations and
-//! compares them with a run. `render` builds and runs the Lean-side tests of the
-//! renderer's bounds and the diagnostic truncation, which the corpus cannot
-//! reach.
+//! compares them with a run. `bdd` binds the feature scenarios to the same
+//! worker and decoder, so the readable specification is also a behavioural
+//! test. `render` builds and runs the Lean-side tests of the renderer's bounds
+//! and the diagnostic truncation, which the corpus cannot reach.
 //!
 //! These tests are `#[ignore]`d because they need `make tools`. The one
 //! exception, `corpus::every_manifest_entry_has_a_request`, reads files only
 //! and runs under `make test`.
 
+mod bdd;
 mod corpus;
 mod manifest;
 mod render;

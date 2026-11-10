@@ -288,29 +288,3 @@ pub fn mixed_roots() -> Case {
         ),
     )
 }
-
-/// Build the case a feature scenario names.
-///
-/// # Panics
-///
-/// Panics when `fixture` is not one of the corpus fixtures this module knows,
-/// because a scenario naming an unknown fixture is a defect in the feature
-/// file rather than a policy outcome.
-#[must_use]
-pub fn case(fixture: &str) -> Case {
-    match fixture {
-        "AcceptedGround" => accepted_ground(),
-        "AcceptedFoundations" => accepted_foundations(),
-        "Sorry" | "SorryImported" => sorry(fixture),
-        "Native" => native(),
-        "Undeclared" | "ReachImported" => undeclared(fixture),
-        "WrongStatement" | "WrongPolicyLiteral" | "Unfolded" => wrong_statement(fixture),
-        "NarrowedFoundations" => narrowed_foundations(),
-        "AxiomRoot" => axiom_root(),
-        "DefRoot" => def_root(),
-        "RootAbsent" => root_absent(),
-        "ForgeInit" | "ForgeImported" => rejected_replay(fixture),
-        "MixedRoots" => mixed_roots(),
-        other => panic!("unknown audit fixture {other}"),
-    }
-}

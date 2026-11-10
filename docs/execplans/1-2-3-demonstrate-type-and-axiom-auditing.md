@@ -1099,15 +1099,19 @@ six failed pre-merge checks. All were actioned; the repairs are `39ced36` to
   guard was then restored and the nine checks passed again.
 - `truncateUtf8`, `charBytes`, and `maxMessageBytes` moved into the same module,
   for the same reason: the worker's `main` cannot be imported, so a test could
-  not otherwise call them. Six cases now drive the truncation, and all fifteen
+  not otherwise call them. Six cases now drive the truncation, and all eighteen
   checks pass: a short message is unchanged; a message exactly at the byte
   limit is unchanged; a message over the limit keeps the prefix that fits; a
   multi-byte scalar that would cross the limit is dropped whole; one ending
   exactly at the limit is kept; and an oversized message is cut to exactly
   4,096 bytes. Three seeded mutations were each caught: returning the input
   unchanged failed four checks, returning a constant empty string failed six,
-  and raising the limit by one byte failed four. With the definition restored
-  the executable again reported `renderer: 15 checks passed`.
+  and raising the limit by one byte failed four. Three further cases pin the
+  rendered universe levels: zero renders as zero, a successor chain renders its
+  depth, and a non-ground level is refused. Dropping the successor branch
+  failed the successor case, and treating a non-ground level as ground failed
+  the refusal case; with the definition restored the executable again reported
+  `renderer: 18 checks passed`.
 - `tests/toolchain/audit/properties/documents.rs` closes the conversion gap
   between the key properties and the contract properties: generated requests
   and reports decode to exactly the keys their parts encode to, and generated
@@ -1158,6 +1162,25 @@ commits, and a `@coderabbitai resume` request sits in the managed queue with an
 ETA of about eleven hours behind roughly thirty earlier requests. Until it
 posts, the head carries `Review paused` and the pre-merge table still describes
 `8eef662`. The repository's three workflows pass on each head that was pushed.
+
+Review round 10 ran after the queued resume posted. The refreshed pre-merge
+table raised two errors and two warnings. The first error was that the
+renderer's universe-level conversion had no substantive test: the direct cases
+counted nodes, so a walk that dropped a successor or treated a non-ground level
+as ground would still pass. Three cases now assert the exact JSON for zero, for
+a successor chain, and for a refused non-ground level, and two seeded mutations
+were each caught by exactly the case that names them. The second error was that
+the feature scenarios duplicated the unit tests at the settlement seam. The
+scenarios now run the real `polean-audit` worker over their named fixture,
+decode its report with the strict adapter, and settle the decoded report; the
+direct fixture-pair checks remain unit tests in
+`tests/toolchain/audit/tests.rs`. The binding moved to
+`tests/toolchain/smoke/audit/bdd.rs`, so the scenarios are `#[ignore]`d and run
+under `make toolchain-smoke` with the rest of the provisioned corpus. The two
+warnings, generated property tests for the Lean renderer and the settlement's
+dependence on the wire name encoding, are dispositioned in the review
+conversation: the first is a bounded-testing trade-off recorded in D24, and the
+second is the standing design decision the plan already declines.
 
 ## Context and orientation
 
@@ -1537,9 +1560,11 @@ negative controls; it lives in `validation/audit_contracts.py`, with the shared
 diagnostics in `validation/harness.py`, so the audit checks are a module of
 their own rather than further growth in the harness. Add `serde` to
 `Cargo.toml`. Add `tests/toolchain/audit/`: `mod.rs`, `wire/`, `settlement/`
-with `settlement/decision/` (the pure function), `properties/`, `tests.rs`, and
-`bdd.rs`, with the feature in `tests/features/axiom_audit.feature`. Widen the
-description at `tests/toolchain/main.rs:1` and `docs/repository-layout.md:14`.
+with `settlement/decision/` (the pure function), `properties/`, and `tests.rs`,
+with the feature in `tests/features/axiom_audit.feature` bound by
+`tests/toolchain/smoke/audit/bdd.rs` so its scenarios run the real worker.
+Widen the description at `tests/toolchain/main.rs:1` and
+`docs/repository-layout.md:14`.
 
 Requirements: machine-readable results, malformed output, coverage.
 
@@ -1750,9 +1775,10 @@ env -i LEAN_SYSROOT="$PWD/.polean/tools/lean/$SHA" LEAN_PATH="$SCRATCH" \
 
 ## Validation and acceptance
 
-The behavioural specification is `tests/features/axiom_audit.feature`. It runs
-against recorded reports through the decoder and settlement, while the corpus
-exercises the real worker.
+The behavioural specification is `tests/features/axiom_audit.feature`. Each
+scenario runs the real worker over its named fixture, decodes the report with
+the strict adapter, and settles it, so the specification and the corpus
+exercise the same process boundary.
 
 The feature file is the authority for those scenarios; they are deliberately
 not copied here, because an embedded copy drifts from the executable
@@ -1771,9 +1797,10 @@ Testing layers:
 - Unit tests with `rstest` and `googletest` or `pretty_assertions` cover each
   finding, the precedence rules, each `validate_request` refusal, and the key
   encoding.
-- Behavioural tests with `rstest-bdd` run the feature above against recorded
-  reports. Follow the immutable `Slot` pattern in `tests/toolchain/bdd.rs`,
-  which avoids a compiler crash on the pinned nightly.
+- Behavioural tests with `rstest-bdd` run the feature above against the real
+  worker's output, decoded by the strict adapter, under `make toolchain-smoke`.
+  Follow the immutable `Slot` pattern in `tests/toolchain/bdd.rs`, which avoids
+  a compiler crash on the pinned nightly.
 - Property tests with `proptest` cover A1 and A2.
 - Snapshot tests with `insta` hold two canonical reports, so format drift is
   reviewed.
