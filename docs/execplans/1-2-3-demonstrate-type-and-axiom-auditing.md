@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: COMPLETE (revision 9). The user approved this plan and accepted
+Status: COMPLETE (revision 11). The user approved this plan and accepted
 [ADR 0006](../adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md)
 on 2026-11-06. Implementation finished on 2026-11-07; promotion into the
 product is roadmap 2.2.4 and operational integrity is roadmap 4.3.2.
@@ -138,9 +138,12 @@ escalate.
 
 Exclude this ExecPlan from every count below.
 
-- Scope: stop and escalate if implementation needs more than 30 non-fixture
-  files or about 3,000 net lines of code and other documentation. Lean
-  fixtures, reviewed snapshots, and regenerated validation outputs do not count.
+- Scope: stop and escalate if implementation needs more than 15,000 net lines
+  of code and other documentation. Lean fixtures, reviewed snapshots, and
+  regenerated validation outputs do not count. The sponsor revised this
+  tolerance on 2026-11-10, replacing the previous "30 non-fixture files or
+  about 3,000 net lines" trigger with the 15,000-line figure; D23 records the
+  measurements against both.
 - Interface: stop if any public item in `src/` or the proposed CLI in
   `contracts/cli.txt` would have to change.
 - Dependencies: the only authorized new dependency is `serde`, pinned
@@ -380,6 +383,20 @@ revision has applied them to the technical design.
         direct bound tests, whole-document wire properties, the control
         checker's explicit control set, the Lean module docstrings, and the
         documentation qualifications.
+  - [x] (2026-11-10) Round-9 review repairs: revised the scope tolerance to
+        15,000 net lines on the sponsor's direction (D23); described A1 in D24
+        as sampled test evidence rather than a proof of universal injectivity;
+        moved the diagnostic truncation beside the renderer and added six direct
+        tests with three caught seeded mutations; documented the
+        imported-environment axiom collection at its call site; drained the
+        deadline child's pipes on reader threads; bound the control checker's
+        exception message to a local; and used Oxford `characterization`. Gate
+        sweep on the resulting tree: `check-fmt`, `markdownlint`, `typecheck`,
+        `lint` (Whitaker, `cargo doc`, Clippy), `test` (74 + 27 + 2 + 122
+        passed, 10 ignored, 1 doc-test), `test-scripts` (172, through the
+        documented 3.14 interpreter), `design-check`, `design-properties` (8 at
+        400 examples), `design-boundary` (11) and `toolchain-smoke` (10 passed
+        in 113 s) all green; logs are `/tmp/<gate>-polean-...out`.
 
 ## Surprises & discoveries
 
@@ -652,34 +669,39 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   twenty-two entries. That is promotion work (roadmap 2.2.4); the divergence
   and its evidence are recorded in the findings note. Date/Author: 2026-11-07,
   implementer, after review proposed the change.
-- D23. Decision: record that the delivered scope exceeded the tolerance in this
-  plan rather than claim it was inside the estimate. Rationale: the tolerance
-  stops and escalates above thirty non-fixture files or about 3,000 net lines.
-  Measured against `de8a85e..3128745`, excluding Lean fixtures, reviewed
+- D23. Decision: record that the delivered scope exceeded the plan's original
+  tolerance, and the sponsor's revision of that tolerance to 15,000 net lines,
+  which places the delivered scope inside it. Rationale: the original tolerance
+  stopped and escalated above thirty non-fixture files or about 3,000 net
+  lines. Measured against `de8a85e..3128745`, excluding Lean fixtures, reviewed
   snapshots, regenerated validation output, and this ExecPlan, the change is 66
   files and 9,406 net added lines; excluding documentation, the checksum
   manifest, and Rust fixture builders as well, it is 53 files and 6,258 net
-  lines. Both counts exceed the trigger by roughly a factor of two. The work
-  continued under the user's explicit instruction to implement the approved
-  plan to completion, and the overrun was not separately escalated while the
-  estimate was being passed. This entry records the fact for the assessment and
-  for anyone planning a comparable audit; it is not a retroactive approval.
-  Disposition: the hosted assessment escalated the missed trigger, and the
-  sponsor's standing instruction to deliver the approved plan to completion is
-  what the escalation rests on. No scope beyond the approved plan was added;
-  the estimate was wrong, not the scope. If the sponsor wants the trigger
-  treated differently, that supersedes this entry. Date/Author: 2026-11-07,
-  implementer, after the hosted assessment raised it.
+  lines. Both counts exceeded the original trigger by roughly a factor of two,
+  and the overrun was not separately escalated while the estimate was being
+  passed. The work continued under the user's explicit instruction to implement
+  the approved plan to completion. Disposition: the hosted assessment escalated
+  the missed original trigger; on 2026-11-10 the sponsor directed that the
+  tolerance be revised to 15,000 net lines. The revision replaces the two-part
+  trigger with that single line figure, keeping the plan's exclusions, so both
+  measurements above are inside it. No scope beyond the approved plan was
+  added: the estimate was wrong, not the scope. The file counts are retained
+  here for anyone planning a comparable audit; they no longer form part of the
+  trigger. Date/Author: 2026-11-07, implementer, after the hosted assessment
+  raised it; revised 2026-11-10 by the implementer on the sponsor's direction.
 - D24. Decision: keep settlement's foundation and axiom identity as the opaque
   `Key = Vec<u8>` and translate Lean names to keys only at the wire adapter;
   decline to introduce a second domain representation inside the proved code.
   Rationale: the settlement proof is about keys, not names, and the wire module
-  owns the mapping. A1 proves each encoder injective, the key round-trip
-  properties pin the decoder against the encoder, and the wire tests pin the
-  four literal foundation keys to the names the pin admits, so the translation
-  is tested at the boundary where it lives. Moving names into the proved code
-  would add a translation obligation that still rests on the same encoding and
-  on the worker's report, without new assurance. The reviewer's suggestion is
+  owns the mapping. A1 is sampled test evidence, not a theorem: its property
+  tests check each encoder for injection on generated inputs and the key
+  round-trip properties pin the decoder against the encoder, but neither
+  establishes universal injectivity. The wire tests pin the four literal
+  foundation keys to the names the pin admits, so the translation is tested at
+  the boundary where it lives. Nothing here is a Verus proof, and this entry
+  does not claim that strength for it. Moving names into the proved code would
+  add a translation obligation that still rests on the same encoding and on the
+  worker's report, without new assurance. The reviewer's suggestion is
   promotion work (roadmap 2.2.4) if a domain name type is wanted where policy
   semantics live. Date/Author: 2026-11-08, implementer, after review raised it.
 
@@ -983,11 +1005,13 @@ returned four findings and one reconciliation note. All five were actioned.
 - W1 required a failed worker to leave standard output empty, and the corpus
   classifier accepted any non-zero exit. It now refuses a failed run that left
   bytes on stdout, which covers `ModuleAbsent`.
-- The scope tolerance in this plan was exceeded: 66 files and 9,406 net lines,
-  or 53 files and 6,258 net lines with documentation, the checksum manifest,
-  and fixture builders also excluded, against a trigger of 30 files or about
-  3,000 lines. D23 records the measurement and the fact that the overrun was
-  not separately escalated.
+- The delivered scope exceeded this plan's original tolerance: 66 files and
+  9,406 net lines, or 53 files and 6,258 net lines with documentation, the
+  checksum manifest, and fixture builders also excluded, against an original
+  trigger of 30 files or about 3,000 lines. D23 records the measurement, the
+  fact that the overrun was not separately escalated, and the sponsor's
+  2026-11-10 revision of the tolerance to 15,000 net lines, which places the
+  delivered scope inside it.
 - The M3 instruction named `WrongPolicyLiteral`, which cannot detect a lossy
   renderer because that fixture is rejected for another reason. The instruction
   now states the corrected expectation and points at the EP-M3 outcome that
@@ -997,7 +1021,7 @@ The hosted proof assessment, `POL35-PROOF-20261107-A` over the same head,
 returned five qualifications. All five were actioned.
 
 - The recognizer's completeness result is stated only for a canonical-token
-  predicate, which is sufficient for success rather than a characterisation of
+  predicate, which is sufficient for success rather than a characterization of
   every successful input. The developers guide now says so next to the
   soundness claim.
 - The settlement witnesses show abstract outcome reachability, not reachability
@@ -1073,6 +1097,17 @@ six failed pre-merge checks. All were actioned; the repairs are `39ced36` to
   the `budget == 0` guard and re-running under `timeout 5` exited 124, so a
   bypassed budget fails as a reported timeout rather than hanging the gate; the
   guard was then restored and the nine checks passed again.
+- `truncateUtf8`, `charBytes`, and `maxMessageBytes` moved into the same module,
+  for the same reason: the worker's `main` cannot be imported, so a test could
+  not otherwise call them. Six cases now drive the truncation, and all fifteen
+  checks pass: a short message is unchanged; a message exactly at the byte
+  limit is unchanged; a message over the limit keeps the prefix that fits; a
+  multi-byte scalar that would cross the limit is dropped whole; one ending
+  exactly at the limit is kept; and an oversized message is cut to exactly
+  4,096 bytes. Three seeded mutations were each caught: returning the input
+  unchanged failed four checks, returning a constant empty string failed six,
+  and raising the limit by one byte failed four. With the definition restored
+  the executable again reported `renderer: 15 checks passed`.
 - `tests/toolchain/audit/properties/documents.rs` closes the conversion gap
   between the key properties and the contract properties: generated requests
   and reports decode to exactly the keys their parts encode to, and generated
@@ -2048,3 +2083,8 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   explicit control set, the Lean module docstrings, the documentation
   qualifications, and decision D24 declining a second key representation. No
   scope change from revision 9.
+- Revision 11 (2026-11-10): recorded review round 9: decision D23's revision of
+  the scope tolerance to 15,000 net lines on the sponsor's direction, D24's
+  corrected account of A1's evidence, direct tests for the diagnostic
+  truncation, and the review's harness, checker, and spelling repairs. No scope
+  change from revision 10 other than the tolerance the sponsor revised.
