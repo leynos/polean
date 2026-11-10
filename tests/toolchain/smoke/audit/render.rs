@@ -39,7 +39,7 @@ const POLL: Duration = Duration::from_millis(20);
 ///
 /// Pinned here so a check that silently disappears from the Lean list fails this
 /// test rather than shrinking it.
-const EXPECTED_CHECKS: usize = 15;
+const EXPECTED_CHECKS: usize = 18;
 
 /// The renderer's own bound tests pass, and the node budget bounds the walk.
 ///

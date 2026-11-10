@@ -23,6 +23,13 @@ message at the limit is unchanged, a message over it keeps the exact prefix
 that fits, and a multi-byte scalar is never split. An implementation that
 returns its input, returns a constant, or drops the scalar-boundary check fails
 at least one of them.
+
+The universe-level cases pin the rendered JSON rather than a node count. A
+constant's levels are part of the proposition settlement compares, so a walk
+that dropped a successor or treated a non-ground level as ground would still
+spend the right number of nodes while reporting the wrong statement. The three
+cases assert the exact JSON for zero, for a successor chain, and for a level
+the contract cannot render.
 -/
 
 open Lean
@@ -51,6 +58,10 @@ def rendered (depth budget : Nat) (e : Expr) : Option Nat :=
 /-- A message one byte longer than the contract's diagnostic bound. -/
 def oversized : String := String.ofList (List.replicate (maxMessageBytes + 1) 'a')
 
+/-- The rendered JSON of a constant with the given levels. -/
+def constantJson (levels : List Nat) : Json :=
+  Json.mkObj [("const", nm ``Nat), ("levels", toJson levels)]
+
 /-- Report one failed check and return whether it passed. -/
 def check (label : String) (passed : Bool) : IO Bool := do
   if passed then
@@ -78,6 +89,12 @@ def main : IO UInt32 := do
         rendered 4 maxNodes (shared 4) == none),
       ("a shared tree over the node bound is refused without expanding it",
         rendered maxDepth maxNodes (shared 40) == none),
+      ("a zero universe level renders as zero",
+        statementJson (mkConst ``Nat [.zero]) == constantJson [0]),
+      ("successor levels render their depth",
+        statementJson (mkConst ``Nat [.succ (.succ .zero)]) == constantJson [2]),
+      ("a non-ground universe level is refused",
+        statementJson (mkConst ``Nat [.param `u]) == Json.null),
       ("a short message is unchanged", truncateUtf8 8 "short" == "short"),
       ("a message at the byte limit is unchanged",
         truncateUtf8 5 "abcde" == "abcde"),
