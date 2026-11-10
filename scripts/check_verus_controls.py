@@ -542,7 +542,8 @@ def check_tree(
     would otherwise report success with nothing to show.
     """
     if not controls:
-        raise ControlError(f"tree {tree.name} has no controls to replay")
+        message = f"tree {tree.name} has no controls to replay"
+        raise ControlError(message)
     lines: list[str] = []
     with tempfile.TemporaryDirectory(
         prefix=f"polean-verus-controls-{tree.name}-"
