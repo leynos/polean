@@ -50,25 +50,6 @@ def kindOf : ConstantInfo → String
 def parseName (s : String) : Name :=
   (s.splitOn ".").foldl Name.mkStr .anonymous
 
-/-- How many bytes `c` occupies when encoded as UTF-8. -/
-def charBytes (c : Char) : Nat :=
-  let n := c.toNat
-  if n < 0x80 then 1 else if n < 0x800 then 2 else if n < 0x10000 then 3 else 4
-
-/-- Truncate `s` to at most `maxBytes` UTF-8 bytes on a scalar boundary. -/
-def truncateUtf8 (maxBytes : Nat) (s : String) : String :=
-  if s.utf8ByteSize ≤ maxBytes then s else
-  let rec go (cs : List Char) (used : Nat) (out : List Char) : List Char :=
-    match cs with
-    | [] => out.reverse
-    | c :: rest =>
-      let n := charBytes c
-      if used + n > maxBytes then out.reverse else go rest (used + n) (c :: out)
-  String.ofList (go s.toList 0 [])
-
-/-- The largest diagnostic the contract admits. -/
-def maxMessageBytes : Nat := 4096
-
 /-- Print the report and exit 0. -/
 def emit (doc : Json) : IO UInt32 := do
   IO.println (Json.compress doc)
@@ -137,6 +118,14 @@ unsafe def main (args : List String) : IO UInt32 := do
             roots := roots.push
               (Json.mkObj [("name", nm rn), ("declaration", Json.null)])
           | some ci =>
+            -- Axioms are collected from the *imported* environment, while the
+            -- declaration above is read from the replayed one. The two can in
+            -- principle disagree, and collecting from the replay would be the
+            -- stronger design; `Environment.ofKernelEnv` cannot supply it
+            -- because it leaves `checked` empty, so every root would report no
+            -- axioms. D22 records the trade-off and
+            -- `docs/lean-environment-integrity-findings.md` the evidence; the
+            -- substitution is promotion work.
             let (axs, _) ← (Lean.collectAxioms rn : CoreM (Array Name)).toIO
               {fileName := "", fileMap := default} {env := env}
             let sorted := axs.qsort Name.lt

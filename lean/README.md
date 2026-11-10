@@ -38,16 +38,18 @@ tree over 4,096 nodes or depth 60 as `null` and never truncates it. It reports
 a replay failure and does not work around it. `tests/toolchain/smoke/` builds
 the worker and runs it over the corpus in `examples/audit/`.
 
-## The renderer module and its tests
+## The bounded-output module and its tests
 
-The statement renderer lives in `PoleanAudit/Render.lean` rather than in the
-worker, so it can be tested without the worker's `main`.
-`PoleanAuditRenderTests.lean` is a second executable,
-`polean-audit-render-tests`, that drives `treeBounded` directly over in-bound
-and over-bound spines and over a self-applying chain whose expanded tree is
-exponential in the graph it denotes. `tests/toolchain/smoke/audit/render.rs`
-builds it and runs it under a deadline, so a bypassed node budget fails as a
-timeout rather than hanging the gate.
+The statement renderer and the diagnostic truncation live in
+`PoleanAudit/Render.lean` rather than in the worker, so they can be tested
+without the worker's `main`. `PoleanAuditRenderTests.lean` is a second
+executable, `polean-audit-render-tests`, that drives `treeBounded` directly
+over in-bound and over-bound spines and over a self-applying chain whose
+expanded tree is exponential in the graph it denotes, and drives `truncateUtf8`
+at and beyond the contract's message bound, including characters that would
+cross it. `tests/toolchain/smoke/audit/render.rs` builds it and runs it under a
+deadline, so a bypassed node budget fails as a timeout rather than hanging the
+gate.
 
 ## What belongs here
 

@@ -1,13 +1,15 @@
 import Lean
 
 /-!
-# Bounded statement rendering
+# Bounded rendering and diagnostic truncation
 
 The audit worker turns a declaration's type into the ground tree the contract
 admits, or into JSON `null` when the type is out of grammar or over the bound.
-The bounds live here, beside the walk that enforces them, so they can be tested
-without running the worker: `PoleanAuditRenderTests.lean` drives
-`treeBounded` directly.
+It also truncates a replay diagnostic to the contract's message bound. Both
+bounds live here, beside the code that applies them, so they can be tested
+without running the worker: `PoleanAuditRenderTests.lean` drives `treeBounded`
+and `truncateUtf8` directly. The worker's `main` cannot be imported into a test
+executable, so anything a test must call belongs in this module.
 
 The node bound is spent on the way down rather than summed on the way back up.
 An `Expr` is a directed acyclic graph, so a shared sub-expression is visited
@@ -78,3 +80,27 @@ def statementJson (e : Expr) : Json :=
   match treeBounded maxDepth maxNodes e with
   | some (j, _) => j
   | none => Json.null
+
+/-- The largest diagnostic the contract admits. -/
+def maxMessageBytes : Nat := 4096
+
+/-- How many bytes `c` occupies when encoded as UTF-8. -/
+def charBytes (c : Char) : Nat :=
+  let n := c.toNat
+  if n < 0x80 then 1 else if n < 0x800 then 2 else if n < 0x10000 then 3 else 4
+
+/-- Truncate `s` to at most `maxBytes` UTF-8 bytes on a scalar boundary.
+
+    A character that would cross the limit is dropped whole rather than split,
+    so the result is always valid UTF-8. The walk stops at the first character
+    that does not fit, so the result is a prefix of `s` rather than a selection
+    of its characters. -/
+def truncateUtf8 (maxBytes : Nat) (s : String) : String :=
+  if s.utf8ByteSize ≤ maxBytes then s else
+  let rec go (cs : List Char) (used : Nat) (out : List Char) : List Char :=
+    match cs with
+    | [] => out.reverse
+    | c :: rest =>
+      let n := charBytes c
+      if used + n > maxBytes then out.reverse else go rest (used + n) (c :: out)
+  String.ofList (go s.toList 0 [])

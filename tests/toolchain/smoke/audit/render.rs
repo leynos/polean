@@ -1,11 +1,12 @@
-//! Direct bound tests for the worker's statement renderer.
+//! Direct bound tests for the worker's statement renderer and diagnostics.
 //!
 //! `corpus` shows what the worker reports for the committed fixtures, but every
 //! fixture's statement is a tree the kernel already built, so the corpus cannot
 //! show that the renderer bounds its walk over a *shared* expression graph. The
 //! Lean side, `lean/PoleanAuditRenderTests.lean`, drives `treeBounded` over
-//! spines and self-applying chains; this module builds that executable with the
-//! pinned Lake and runs it.
+//! spines and self-applying chains, and `truncateUtf8` at and beyond the
+//! contract's message bound; this module builds that executable with the pinned
+//! Lake and runs it.
 //!
 //! The deadline is the point of the test. The guarded walk finishes in tens of
 //! milliseconds, but with the node-budget guard bypassed the same input expands
@@ -14,8 +15,9 @@
 //! test fails if the worker's budget stops bounding its work.
 
 use std::{
+    io::{self, Read},
     path::Path,
-    process::{Command, Output, Stdio},
+    process::{Child, Command, Output, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -37,7 +39,7 @@ const POLL: Duration = Duration::from_millis(20);
 ///
 /// Pinned here so a check that silently disappears from the Lean list fails this
 /// test rather than shrinking it.
-const EXPECTED_CHECKS: usize = 9;
+const EXPECTED_CHECKS: usize = 15;
 
 /// The renderer's own bound tests pass, and the node budget bounds the walk.
 ///
@@ -76,7 +78,10 @@ fn require_summary(output: &Output) -> Result<(), String> {
 /// Run `program` with no arguments, failing if it outlives `deadline`.
 ///
 /// A `Command::output` call would wait forever on a runaway walk, so the child
-/// is polled and killed at the deadline.
+/// is polled and killed at the deadline. Both pipes are drained on their own
+/// threads while it runs: reading them only after the child exits would let a
+/// child that writes more than the pipe buffer block on the write, and the
+/// deadline would then report a runaway walk for a merely blocked process.
 ///
 /// # Errors
 ///
@@ -90,20 +95,30 @@ fn bounded(program: &Path, cwd: &Path, deadline: Duration) -> Result<Output, Str
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| format!("cannot run {}: {error}", program.display()))?;
+    let stdout = child.stdout.take().map(drain).ok_or_else(|| {
+        format!(
+            "cannot read the output of {}: stdout is not piped",
+            program.display()
+        )
+    })?;
+    let stderr = child.stderr.take().map(drain).ok_or_else(|| {
+        format!(
+            "cannot read the output of {}: stderr is not piped",
+            program.display()
+        )
+    })?;
     let started = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) => {}
             Err(error) => {
-                drop(child.kill());
-                drop(child.wait());
+                stop(&mut child, stdout, stderr);
                 return Err(format!("cannot wait for {}: {error}", program.display()));
             }
         }
         if started.elapsed() >= deadline {
-            drop(child.kill());
-            drop(child.wait());
+            stop(&mut child, stdout, stderr);
             return Err(format!(
                 "{} did not finish within {deadline:?}; the renderer's node budget is not \
                  bounding its walk",
@@ -112,7 +127,57 @@ fn bounded(program: &Path, cwd: &Path, deadline: Duration) -> Result<Output, Str
         }
         thread::sleep(POLL);
     }
-    child
-        .wait_with_output()
-        .map_err(|error| format!("cannot read the output of {}: {error}", program.display()))
+    let status = child
+        .wait()
+        .map_err(|error| format!("cannot wait for {}: {error}", program.display()))?;
+    Ok(Output {
+        status,
+        stdout: join(stdout, program)?,
+        stderr: join(stderr, program)?,
+    })
+}
+
+/// Read `pipe` to end on its own thread, while the child still runs.
+fn drain<R>(mut pipe: R) -> thread::JoinHandle<io::Result<Vec<u8>>>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let mut buffer = Vec::new();
+        pipe.read_to_end(&mut buffer).map(|_| buffer)
+    })
+}
+
+/// Kill and reap `child`, then wait for its output readers to see end of file.
+fn stop(
+    child: &mut Child,
+    stdout: thread::JoinHandle<io::Result<Vec<u8>>>,
+    stderr: thread::JoinHandle<io::Result<Vec<u8>>>,
+) {
+    drop(child.kill());
+    drop(child.wait());
+    drop(stdout.join());
+    drop(stderr.join());
+}
+
+/// Collect one reader's bytes, naming the program when the read failed.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the read failed or its thread panicked.
+fn join(
+    reader: thread::JoinHandle<io::Result<Vec<u8>>>,
+    program: &Path,
+) -> Result<Vec<u8>, String> {
+    match reader.join() {
+        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Err(error)) => Err(format!(
+            "cannot read the output of {}: {error}",
+            program.display()
+        )),
+        Err(_) => Err(format!(
+            "the output reader for {} panicked",
+            program.display()
+        )),
+    }
 }

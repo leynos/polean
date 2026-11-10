@@ -1,12 +1,13 @@
 import PoleanAudit.Render
 
 /-!
-# Renderer bound tests
+# Bounded rendering and truncation tests
 
-Direct tests of `PoleanAudit.Render.treeBounded`, built and run by
+Direct tests of `PoleanAudit.Render.treeBounded` and
+`PoleanAudit.Render.truncateUtf8`, built and run by
 `tests/toolchain/smoke/audit/render.rs` under `make toolchain-smoke`. The
-worker's `main` cannot be imported into a test executable, so the renderer and
-its bounds live in their own module and are driven here.
+worker's `main` cannot be imported into a test executable, so the bounded
+operations live in their own module and are driven here.
 
 The shared-expression cases are the reason this file exists. The corpus cannot
 show that the walk is bounded: every fixture's statement is a tree the kernel
@@ -16,6 +17,12 @@ expands to is exponential while the graph is tiny. The last case, `shared 40`,
 expands to 2^41 - 1 nodes if the budget guard is bypassed; the Rust side runs
 this executable under a deadline, so such a bypass fails as a timeout instead of
 hanging the gate.
+
+The truncation cases pin the contract's message bound from both sides: a
+message at the limit is unchanged, a message over it keeps the exact prefix
+that fits, and a multi-byte scalar is never split. An implementation that
+returns its input, returns a constant, or drops the scalar-boundary check fails
+at least one of them.
 -/
 
 open Lean
@@ -40,6 +47,9 @@ def shared : Nat → Expr
 /-- The rendered node count, or `none` when the walk refused the tree. -/
 def rendered (depth budget : Nat) (e : Expr) : Option Nat :=
   (treeBounded depth budget e).map (·.2)
+
+/-- A message one byte longer than the contract's diagnostic bound. -/
+def oversized : String := String.ofList (List.replicate (maxMessageBytes + 1) 'a')
 
 /-- Report one failed check and return whether it passed. -/
 def check (label : String) (passed : Bool) : IO Bool := do
@@ -67,7 +77,18 @@ def main : IO UInt32 := do
       ("a shared tree is refused above the depth bound",
         rendered 4 maxNodes (shared 4) == none),
       ("a shared tree over the node bound is refused without expanding it",
-        rendered maxDepth maxNodes (shared 40) == none) ]
+        rendered maxDepth maxNodes (shared 40) == none),
+      ("a short message is unchanged", truncateUtf8 8 "short" == "short"),
+      ("a message at the byte limit is unchanged",
+        truncateUtf8 5 "abcde" == "abcde"),
+      ("a message over the limit keeps the prefix that fits",
+        truncateUtf8 4 "abcde" == "abcd"),
+      ("a multi-byte scalar crossing the limit is dropped whole",
+        truncateUtf8 2 "aé" == "a"),
+      ("a multi-byte scalar ending exactly at the limit is kept",
+        truncateUtf8 3 "aéX" == "aé"),
+      ("the contract's bound cuts an oversized message to 4,096 bytes",
+        (truncateUtf8 maxMessageBytes oversized).utf8ByteSize == maxMessageBytes) ]
   let mut failures := 0
   for (label, passed) in cases do
     unless (← check label passed) do
