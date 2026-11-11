@@ -55,3 +55,4 @@ Feature: Settlement decides audit reports
     Given a report with an unknown field
     When the adapter decodes the report
     Then the adapter refuses it as malformed, naming extra
+    And the settlement does not run

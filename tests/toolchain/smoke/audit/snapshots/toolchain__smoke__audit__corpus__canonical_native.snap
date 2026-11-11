@@ -3,7 +3,7 @@ source: tests/toolchain/smoke/audit/corpus.rs
 expression: text
 ---
 {
-  "githash": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+  "githash": "<pinned>",
   "module": [
     "AuditFixture",
     "Native"

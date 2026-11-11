@@ -12,7 +12,9 @@
 //! The two canonical snapshots pin the report shape for an accepted
 //! foundations case and a rejected native case. The replay `message` is
 //! excluded: it quotes the kernel's diagnostic, which is not part of the
-//! contract.
+//! contract. `githash` is replaced with a fixed marker, so a pin update does
+//! not churn the snapshots; settlement still refuses a report whose pin is not
+//! [`PIN`].
 
 use std::process::Output;
 
@@ -241,11 +243,13 @@ fn compare(name: &str, text: &str) {
     insta::assert_snapshot!(name, text);
 }
 
-/// Pretty-print a report, excluding the replay diagnostic.
+/// Pretty-print a report, excluding volatile values.
 ///
 /// `message` quotes the kernel's rejection text. It is bounded, never parsed,
 /// and deliberately outside the snapshot so a kernel wording change does not
-/// look like a contract change.
+/// look like a contract change. `githash` is replaced with a fixed marker for
+/// the same reason: a toolchain pin update must not churn the snapshot, and
+/// settlement already refuses a report whose pin is not [`PIN`].
 ///
 /// # Errors
 ///
@@ -258,6 +262,9 @@ fn canonical(bytes: &[u8]) -> Result<String, String> {
         .and_then(serde_json::Value::as_object_mut)
     {
         replay.remove("message");
+    }
+    if let Some(githash) = document.get_mut("githash") {
+        *githash = serde_json::Value::String("<pinned>".to_owned());
     }
     serde_json::to_string_pretty(&document)
         .map_err(|error| format!("cannot render the canonical report: {error}"))

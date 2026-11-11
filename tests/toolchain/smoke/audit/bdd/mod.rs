@@ -2,10 +2,15 @@
 //!
 //! The feature file is the readable specification: one scenario per distinct
 //! settlement outcome, each naming a representative corpus fixture. Each
-//! scenario runs the real `polean-audit` worker over that fixture, decodes its
-//! report with the strict wire adapter, and settles the decoded report against
-//! the request the corpus asks. The scenario therefore exercises the boundary
-//! it describes rather than a hand-built pair at the settlement seam.
+//! scenario runs the real `polean-audit` worker over a corpus fixture, decodes
+//! its report with the strict wire adapter, and settles the decoded report
+//! against the request the corpus asks. The scenario therefore exercises the
+//! boundary it describes rather than a hand-built pair at the settlement seam.
+//!
+//! The malformed-report scenario starts from the worker's own report for
+//! `AcceptedGround` and adds a field the contract does not name before
+//! decoding, so its refusal is exercised at the process-output boundary and
+//! settlement is then asserted not to have run.
 //!
 //! A scenario that passes is evidence about this build of the worker, the
 //! decoder, and the settlement function over these fixtures. It is not evidence
@@ -20,32 +25,13 @@
 //! internal compiler error for the macro-driven mutable world on the pinned
 //! nightly.
 
-mod fixture {
-    //! The per-scenario state fixture.
-    //!
-    //! `rstest`'s fixture expansion wraps a single-expression body in braces,
-    //! which `unused_braces` rejects. The expectation is scoped to this module
-    //! so it covers only the generation it is about.
-
-    #![expect(
-        unused_braces,
-        reason = "rstest fixture expansion wraps a single-expression body in braces"
-    )]
-
-    use rstest::fixture;
-
-    use super::AuditState;
-
-    /// The per-scenario state, built empty for each generated test.
-    #[fixture]
-    pub fn state() -> AuditState { AuditState::default() }
-}
+mod support;
 
 use std::sync::OnceLock;
 
-pub use fixture::state;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
+pub use support::{finding_code, protocol_breach, state, with_settlement};
 
 use super::{requests, runner::Corpus};
 use crate::audit::{
@@ -53,7 +39,6 @@ use crate::audit::{
         AuditReport,
         AuditRequest,
         FindingCode,
-        ProtocolBreach,
         RequestRefusal,
         Settlement,
         settle,
@@ -66,7 +51,7 @@ use crate::audit::{
 /// `#[scenario]` reads the feature file itself, which Cargo cannot fingerprint,
 /// so without this reference an edited feature file can leave a previously
 /// expanded binary in place.
-const _: [&str; 1] = [include_str!("../../../features/axiom_audit.feature")];
+const _: [&str; 1] = [include_str!("../../../../features/axiom_audit.feature")];
 
 /// The fixtures the feature scenarios name, dependencies before dependants.
 const SOURCES: &[&str] = &[
@@ -96,8 +81,11 @@ fn corpus() -> Result<&'static Corpus, String> {
 }
 
 /// The state one scenario accumulates.
+///
+/// Visible in the parent module because the `support` child re-exports the
+/// fixture that builds it.
 #[derive(Default, ScenarioState)]
-struct AuditState {
+pub(super) struct AuditState {
     /// The request the corpus asks for the selected fixture.
     request: Slot<AuditRequest>,
     /// The report the worker produced, as the adapter decoded it.
@@ -139,18 +127,35 @@ fn report_names_another_toolchain(state: &AuditState) -> Result<(), String> {
         .ok_or_else(|| "no fixture was run before the mutation".to_owned())
 }
 
-/// Select a report carrying a field the contract does not name.
+/// Select the worker's report for a valid fixture with an unknown field added.
+///
+/// The document starts as the real worker's output, so the scenario exercises
+/// the process-output boundary: the adapter must refuse the worker's own report
+/// once a field the contract does not name is added, before settlement sees it.
 #[given("a report with an unknown field")]
-fn report_with_unknown_field(state: &AuditState) {
-    state.document.set(
-        concat!(
-            r#"{"schema_version":"polean.audit-report.v0","githash":"x","#,
-            r#""module":["AuditFixture","AcceptedGround"],"#,
-            r#""replay":{"status":"accepted","modules":[]},"#,
-            r#""roots":[],"extra":0}"#
-        )
-        .to_owned(),
-    );
+fn report_with_unknown_field(state: &AuditState) -> Result<(), String> {
+    let entry = requests::entry("AcceptedGround")?;
+    let output = corpus()?.worker(&entry.module, &entry.roots)?;
+    if !output.status.success() {
+        return Err(format!(
+            "AcceptedGround: the worker failed with {:?}\nstderr:\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let report = std::str::from_utf8(&output.stdout)
+        .map_err(|error| format!("the worker's report is not UTF-8: {error}"))?;
+    state.document.set(with_unknown_field(report)?);
+    Ok(())
+}
+
+/// Add a field the report contract does not name to a compact JSON object.
+fn with_unknown_field(report: &str) -> Result<String, String> {
+    let body = report.trim_end();
+    let Some(prefix) = body.strip_suffix('}') else {
+        return Err(format!("the worker's report is not a JSON object: {body}"));
+    };
+    Ok(format!("{prefix},\"extra\":0}}"))
 }
 
 /// Decide the decoded report against the corpus request.
@@ -178,17 +183,6 @@ fn adapter_decodes(state: &AuditState) -> Result<(), String> {
         .ok_or_else(|| "no document was selected before decoding".to_owned())?;
     state.decoded.set(decode_report(document.as_bytes()));
     Ok(())
-}
-
-/// Borrow the settlement outcome, or report that settlement never ran.
-fn with_settlement<T>(
-    state: &AuditState,
-    inspect: impl FnOnce(&Result<Settlement, RequestRefusal>) -> T,
-) -> Result<T, String> {
-    state
-        .settlement
-        .with_ref(inspect)
-        .ok_or_else(|| "the settlement did not run".to_owned())
 }
 
 /// Require acceptance.
@@ -276,29 +270,17 @@ fn adapter_refuses_as_malformed(state: &AuditState, field: String) -> Result<(),
         .ok_or_else(|| "the adapter did not run".to_owned())?
 }
 
-/// Parse a finding code named by a scenario.
-fn finding_code(name: &str) -> Result<FindingCode, String> {
-    match name {
-        "KernelRejected" => Ok(FindingCode::KernelRejected),
-        "RootAbsent" => Ok(FindingCode::RootAbsent),
-        "WrongKind" => Ok(FindingCode::WrongKind),
-        "StatementMismatch" => Ok(FindingCode::StatementMismatch),
-        "SorryAxiom" => Ok(FindingCode::SorryAxiom),
-        "NativeAxiom" => Ok(FindingCode::NativeAxiom),
-        "UndeclaredAxiom" => Ok(FindingCode::UndeclaredAxiom),
-        other => Err(format!("unknown finding code {other}")),
+/// Require that no settlement outcome was recorded.
+///
+/// A malformed report must be refused by the adapter, so settlement is never
+/// asked to decide it. This asserts the boundary rather than relying on the
+/// scenario's step order.
+#[then("the settlement does not run")]
+fn settlement_does_not_run(state: &AuditState) -> Result<(), String> {
+    if state.settlement.with_ref(|_| ()).is_some() {
+        return Err("settlement ran on a report the adapter refused".to_owned());
     }
-}
-
-/// Parse a protocol breach named by a scenario.
-fn protocol_breach(name: &str) -> Result<ProtocolBreach, String> {
-    match name {
-        "ToolchainMismatch" => Ok(ProtocolBreach::ToolchainMismatch),
-        "ModuleMismatch" => Ok(ProtocolBreach::ModuleMismatch),
-        "CoverageMismatch" => Ok(ProtocolBreach::CoverageMismatch),
-        "RejectedReplayWithRoots" => Ok(ProtocolBreach::RejectedReplayWithRoots),
-        other => Err(format!("unknown protocol breach {other}")),
-    }
+    Ok(())
 }
 
 /// A theorem of the expected proposition is accepted.

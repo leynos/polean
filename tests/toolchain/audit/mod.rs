@@ -9,7 +9,7 @@
 //!   it holds no dependency that a proof cannot see.
 //! - [`fixtures`] builds the request and report pairs the unit and property tests share, so one
 //!   case names the same bytes everywhere. The feature scenarios run the real worker instead and
-//!   live in `tests/toolchain/smoke/audit/bdd.rs`.
+//!   live in `tests/toolchain/smoke/audit/bdd/`.
 //!
 //! The split matters for assurance. A proof over settlement says acceptance
 //! follows from a truthful report; it says nothing about whether the report is

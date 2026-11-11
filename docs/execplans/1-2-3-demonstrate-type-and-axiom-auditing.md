@@ -1175,12 +1175,47 @@ scenarios now run the real `polean-audit` worker over their named fixture,
 decode its report with the strict adapter, and settle the decoded report; the
 direct fixture-pair checks remain unit tests in
 `tests/toolchain/audit/tests.rs`. The binding moved to
-`tests/toolchain/smoke/audit/bdd.rs`, so the scenarios are `#[ignore]`d and run
+`tests/toolchain/smoke/audit/bdd/`, so the scenarios are `#[ignore]`d and run
 under `make toolchain-smoke` with the rest of the provisioned corpus. The two
 warnings, generated property tests for the Lean renderer and the settlement's
 dependence on the wire name encoding, are dispositioned in the review
 conversation: the first is a bounded-testing trade-off recorded in D24, and the
 second is the standing design decision the plan already declines.
+
+Review round 11 ran on the round-10 head. The refreshed pre-merge table raised
+four errors and four warnings; the four errors and two of the warnings are
+repaired on the head this section records.
+
+The first error was that the renderer's numeric name components and its three-
+and four-byte scalar truncation had no direct test. Ten cases now pin them. A
+text component and a numeric component with the same digits render as different
+JSON, so a walk that stringified every component fails. Each of a three-byte
+and a four-byte scalar is checked alone and behind an ASCII prefix, at the byte
+limit and one byte across it, so a `charBytes` that undercounts a wide scalar
+fails. The direct suite is now 28 checks, and
+`tests/toolchain/smoke/audit/render.rs` pins that count.
+
+The second and third errors were one defect seen twice: the malformed-report
+feature scenario hand-wrote its JSON, so the claim that every scenario runs the
+worker was false. The scenario now runs the real worker over `AcceptedGround`,
+adds `"extra":0` to the worker's own report, and decodes that; a new `Then`
+step asserts settlement never ran. The fourth error was the fixture module
+docstring, which said feature scenarios used the same hand-built pairs. It now
+names the unit and property tests as its callers and says the scenarios take
+their requests from the corpus and their reports from the worker.
+
+Two warnings were also repaired. The canonical snapshots retained the Lean
+commit hash, so a pin update would churn both; `canonical` now replaces
+`githash` with `<pinned>` before comparison, and settlement's separate `PIN`
+check is unchanged. The developer-documentation warning was the malformed
+scenario claim itself, which the repair removes.
+
+The remaining two warnings are dispositioned rather than repaired, for the
+reasons D24 records: generated Lean property tests with an independent tree
+oracle would need a generator inside the pinned package, and the plan keeps the
+Lean side to direct executable checks; and settlement's keys are the verified
+interface the proof is stated over, so a second domain representation is
+promotion work rather than this test-only demonstration.
 
 ## Context and orientation
 
@@ -1562,8 +1597,8 @@ their own rather than further growth in the harness. Add `serde` to
 `Cargo.toml`. Add `tests/toolchain/audit/`: `mod.rs`, `wire/`, `settlement/`
 with `settlement/decision/` (the pure function), `properties/`, and `tests.rs`,
 with the feature in `tests/features/axiom_audit.feature` bound by
-`tests/toolchain/smoke/audit/bdd.rs` so its scenarios run the real worker.
-Widen the description at `tests/toolchain/main.rs:1` and
+`tests/toolchain/smoke/audit/bdd/` so its scenarios run the real worker. Widen
+the description at `tests/toolchain/main.rs:1` and
 `docs/repository-layout.md:14`.
 
 Requirements: machine-readable results, malformed output, coverage.
@@ -1776,9 +1811,11 @@ env -i LEAN_SYSROOT="$PWD/.polean/tools/lean/$SHA" LEAN_PATH="$SCRATCH" \
 ## Validation and acceptance
 
 The behavioural specification is `tests/features/axiom_audit.feature`. Each
-scenario runs the real worker over its named fixture, decodes the report with
+scenario runs the real worker over a corpus fixture, decodes the report with
 the strict adapter, and settles it, so the specification and the corpus
-exercise the same process boundary.
+exercise the same process boundary. The malformed-report scenario adds a field
+the contract does not name to the worker's own report before decoding, and
+asserts that settlement never ran.
 
 The feature file is the authority for those scenarios; they are deliberately
 not copied here, because an embedded copy drifts from the executable
@@ -2115,3 +2152,8 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   corrected account of A1's evidence, direct tests for the diagnostic
   truncation, and the review's harness, checker, and spelling repairs. No scope
   change from revision 10 other than the tolerance the sponsor revised.
+- Revision 12 (2026-11-11): recorded review rounds 10 and 11: the
+  universe-level, name-component, and wide-scalar renderer cases, the feature
+  scenarios at the worker boundary including the malformed report, the fixture
+  docstring correction, and the snapshot pin redaction. No scope change from
+  revision 11.

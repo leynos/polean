@@ -20,9 +20,17 @@ hanging the gate.
 
 The truncation cases pin the contract's message bound from both sides: a
 message at the limit is unchanged, a message over it keeps the exact prefix
-that fits, and a multi-byte scalar is never split. An implementation that
-returns its input, returns a constant, or drops the scalar-boundary check fails
-at least one of them.
+that fits, and a multi-byte scalar is never split. Two-, three-, and four-byte
+scalars are each checked alone and behind an ASCII prefix, at the limit and one
+byte across it, so a `charBytes` that undercounts a wide scalar is caught. An
+implementation that returns its input, returns a constant, or drops the
+scalar-boundary check fails at least one of them.
+
+The name cases pin the component encoding. A name component is either text or a
+number, and the contract keeps them distinct: `A.1` as a string component and
+`A.1` as a numeric component render differently, so a walk that stringified
+every component would still produce a well-formed array while losing the
+distinction settlement relies on.
 
 The universe-level cases pin the rendered JSON rather than a node count. A
 constant's levels are part of the proposition settlement compares, so a walk
@@ -95,6 +103,10 @@ def main : IO UInt32 := do
         statementJson (mkConst ``Nat [.succ (.succ .zero)]) == constantJson [2]),
       ("a non-ground universe level is refused",
         statementJson (mkConst ``Nat [.param `u]) == Json.null),
+      ("a text name component renders as a string",
+        nm (.str (.str .anonymous "A") "1") == Json.arr #[Json.str "A", Json.str "1"]),
+      ("a numeric name component renders as a number",
+        nm (.num (.str .anonymous "A") 1) == Json.arr #[Json.str "A", toJson 1]),
       ("a short message is unchanged", truncateUtf8 8 "short" == "short"),
       ("a message at the byte limit is unchanged",
         truncateUtf8 5 "abcde" == "abcde"),
@@ -104,6 +116,22 @@ def main : IO UInt32 := do
         truncateUtf8 2 "aé" == "a"),
       ("a multi-byte scalar ending exactly at the limit is kept",
         truncateUtf8 3 "aéX" == "aé"),
+      ("a three-byte scalar ending exactly at the limit is kept",
+        truncateUtf8 3 "€" == "€"),
+      ("a three-byte scalar crossing the limit is dropped whole",
+        truncateUtf8 2 "€" == ""),
+      ("a prefixed three-byte scalar ending exactly at the limit is kept",
+        truncateUtf8 4 "a€" == "a€"),
+      ("a prefixed three-byte scalar crossing the limit keeps the prefix",
+        truncateUtf8 3 "a€" == "a"),
+      ("a four-byte scalar ending exactly at the limit is kept",
+        truncateUtf8 4 "😀" == "😀"),
+      ("a four-byte scalar crossing the limit is dropped whole",
+        truncateUtf8 3 "😀" == ""),
+      ("a prefixed four-byte scalar ending exactly at the limit is kept",
+        truncateUtf8 5 "a😀" == "a😀"),
+      ("a prefixed four-byte scalar crossing the limit keeps the prefix",
+        truncateUtf8 4 "a😀" == "a"),
       ("the contract's bound cuts an oversized message to 4,096 bytes",
         (truncateUtf8 maxMessageBytes oversized).utf8ByteSize == maxMessageBytes) ]
   let mut failures := 0
