@@ -1,11 +1,13 @@
 //! Shared state, fixture, and vocabulary for the audit feature scenarios.
 //!
-//! The scenario module keeps the step definitions and the generated tests; this
-//! child module holds what they share without being a step itself: the
-//! per-scenario fixture, the accessor that requires settlement to have run, and
-//! the parsers for the finding and protocol-breach names a scenario spells.
-//! Splitting them keeps `bdd` inside the repository's module-size bound without
-//! moving any step out of the module the `#[scenario]` expansion expects.
+//! The scenario module keeps the `Given` and `When` steps and the generated
+//! tests; [`super::then`] holds the `Then` steps. This child module holds what
+//! they share without being a step itself: the per-scenario fixture, the
+//! accessor that requires settlement to have run, and the parsers for the
+//! finding and protocol-breach names a scenario spells. Splitting the steps
+//! keeps `bdd` inside the repository's module-size bound, which works because
+//! the step macros register with a crate-wide inventory rather than with the
+//! module the `#[scenario]` expansion lives in.
 
 mod fixture {
     //! The per-scenario state fixture.
