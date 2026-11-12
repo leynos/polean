@@ -11,7 +11,7 @@
   "witnesses_replayed": 6,
   "negative_controls_passed": 19,
   "audit_contract_samples_checked": 2,
-  "audit_manifest_entries_checked": 22,
+  "audit_manifest_entries_checked": 23,
   "audit_contract_controls_passed": 13,
   "boundary_seam_checks_passed": 2,
   "malformed_request_shapes_rejected": 5,

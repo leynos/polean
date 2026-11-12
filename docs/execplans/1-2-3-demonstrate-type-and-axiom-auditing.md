@@ -1265,6 +1265,13 @@ with LLVM alone, under `[profile.dev.package.zmij]` in `.cargo/config.toml`, and
 `scripts/tests/test_build_standard.py` holds the exception. The developer
 guide names the exception beside the Cranelift default it displaces.
 
+Every gate passed on `c7fbd9b` after the repairs: `make check-fmt` and
+`make markdownlint` on 35 and 36 files, `make typecheck` (568 s), `make lint`
+(1 337 s; interrogate 100.0%, Whitaker, rustdoc and Clippy clean), `make test`
+(214 passed, 22 skipped, 1 doc test, 820 s), `make test-scripts` with the 3.14
+interpreter (10 s), `make design-check` (7 schemas, 224 comparisons, 64
+decisions), and `make toolchain-smoke` (22 passed, 802 s).
+
 ## Context and orientation
 
 Polean is a design scaffold. `src/lib.rs` holds a project name and a status
