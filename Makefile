@@ -143,9 +143,11 @@ verus-proof: ## Run the Verus proof entry point
 		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
 		exit 1; \
 	}
+	set -- $(VERUS_FLAGS); \
+	for flag in "$$@"; do set -- "$$@" "--extra-arg=$$flag"; shift; done; \
 	VERUS_Z3_PATH="$(VERUS_Z3_PATH)" $(PROVER_TOOLS) verus run --repo-root . \
 		--verus-bin "$(VERUS_BIN)" --no-install-missing \
-		--proof-file "$(VERUS_PROOF_FILE)" $(addprefix --extra-arg=,$(VERUS_FLAGS))
+		--proof-file "$(VERUS_PROOF_FILE)" "$$@"
 
 verus-controls: ## Show the proof rejects mutated kernel bodies and weakened specs
 	@test -x "$(VERUS_BIN)" || { \
