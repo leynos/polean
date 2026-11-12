@@ -18,6 +18,16 @@ codegen-backend = true
 [profile.dev]
 codegen-backend = "cranelift"
 
+# `zmij` renders an `f64` with SSE2 intrinsics, and the pinned Cranelift has no
+# lowering for `llvm.x86.sse2.pmulhu.w` (rustc_codegen_cranelift#171). It is
+# reached from any `serde_json` diagnostic that reports a floating-point value,
+# and the panic it raises cannot unwind, so a malformed document would abort a
+# development or test process instead of being refused. The crate is small, so
+# building it with LLVM costs little. Remove the override when Cranelift lowers
+# the intrinsic or `zmij` gains a scalar fallback.
+[profile.dev.package.zmij]
+codegen-backend = "llvm"
+
 [build]
 rustflags = ["-Zthreads=8"]
 
