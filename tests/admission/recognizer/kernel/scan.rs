@@ -134,6 +134,12 @@ pub(super) fn contains_metadata(src: &[u8], from: usize, to: usize) -> (r: bool)
 }
 
 /// Whether the byte at `at` starts a line ending.
+// The `if`/`else if` chain mirrors the specification case by case, which is what
+// the verifier checks; folding it into `&&`/`||` would rewrite verified code.
+#[expect(
+    clippy::ifs_as_logical_ops,
+    reason = "the branch structure is the verified proof shape; Verus checks each arm"
+)]
 pub(super) fn is_line_end(src: &[u8], at: usize) -> (r: bool)
     requires
         at < src@.len(),
