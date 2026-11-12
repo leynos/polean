@@ -135,45 +135,66 @@ def layout(tmp_path: Path) -> Layout:
     return Layout(root, bin_dir, tmp_path / "calls.log")
 
 
+PINNED_RUN = ["tool", "run", "--from", PINNED_SOURCE, "prover-tools"]
+
+
 def test_install_verus_calls_both_installers(layout: Layout) -> None:
-    """The target runs the prover-tools install, then the Z3 installer."""
+    """The target runs the prover-tools Verus install, then its Z3 install."""
     layout.extractor("uv")
 
     result = layout.make("install-verus")
 
     assert result.returncode == 0, result.stderr
-    programs = [call["program"] for call in layout.calls()]
-    assert programs == ["uv", "fake-python"], (
-        "the pinned release installs before the solver"
+    calls = layout.calls()
+    assert [call["program"] for call in calls] == ["uv", "uv"], (
+        "both installs go through the pinned tool, not a local script"
     )
-    assert layout.calls()[0]["argv"] == [
-        "tool",
-        "run",
-        "--from",
-        PINNED_SOURCE,
-        "prover-tools",
+    assert calls[0]["argv"] == [
+        *PINNED_RUN,
         "verus",
         "install",
         "--repo-root",
         ".",
-    ], "uv runs the pinned prover-tools source, not an installed or local copy"
-    assert layout.calls()[1]["argv"] == ["scripts/install_verus_z3.py"], (
-        "the Z3 installer is invoked through $(PYTHON)"
+        "--install-dir",
+        str(VERUS_BIN.parents[1]),
+    ], "uv runs the pinned prover-tools source, installing where the proof looks"
+    assert calls[1]["argv"][: len(PINNED_RUN) + 4] == [
+        *PINNED_RUN,
+        "z3",
+        "install",
+        "--repo-root",
+        ".",
+    ], "the solver installs through the same pinned tool, after the release"
+    assert str(Z3_BIN.parent) in calls[1]["argv"], (
+        "the solver lands where VERUS_Z3_PATH looks"
     )
 
 
 def test_verus_proof_forwards_the_binary_and_solver(layout: Layout) -> None:
-    """The proof target runs the pinned verifier with the pinned solver."""
+    """The proof target runs the pinned tool on the installed verifier."""
     layout.installed_verus()
+    layout.extractor("uv")
 
-    result = layout.make("verus-proof", VERUS_FLAGS="-q")
+    result = layout.make("verus-proof", VERUS_FLAGS='-q --triggers "--cfg a b"')
 
     assert result.returncode == 0, result.stderr
     (call,) = layout.calls()
-    assert call["program"] == "verus", "the pinned verifier is the program"
-    assert call["argv"] == ["verus/admission_recognizer.rs", "-q"], (
-        "the proof file and flags are forwarded"
-    )
+    assert call["program"] == "uv", "the pinned tool is the runner"
+    assert call["argv"] == [
+        *PINNED_RUN,
+        "verus",
+        "run",
+        "--repo-root",
+        ".",
+        "--verus-bin",
+        str(layout.root / VERUS_BIN),
+        "--no-install-missing",
+        "--proof-file",
+        "verus/admission_recognizer.rs",
+        "--extra-arg=-q",
+        "--extra-arg=--triggers",
+        "--extra-arg=--cfg a b",
+    ], "the installed binary and proof file are forwarded, each Verus flag as an extra argument"
     assert call["z3"] == str(layout.root / Z3_BIN), (
         "VERUS_Z3_PATH names the pinned solver"
     )
@@ -270,6 +291,7 @@ def test_malformed_version_stops_every_target(layout: Layout) -> None:
 def test_verus_proof_propagates_a_verifier_failure(layout: Layout) -> None:
     """A failing proof run makes the target fail."""
     layout.installed_verus()
+    layout.extractor("uv")
 
     result = layout.make("verus-proof", FAKE_EXIT="7")
 
@@ -280,12 +302,13 @@ def test_verus_proof_propagates_a_verifier_failure(layout: Layout) -> None:
 def test_verus_runs_the_proof_before_the_controls(layout: Layout) -> None:
     """The aggregate target runs both prerequisites, proof first."""
     layout.installed_verus()
+    layout.extractor("uv")
 
     result = layout.make("verus")
 
     assert result.returncode == 0, result.stderr
     programs = [call["program"] for call in layout.calls()]
-    assert programs == ["verus", "fake-python"], (
+    assert programs == ["uv", "fake-python"], (
         "the proof runs before the controls"
     )
     assert layout.calls()[1]["argv"][0] == "scripts/check_verus_controls.py", (

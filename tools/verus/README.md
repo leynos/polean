@@ -1,11 +1,12 @@
 # Pinned Verus prover
 
 `VERSION` and `SHA256SUMS` pin the Verus release used to verify the admission
-recognizer kernel. `Z3_SHA256SUMS` pins the Z3 solver that release needs.
-`make install-verus` downloads the release through `rust-prover-tools`, checks
-it against `SHA256SUMS`, unpacks it to `.verus/<version>/verus`, and then runs
-`scripts/install_verus_z3.py`, which installs the pinned solver to `.verus/z3`.
-`tools/rust-prover-tools/REF` pins the installer itself.
+recognizer kernel. `make install-verus` downloads the release through
+`rust-prover-tools`, checks it against `SHA256SUMS`, unpacks it to
+`.verus/<version>/verus`, and then runs `prover-tools z3 install`, which
+installs the Z3 solver that revision pins to `.verus/z3`. `make verus-proof`
+runs the proof through `prover-tools verus run`. `tools/rust-prover-tools/REF`
+pins the tool itself.
 
 Verus is not part of the Cargo workspace and not part of the E0 toolchain tuple
 in `toolchain-pins.json`. `make verus` is an on-demand target: it is not part of
@@ -84,9 +85,8 @@ machinery, and the controls exercise only the kernel's soundness contract.
 2. Update `VERSION` and the matching row of `SHA256SUMS`. Keep the archive name
    in the checksum row: the installer looks the digest up by that name.
 3. Read the Z3 version the release's `source/tools/get-z3.sh` downloads and
-   compare it with the version named in `Z3_SHA256SUMS`. If they differ,
-   replace that single row with the new version and its published digest; the
-   installer looks the digest up by the archive name in the row.
+   compare it with the one `prover-tools z3 install` installs. If they differ,
+   move `tools/rust-prover-tools/REF` to a revision that pins the new one.
 4. If the release pins a new `vstd`, update the `vstd` dev-dependency in
    `Cargo.toml` to the matching version and rebuild the lock file.
 5. Run `make install-verus` and then `make verus`, and record the result.
