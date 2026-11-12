@@ -145,7 +145,7 @@ verus-proof: ## Run the Verus proof entry point
 	}
 	VERUS_Z3_PATH="$(VERUS_Z3_PATH)" $(PROVER_TOOLS) verus run --repo-root . \
 		--verus-bin "$(VERUS_BIN)" --no-install-missing \
-		--proof-file "$(VERUS_PROOF_FILE)" $(VERUS_FLAGS)
+		--proof-file "$(VERUS_PROOF_FILE)" $(addprefix --extra-arg=,$(VERUS_FLAGS))
 
 verus-controls: ## Show the proof rejects mutated kernel bodies and weakened specs
 	@test -x "$(VERUS_BIN)" || { \

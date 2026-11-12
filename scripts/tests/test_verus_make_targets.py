@@ -175,7 +175,7 @@ def test_verus_proof_forwards_the_binary_and_solver(layout: Layout) -> None:
     layout.installed_verus()
     layout.extractor("uv")
 
-    result = layout.make("verus-proof", VERUS_FLAGS="--extra-arg=-q")
+    result = layout.make("verus-proof", VERUS_FLAGS="-q --triggers")
 
     assert result.returncode == 0, result.stderr
     (call,) = layout.calls()
@@ -192,7 +192,8 @@ def test_verus_proof_forwards_the_binary_and_solver(layout: Layout) -> None:
         "--proof-file",
         "verus/admission_recognizer.rs",
         "--extra-arg=-q",
-    ], "the installed binary, the proof file and the flags are forwarded"
+        "--extra-arg=--triggers",
+    ], "the installed binary and proof file are forwarded, each Verus flag as an extra argument"
     assert call["z3"] == str(layout.root / Z3_BIN), (
         "VERUS_Z3_PATH names the pinned solver"
     )
