@@ -140,13 +140,13 @@ fn settlement_does_not_run(state: &AuditState) -> Result<(), String> {
     if state.settlement.with_ref(|_| ()).is_some() {
         return Err("settlement ran on a report the adapter refused".to_owned());
     }
-    if let Some(calls) = state.settlement_calls.with_ref(|calls| *calls) {
-        if calls != 0 {
-            return Err(format!(
-                "the classification boundary reached settlement {calls} time(s) for a report the \
-                 adapter refused"
-            ));
-        }
+    if let Some(calls) = state.settlement_calls.with_ref(|calls| *calls)
+        && calls != 0
+    {
+        return Err(format!(
+            "the classification boundary reached settlement {calls} time(s) for a report the \
+             adapter refused"
+        ));
     }
     Ok(())
 }
