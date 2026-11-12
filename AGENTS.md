@@ -59,6 +59,11 @@ make design-check
 make markdownlint
 ```
 
+`make lint` first runs `make interrogate`, which needs `uv` and fails on any
+Python definition under `INTERROGATE_TARGETS` (`scripts` and `validation`)
+without a docstring, and on any `MISSED` row, since the percentage is rounded.
+Add a new Python directory to that list.
+
 `make lint` already runs `make lint-whitaker`, the Whitaker Dylint suite. Run
 it through the `whitaker` wrapper, never bare `cargo dylint`. Its first run on
 a machine builds the Dylint driver and needs the network.
