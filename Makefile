@@ -126,14 +126,15 @@ override VERUS_VERSION := $(shell awk 'NR == 1 && /^[0-9A-Za-z.]+$$/ { print; ex
 ifeq ($(VERUS_VERSION),)
 $(error VERUS_VERSION missing or malformed in tools/verus/VERSION; expected a release such as 0.2026.09.06.8dea4a2)
 endif
-# `prover-tools verus run` cannot read the pinned release's `--version` output,
-# which indents its `Toolchain:` line, so the target runs the binary that
-# `install-verus` has already installed and digest-checked.
-override VERUS_BIN := $(CURDIR)/.verus/$(VERUS_VERSION)/verus/verus
+# Both installers write under `.verus`, where `VERUS_BIN` and `VERUS_Z3_PATH`
+# find them. The shared tool owns the downloads, digests and the Z3 release; this
+# file only chooses where they land.
+override VERUS_INSTALL_DIR := .verus/$(VERUS_VERSION)
+override VERUS_BIN := $(CURDIR)/$(VERUS_INSTALL_DIR)/verus/verus
 
 install-verus: ## Install the pinned Verus release and its pinned Z3 solver
-	$(PROVER_TOOLS) verus install --repo-root .
-	$(PYTHON) scripts/install_verus_z3.py
+	$(PROVER_TOOLS) verus install --repo-root . --install-dir "$(VERUS_INSTALL_DIR)"
+	$(PROVER_TOOLS) z3 install --repo-root . --install-dir .verus/z3 --cache-dir .verus/z3-archive
 
 verus: verus-proof verus-controls ## Run the Verus proof and its negative controls
 
@@ -142,7 +143,9 @@ verus-proof: ## Run the Verus proof entry point
 		echo "Verus is not installed at $(VERUS_BIN); run 'make install-verus' first" >&2; \
 		exit 1; \
 	}
-	VERUS_Z3_PATH="$(VERUS_Z3_PATH)" "$(VERUS_BIN)" "$(VERUS_PROOF_FILE)" $(VERUS_FLAGS)
+	VERUS_Z3_PATH="$(VERUS_Z3_PATH)" $(PROVER_TOOLS) verus run --repo-root . \
+		--verus-bin "$(VERUS_BIN)" --no-install-missing \
+		--proof-file "$(VERUS_PROOF_FILE)" $(VERUS_FLAGS)
 
 verus-controls: ## Show the proof rejects mutated kernel bodies and weakened specs
 	@test -x "$(VERUS_BIN)" || { \
