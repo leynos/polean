@@ -52,11 +52,10 @@ pub fn entry(fixture: &str) -> Result<Entry, String> {
         // expected statement, no approved foundations — whether the report is
         // expected to be accepted or rejected. Only the report differs, so one
         // arm states the shared request rather than repeating it per outcome.
-        "AcceptedGround" | "InitSentinel" | "Sorry" | "SorryImported" | "Native" | "Undeclared"
-        | "ReachImported" | "WrongStatement" | "Unfolded" | "AxiomRoot" | "DefRoot"
-        | "RootAbsent" | "ForgeInit" | "ForgeImported" | "ModuleAbsent" | "WorkerGarbled" => {
-            (roots(&module, &["root"]), vec![goal], &[])
-        }
+        "AcceptedGround" | "InitSentinel" | "ImportedBase" | "Sorry" | "SorryImported"
+        | "Native" | "Undeclared" | "ReachImported" | "WrongStatement" | "Unfolded"
+        | "AxiomRoot" | "DefRoot" | "RootAbsent" | "ForgeInit" | "ForgeImported"
+        | "ModuleAbsent" | "WorkerGarbled" => (roots(&module, &["root"]), vec![goal], &[]),
         "AcceptedFoundations" => (roots(&module, &["root"]), vec![goal], FOUNDATIONS),
         "AcceptedClaimShape" | "WrongPolicyLiteral" => {
             (roots(&module, &["root"]), vec![claim_shape_policy()], &[])

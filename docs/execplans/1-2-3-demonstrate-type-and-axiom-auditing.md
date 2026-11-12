@@ -665,8 +665,8 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   `env.checked.get`, which that constructor leaves empty, so every root would
   silently report no axioms and the corpus would fail for the wrong reason. A
   correct single-source collection therefore needs a supported way to set the
-  checked environment, or a local collector, and re-verification of all
-  twenty-two entries. That is promotion work (roadmap 2.2.4); the divergence
+  checked environment, or a local collector, and re-verification of every
+  corpus entry. That is promotion work (roadmap 2.2.4); the divergence
   and its evidence are recorded in the findings note. Date/Author: 2026-11-07,
   implementer, after review proposed the change.
 - D23. Decision: record that the delivered scope exceeded the plan's original
@@ -1217,6 +1217,54 @@ Lean side to direct executable checks; and settlement's keys are the verified
 interface the proof is stated over, so a second domain representation is
 promotion work rather than this test-only demonstration.
 
+Review round 12 ran on the round-11 head, `9be9393`, after the branch was
+rebased onto `main` at `9648ee6`. Its pre-merge table kept four rows and added
+one wording comment outside the diff.
+
+The first row named a real gap in the worker's replay base. The base always
+holds `Init` and adds each toolchain module a fixture imports, but no accepted
+fixture imported one outside `Init`, so removing those additions would not have
+failed the corpus. `ImportedBase` now proves a `Std.HashMap` fact in a helper,
+so its replay needs `Std.Data.HashMap`; dropping the additions turns its corpus
+line into `kernel_rejected`, which the mutation evidence below records. The
+fixture is accepted with no axiom and has its own feature scenario, so the
+specification and the corpus both name it. Removing the additions from the
+worker and rebuilding it turns that scenario into
+`Rejected([Finding { code: KernelRejected }])`; the source was restored and
+`git diff lean/` is empty.
+
+The second row asked for the mutated worker output to cross the classification
+boundary. The malformed-report scenario now also routes the worker's own report
+through `corpus::classify_document`, the boundary `corpus_matches_manifest`
+uses, and asserts `malformed_report`. That boundary takes an `on_decoded`
+callback which runs only after decoding succeeds; the scenario requires its
+count to stay at zero, so "settlement does not run" is observed at the seam
+rather than inferred from the scenario's step order.
+
+The wording repairs are the ExecPlan and BDD module claims, which said every
+scenario settles, and the developer-guide pin evidence, which said the
+snapshots carry the githash. They now say the malformed scenario is refused
+before settlement, and that the snapshot redacts the pin while settlement
+checks it separately. The module docstrings now call the fixture pairs
+unit-test data and name the property tests' strategies and shared sample.
+
+The two standing warnings, generated Lean property tests and a second domain
+representation for settlement keys, returned unchanged. D24 records both
+decisions and round 12 repeats their evidence.
+
+The rebase onto `9648ee6` also moved the pin to `nightly-2026-11-11`, whose
+Cranelift component does not lower `llvm.x86.sse2.pmulhu.w`
+(rustc_codegen_cranelift#171). That intrinsic is how `zmij`, the float
+formatter behind `serde_json`'s diagnostics, renders an `f64`, and the panic it
+raises cannot unwind. Two negative cases in the report tests, an integer above
+`u64` and a fractional level, reach it through the decoder's own refusal
+message, so `make test` aborted instead of failing one case. A scratch crate
+depending only on `serde_json` reproduced the abort on the same pin, which
+places the fault in the backend rather than in this decoder. `zmij` now builds
+with LLVM alone, under `[profile.dev.package.zmij]` in `.cargo/config.toml`, and
+`scripts/tests/test_build_standard.py` holds the exception. The developer guide
+names the exception beside the Cranelift default it displaces.
+
 ## Context and orientation
 
 Polean is a design scaffold. `src/lib.rs` holds a project name and a status
@@ -1681,6 +1729,7 @@ Finding and reason names are contractual.
 | `AcceptedClaimShape`  | Named claim over a structural literal        | `accepted`                                   |
 | `MaximalPolicy`       | Claim over a 16-rule, 16-atom literal        | `accepted`, inside the tree bound            |
 | `InitSentinel`        | `initialize` writes a sentinel if ever run   | `accepted`, and no sentinel file             |
+| `ImportedBase`        | Replay needs a `Std` module outside `Init`   | `accepted`                                   |
 | `MixedRoots`          | One clean root and one with `sorry`          | `rejected`: `sorry_axiom` on one root only   |
 | `Sorry`               | Direct `sorry`                               | `rejected`: `sorry_axiom`                    |
 | `SorryImported`       | `sorry` behind an imported helper            | `rejected`: `sorry_axiom`                    |
@@ -1810,12 +1859,13 @@ env -i LEAN_SYSROOT="$PWD/.polean/tools/lean/$SHA" LEAN_PATH="$SCRATCH" \
 
 ## Validation and acceptance
 
-The behavioural specification is `tests/features/axiom_audit.feature`. Each
-scenario runs the real worker over a corpus fixture, decodes the report with
-the strict adapter, and settles it, so the specification and the corpus
-exercise the same process boundary. The malformed-report scenario adds a field
-the contract does not name to the worker's own report before decoding, and
-asserts that settlement never ran.
+The behavioural specification is `tests/features/axiom_audit.feature`. Every
+scenario except the malformed-report one runs the real worker over a corpus
+fixture, decodes the report with the strict adapter, and settles it, so the
+specification and the corpus exercise the same process boundary. The
+malformed-report scenario adds a field the contract does not name to the
+worker's own report, asserts that the adapter refuses it, and asserts through
+an explicit seam that the classification boundary never reached settlement.
 
 The feature file is the authority for those scenarios; they are deliberately
 not copied here, because an embedded copy drifts from the executable
@@ -2157,3 +2207,13 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   scenarios at the worker boundary including the malformed report, the fixture
   docstring correction, and the snapshot pin redaction. No scope change from
   revision 11.
+- Revision 13 (2026-11-12): recorded review round 12 and the rebase onto
+  `main` at `9648ee6`: the `ImportedBase` fixture for a replay base outside
+  `Init`, the classification seam for the malformed report, the two module
+  docstrings, and the wording corrections in the validation section and the
+  developer guide. The corpus grows by one accepted fixture; no other scope
+  change from revision 12.
+- Revision 14 (2026-11-12): recorded the pinned toolchain's Cranelift fault for
+  the float formatter `serde_json` uses, the LLVM override for `zmij` that keeps
+  the development and test profiles usable, its build-standard property test,
+  and the developer-guide note. No scope change from revision 13.

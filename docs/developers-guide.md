@@ -357,8 +357,11 @@ A Lean pin change moves five things that the audit corpus holds fixed:
 - `githash` in `examples/audit/sample-report.json` must equal `PIN`.
   `decode_report_accepts_the_shared_sample` compares them, so changing only
   `PIN` fails `make test`.
-- The canonical snapshots under `tests/toolchain/smoke/audit/snapshots/` carry
-  the githash and the report shape. Review a diff with `cargo insta review`.
+- The canonical snapshots under `tests/toolchain/smoke/audit/snapshots/` pin
+  the report shape with `githash` redacted to `<pinned>`, so a pin bump does
+  not churn them. Settlement separately compares the worker's `githash` with
+  `PIN`, so the pin is checked at the settlement boundary rather than by a
+  snapshot. Review any other diff with `cargo insta review`.
 - The foundation names in `tests/toolchain/smoke/audit/requests.rs` and the
   settlement's literal keys are the pinned axioms. A toolchain that renames or
   adds one changes what acceptance means.

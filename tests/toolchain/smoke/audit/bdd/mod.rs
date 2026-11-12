@@ -1,16 +1,18 @@
 //! The audit workflow, bound to `tests/features/axiom_audit.feature`.
 //!
 //! The feature file is the readable specification: one scenario per distinct
-//! settlement outcome, each naming a representative corpus fixture. Each
-//! scenario runs the real `polean-audit` worker over a corpus fixture, decodes
-//! its report with the strict wire adapter, and settles the decoded report
-//! against the request the corpus asks. The scenario therefore exercises the
-//! boundary it describes rather than a hand-built pair at the settlement seam.
+//! settlement outcome, each naming a representative corpus fixture. Every
+//! scenario except the malformed-report one runs the real `polean-audit`
+//! worker over a corpus fixture, decodes its report with the strict wire
+//! adapter, and settles the decoded report against the request the corpus
+//! asks. Each therefore exercises the boundary it describes rather than a
+//! hand-built pair at the settlement seam.
 //!
 //! The malformed-report scenario starts from the worker's own report for
-//! `AcceptedGround` and adds a field the contract does not name before
-//! decoding, so its refusal is exercised at the process-output boundary and
-//! settlement is then asserted not to have run.
+//! `AcceptedGround` and adds a field the contract does not name. It asserts
+//! that the strict adapter refuses the document, that the corpus's
+//! classification boundary reports `malformed_report`, and, through a seam
+//! that counts decoded reports, that settlement was never reached.
 //!
 //! A scenario that passes is evidence about this build of the worker, the
 //! decoder, and the settlement function over these fixtures. It is not evidence
@@ -33,7 +35,7 @@ use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 pub use support::{finding_code, protocol_breach, state, with_settlement};
 
-use super::{requests, runner::Corpus};
+use super::{corpus, manifest::Outcome, requests, runner::Corpus};
 use crate::audit::{
     settlement::decision::{
         AuditReport,
@@ -56,6 +58,7 @@ const _: [&str; 1] = [include_str!("../../../../features/axiom_audit.feature")];
 /// The fixtures the feature scenarios name, dependencies before dependants.
 const SOURCES: &[&str] = &[
     "AuditFixture.Goal",
+    "AuditFixture.ImportedBase",
     "AuditFixture.AcceptedGround",
     "AuditFixture.AcceptedFoundations",
     "AuditFixture.Sorry",
@@ -96,6 +99,10 @@ pub(super) struct AuditState {
     document: Slot<String>,
     /// The result of the most recent decode.
     decoded: Slot<Result<AuditReport, DecodeError>>,
+    /// The corpus boundary's classification of the most recent document.
+    outcome: Slot<Outcome>,
+    /// How many times classification reached settlement.
+    settlement_calls: Slot<usize>,
 }
 
 /// Run the worker over the named fixture and decode its report.
@@ -185,6 +192,29 @@ fn adapter_decodes(state: &AuditState) -> Result<(), String> {
     Ok(())
 }
 
+/// Classify the selected document at the corpus's process-output boundary.
+///
+/// The boundary is the one `corpus_matches_manifest` uses for every fixture,
+/// so the scenario exercises the same classification a real run does. The
+/// callback counts decoded reports: a document that does not decode must be
+/// classified as a tool failure without the settlement step being reached.
+#[when("the corpus classifies the document")]
+fn corpus_classifies(state: &AuditState) -> Result<(), String> {
+    let document = state
+        .document
+        .with_ref(String::clone)
+        .ok_or_else(|| "no document was selected before classification".to_owned())?;
+    let entry = requests::entry("AcceptedGround")?;
+    let mut settlement_calls = 0usize;
+    let outcome = corpus::classify_document(&entry, document.as_bytes(), || {
+        settlement_calls += 1;
+    })
+    .map_err(|error| format!("the corpus refused the document: {error}"))?;
+    state.outcome.set(outcome);
+    state.settlement_calls.set(settlement_calls);
+    Ok(())
+}
+
 /// Require acceptance.
 #[then("the settlement accepts")]
 fn settlement_accepts(state: &AuditState) -> Result<(), String> {
@@ -270,15 +300,46 @@ fn adapter_refuses_as_malformed(state: &AuditState, field: String) -> Result<(),
         .ok_or_else(|| "the adapter did not run".to_owned())?
 }
 
-/// Require that no settlement outcome was recorded.
+/// Require the corpus boundary to report the named tool failure.
+#[then("the classification reports the tool failure {reason}")]
+fn classification_reports_tool_failure(state: &AuditState, reason: String) -> Result<(), String> {
+    state
+        .outcome
+        .with_ref(|outcome| match outcome {
+            Outcome::ToolFailure(observed) if *observed == reason => Ok(()),
+            Outcome::ToolFailure(observed) => Err(format!(
+                "expected the tool failure {reason}, got {observed}"
+            )),
+            Outcome::Accepted => Err(format!(
+                "expected the tool failure {reason}, got acceptance"
+            )),
+            Outcome::Rejected(findings) => Err(format!(
+                "expected the tool failure {reason}, got a rejection with {} finding(s)",
+                findings.len()
+            )),
+        })
+        .ok_or_else(|| "the corpus did not classify a document".to_owned())?
+}
+
+/// Require that settlement was never reached.
 ///
-/// A malformed report must be refused by the adapter, so settlement is never
-/// asked to decide it. This asserts the boundary rather than relying on the
-/// scenario's step order.
+/// A malformed report must be refused by the adapter, and the corpus boundary
+/// must classify it as a tool failure before settlement is asked to decide it.
+/// The scenario's settlement slot covers the first claim; the counter the
+/// boundary's callback records covers the second. This asserts the boundary
+/// rather than relying on the scenario's step order.
 #[then("the settlement does not run")]
 fn settlement_does_not_run(state: &AuditState) -> Result<(), String> {
     if state.settlement.with_ref(|_| ()).is_some() {
         return Err("settlement ran on a report the adapter refused".to_owned());
+    }
+    if let Some(calls) = state.settlement_calls.with_ref(|calls| *calls) {
+        if calls != 0 {
+            return Err(format!(
+                "the classification boundary reached settlement {calls} time(s) for a report the \
+                 adapter refused"
+            ));
+        }
     }
     Ok(())
 }
@@ -298,6 +359,14 @@ fn accepted_ground_is_accepted(#[from(state)] _state: AuditState) {}
     name = "A theorem depending only on approved foundations is accepted"
 )]
 fn accepted_foundations_is_accepted(#[from(state)] _state: AuditState) {}
+
+/// A theorem whose replay needs a toolchain module outside `Init` is accepted.
+#[ignore = "needs make tools; run make toolchain-smoke"]
+#[scenario(
+    path = "tests/features/axiom_audit.feature",
+    name = "A theorem whose replay needs an imported toolchain module is accepted"
+)]
+fn imported_base_is_accepted(#[from(state)] _state: AuditState) {}
 
 /// A theorem depending on `sorry` is rejected.
 #[ignore = "needs make tools; run make toolchain-smoke"]

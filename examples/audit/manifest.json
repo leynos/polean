@@ -3,6 +3,7 @@
 {"fixture":"AcceptedClaimShape","module":["AuditFixture","AcceptedClaimShape"],"settlement":"accepted","findings":[],"reason":null}
 {"fixture":"MaximalPolicy","module":["AuditFixture","MaximalPolicy"],"settlement":"accepted","findings":[],"reason":null}
 {"fixture":"InitSentinel","module":["AuditFixture","InitSentinel"],"settlement":"accepted","findings":[],"reason":null}
+{"fixture":"ImportedBase","module":["AuditFixture","ImportedBase"],"settlement":"accepted","findings":[],"reason":null}
 {"fixture":"MixedRoots","module":["AuditFixture","MixedRoots"],"settlement":"rejected","findings":[{"root":1,"code":"sorry_axiom"}],"reason":null}
 {"fixture":"Sorry","module":["AuditFixture","Sorry"],"settlement":"rejected","findings":[{"root":0,"code":"sorry_axiom"}],"reason":null}
 {"fixture":"SorryImported","module":["AuditFixture","SorryImported"],"settlement":"rejected","findings":[{"root":0,"code":"sorry_axiom"}],"reason":null}

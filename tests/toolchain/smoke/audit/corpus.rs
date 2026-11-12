@@ -5,7 +5,7 @@
 //! request. The outcome must equal the hand-written manifest line.
 //!
 //! Nothing here proves the worker truthful. A matching corpus shows the
-//! worker and settlement agree with the plan on these twenty-two cases; the
+//! worker and settlement agree with the plan on these twenty-three cases; the
 //! settlement proof separately shows what acceptance means if the report is
 //! true. Neither substitutes for the other.
 //!
@@ -34,6 +34,7 @@ use crate::{
 /// The fixtures to compile, dependencies before dependants.
 const FIXTURES: &[&str] = &[
     "AuditFixture.Goal",
+    "AuditFixture.ImportedBase",
     "AuditFixture.Claim",
     "AuditFixture.SorryBase",
     "AuditFixture.ReachBase",
@@ -213,10 +214,30 @@ fn classify(entry: &Entry, output: &Output) -> Result<Outcome, String> {
         }
         return Ok(Outcome::ToolFailure("worker_failed"));
     }
-    match decode_report(&output.stdout) {
+    classify_document(entry, &output.stdout, || {})
+}
+
+/// Classify the standard output a successful worker run left behind.
+///
+/// This is the process-output classification boundary: a document that does
+/// not decode is a tool failure and never reaches settlement. `on_decoded`
+/// runs exactly when the document decoded, immediately before settlement is
+/// asked to decide it, so a caller can observe whether that step was reached.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the request is refused, which would mean the
+/// corpus itself is inadmissible.
+pub(super) fn classify_document(
+    entry: &Entry,
+    stdout: &[u8],
+    mut on_decoded: impl FnMut(),
+) -> Result<Outcome, String> {
+    match decode_report(stdout) {
         Err(DecodeError::Malformed(_)) => Ok(Outcome::ToolFailure("malformed_report")),
         Err(DecodeError::OutputOverflow) => Ok(Outcome::ToolFailure("output_overflow")),
         Ok(report) => {
+            on_decoded();
             let settled = settle(&entry.request, &report, PIN.as_bytes())
                 .map_err(|refusal| format!("{}: request refused: {refusal:?}", entry.fixture))?;
             Ok(manifest::outcome(settled))

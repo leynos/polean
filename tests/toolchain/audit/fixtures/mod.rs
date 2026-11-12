@@ -1,15 +1,17 @@
-//! Shared request and report pairs for the audit unit and property tests.
+//! Request and report pairs for the audit unit tests.
 //!
 //! Every unit test names the same corpus fixtures the plan's Table 2 lists, and
-//! the builders here are the single place their bytes are constructed. A unit
-//! test and a property test that both say "`Sorry`" therefore decide the same
-//! report.
+//! the builders here are the single place their bytes are constructed, so one
+//! test's "`Sorry`" is the same report as another's.
 //!
 //! These are fixtures, not a corpus: nothing here compiles Lean or runs the
-//! worker. The feature scenarios in `tests/toolchain/smoke/audit/bdd/` do not
-//! use these pairs: each takes its request from the provisioned corpus and its
-//! report from the real worker. That corpus is what exercises the real
-//! interface.
+//! worker. The property tests do not use these pairs, because they are about
+//! inputs rather than named cases: they generate names, trees and malformed
+//! documents from strategies, and mutate the shared sample report in
+//! `examples/audit/sample-report.json`. The feature scenarios in
+//! `tests/toolchain/smoke/audit/bdd/` take their requests from the provisioned
+//! corpus and their reports from the real worker. That corpus is what
+//! exercises the real interface.
 //!
 //! The module holds the vocabulary every fixture shares and re-exports the
 //! case builders in [`cases`], so callers keep naming `fixtures::accepted_ground`

@@ -7,9 +7,10 @@
 //! - [`settlement::decision`] decides a report against a request using those keys. It is pure: no
 //!   `serde`, no I/O, and no Lean. It is also the source `verus/audit_settlement.rs` verifies, so
 //!   it holds no dependency that a proof cannot see.
-//! - [`fixtures`] builds the request and report pairs the unit and property tests share, so one
-//!   case names the same bytes everywhere. The feature scenarios run the real worker instead and
-//!   live in `tests/toolchain/smoke/audit/bdd/`.
+//! - [`fixtures`] builds the request and report pairs the unit tests share, so one case names the
+//!   same bytes everywhere. The property tests generate their own documents from strategies and
+//!   mutate the shared sample report; the feature scenarios run the real worker instead and live in
+//!   `tests/toolchain/smoke/audit/bdd/`.
 //!
 //! The split matters for assurance. A proof over settlement says acceptance
 //! follows from a truthful report; it says nothing about whether the report is

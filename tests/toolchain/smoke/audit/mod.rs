@@ -1,6 +1,6 @@
 //! The provisioned audit corpus: the worker, the fixtures, and settlement.
 //!
-//! `corpus` runs the real `polean-audit` worker over twenty-two committed Lean
+//! `corpus` runs the real `polean-audit` worker over twenty-three committed Lean
 //! fixtures and requires each settlement to equal the hand-written manifest.
 //! `sentinel_fires_when_initializers_run` is the positive control for the
 //! no-execution claim: importing a module must not run its initializer, while

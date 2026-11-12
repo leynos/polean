@@ -33,6 +33,7 @@ AUDIT_CORPUS = (
     ("AcceptedClaimShape", "accepted", None, ()),
     ("MaximalPolicy", "accepted", None, ()),
     ("InitSentinel", "accepted", None, ()),
+    ("ImportedBase", "accepted", None, ()),
     ("MixedRoots", "rejected", None, ((1, "sorry_axiom"),)),
     ("Sorry", "rejected", None, ((0, "sorry_axiom"),)),
     ("SorryImported", "rejected", None, ((0, "sorry_axiom"),)),

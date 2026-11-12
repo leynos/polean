@@ -10,6 +10,11 @@ Feature: Settlement decides audit reports
     When the settlement decides the report
     Then the settlement accepts
 
+  Scenario: A theorem whose replay needs an imported toolchain module is accepted
+    Given the audit fixture ImportedBase
+    When the settlement decides the report
+    Then the settlement accepts
+
   Scenario: A theorem depending on sorry is rejected
     Given the audit fixture Sorry
     When the settlement decides the report
@@ -55,4 +60,6 @@ Feature: Settlement decides audit reports
     Given a report with an unknown field
     When the adapter decodes the report
     Then the adapter refuses it as malformed, naming extra
+    When the corpus classifies the document
+    Then the classification reports the tool failure malformed_report
     And the settlement does not run
