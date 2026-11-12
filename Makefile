@@ -6,7 +6,7 @@ CARGO ?= cargo
 WHITAKER ?= whitaker
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke install-verus verus verus-proof verus-controls
+.PHONY: help all build clean test typecheck lint interrogate lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke install-verus verus verus-proof verus-controls
 
 SHELL := bash
 
@@ -28,7 +28,33 @@ clean: ## Remove Rust and Python build artefacts
 	$(CARGO) clean
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 
-lint: lint-whitaker ## Build documentation, run Clippy and the Whitaker suite with warnings denied
+# Interrogate scans each target recursively, subject to its default exclusions
+# (check a new file against the verbose report). Add a new Python directory to
+# the targets. Python 3.14 is required: interrogate parses the source with the
+# interpreter that runs it, and the scripts import `compression.zstd`.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE_TARGETS ?= scripts validation
+# Level 2 prints a MISSED row per undocumented definition, which the
+# `interrogate` target fails on: the rounded percentage alone can pass a lone
+# gap.
+INTERROGATE_FLAGS ?= -vv --no-color --fail-under 100
+INTERROGATE ?= uv tool run --python 3.14 --from 'interrogate==$(INTERROGATE_VERSION)' interrogate
+
+# `grep` reads the whole report, so an early exit cannot break the pipe.
+interrogate: ## Enforce complete Python docstring coverage
+	@set -euo pipefail; \
+	  status=0; \
+	  report="$$($(INTERROGATE) $(INTERROGATE_FLAGS) $(INTERROGATE_TARGETS))" || status=$$?; \
+	  printf '%s\n' "$$report"; \
+	  test "$$status" -eq 0 || exit "$$status"; \
+	  found=0; \
+	  printf '%s\n' "$$report" | grep '| *MISSED *|' >/dev/null || found=$$?; \
+	  if test "$$found" -ne 1; then \
+	    printf '%s\n' 'interrogate: undocumented definitions remain (or the MISSED check failed); see above' >&2; \
+	    exit 1; \
+	  fi
+
+lint: interrogate lint-whitaker ## Check docstring coverage, build documentation, run Clippy and the Whitaker suite with warnings denied
 	RUSTDOCFLAGS="-D warnings" $(CARGO) doc --no-deps --all-features
 	$(CARGO) clippy --all-targets --all-features -- -D warnings
 

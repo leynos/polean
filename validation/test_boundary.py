@@ -70,11 +70,13 @@ class Tampered(VD.Repository):
 
     def __init__(self, root: Path, relative: str,
                  mutate: Callable[[str], str]) -> None:
+        """Remember the one path to tamper with and the mutation to apply."""
         super().__init__(root)
         self.relative = relative
         self.mutate = mutate
 
     def read_text(self, relative: str) -> str:
+        """Return the document, mutated when it is the tampered path."""
         text = super().read_text(relative)
         return self.mutate(text) if relative == self.relative else text
 
@@ -82,6 +84,7 @@ class Tampered(VD.Repository):
 def edit_json(mutate: Callable[[Any], Any]) -> Callable[[str], str]:
     """Lift a mutation of a parsed document to one over its text."""
     def apply(text: str) -> str:
+        """Parse the text, mutate the document and serialise it again."""
         return json.dumps(mutate(json.loads(text)), ensure_ascii=False, indent=2)
 
     return apply
@@ -119,6 +122,7 @@ def test_a_mutated_policy_changes_the_review() -> None:
     that never evaluated the rules, would accept this.
     """
     def deny_everything(policy: dict[str, Any]) -> dict[str, Any]:
+        """Replace the rule list with one rule over three atoms."""
         mutated = copy.deepcopy(policy)
         mutated["rules"] = [["same_tenant", "write_action", "admin_role"]]
         return mutated
@@ -132,6 +136,7 @@ def test_a_mutated_policy_changes_the_review() -> None:
 def test_source_drift_is_rejected() -> None:
     """Rendered source that no longer matches the committed fixture fails."""
     def blank_the_source(source: str) -> str:
+        """Append a hand edit that the committed fixture does not contain."""
         return source + "\n# hand edit\n"
 
     tampered = Tampered(ROOT, VD.policy_folder("baseline") + "/policy.rego",
@@ -149,6 +154,7 @@ def test_a_mutated_profile_widening_the_grammar_is_rejected() -> None:
     profile contract is compared against the constant.
     """
     def widen(profile: dict[str, Any]) -> dict[str, Any]:
+        """Add an ``is_root`` atom that the admitted vocabulary lacks."""
         mutated = copy.deepcopy(profile)
         mutated["atoms"]["is_root"] = "input.subject.is_root"
         return mutated
@@ -215,6 +221,7 @@ def test_a_missing_witness_is_a_named_boundary_error() -> None:
 def test_a_failed_run_leaves_the_tree_untouched() -> None:
     """A rejected fixture must not publish a summary or rewrite a witness."""
     def blank_the_source(source: str) -> str:
+        """Append a hand edit that the committed fixture does not contain."""
         return source + "\n# hand edit\n"
 
     before_witnesses = snapshot(ROOT)
@@ -368,6 +375,7 @@ def test_the_property_suite_reads_the_profile_it_is_handed() -> None:
     import property_fixtures as PF
 
     def rename_an_atom(profile: dict[str, Any]) -> dict[str, Any]:
+        """Rename the same_tenant atom so the property suite must follow it."""
         mutated = copy.deepcopy(profile)
         mutated["atoms"]["same_tenant"] = "tenant_match"
         return mutated

@@ -48,7 +48,8 @@ targets are:
 | `make check-fmt`         | Verify Rust formatting and Markdown table layout; changes nothing.  |
 | `make fmt`               | Rewrite Rust formatting and Markdown tables in place.               |
 | `make typecheck`         | Type-check every Rust target with warnings denied.                  |
-| `make lint`              | Build documentation, then run Clippy and the Whitaker suite.        |
+| `make interrogate`       | Require a docstring on every Python definition (100 per cent).      |
+| `make lint`              | Check docstrings, build documentation, run Clippy and Whitaker.     |
 | `make lint-whitaker`     | Run the Whitaker Dylint suite through its wrapper, warnings denied. |
 | `make markdownlint`      | Lint Markdown with the repository configuration.                    |
 | `make test`              | Run Rust unit, integration, and documentation tests.                |

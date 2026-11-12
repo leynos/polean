@@ -196,6 +196,7 @@ class Suite:
     """
 
     def __init__(self, admitted: Admitted) -> None:
+        """Bind the suite to the admitted profile its properties read."""
         self.admitted = admitted
 
     @given(rules=RULES, request=requests())
