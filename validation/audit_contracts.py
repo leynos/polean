@@ -167,6 +167,15 @@ class ManifestLineError(AssertionError):
     """Report one audit manifest line that is not valid JSON."""
 
     def __init__(self, number: int, error: json.JSONDecodeError) -> None:
+        """Name the malformed manifest line and the decoder's complaint.
+
+        Parameters
+        ----------
+        number:
+            The one-based line the manifest reader was decoding.
+        error:
+            The decoder's refusal, quoted after the line number.
+        """
         super().__init__(f"{AUDIT_MANIFEST} line {number} is not JSON: {error}")
 
 
