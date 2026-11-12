@@ -143,12 +143,12 @@ every commit. It is not in `make all` for that reason.
   provisioned tools) passes under it on `nightly-2026-11-11`, measured on
   2026-11-12, with one per-package exception. `zmij`, the float formatter
   `serde_json` uses in its diagnostics, renders an `f64` through an SSE2
-  intrinsic that Cranelift does not lower
-  (`llvm.x86.sse2.pmulhu.w`; rustc_codegen_cranelift#171). The resulting panic
-  cannot unwind, so formatting a diagnostic about a floating-point value would
-  abort the process rather than refuse a document. `[profile.dev.package.zmij]`
-  therefore selects LLVM for that crate alone, and
-  `scripts/tests/test_build_standard.py` holds the exception in place.
+  intrinsic that Cranelift does not lower (`llvm.x86.sse2.pmulhu.w`;
+  rustc_codegen_cranelift#171). The resulting panic cannot unwind, so
+  formatting a diagnostic about a floating-point value would abort the process
+  rather than refuse a document. `[profile.dev.package.zmij]` therefore selects
+  LLVM for that crate alone, and `scripts/tests/test_build_standard.py` holds
+  the exception in place.
 
 Assigning `RUSTFLAGS` replaces every `rustflags` source, so the `typecheck`
 recipe restates the flags through `STANDARD_RUSTFLAGS`. The Whitaker route

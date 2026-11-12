@@ -666,8 +666,8 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   silently report no axioms and the corpus would fail for the wrong reason. A
   correct single-source collection therefore needs a supported way to set the
   checked environment, or a local collector, and re-verification of every
-  corpus entry. That is promotion work (roadmap 2.2.4); the divergence
-  and its evidence are recorded in the findings note. Date/Author: 2026-11-07,
+  corpus entry. That is promotion work (roadmap 2.2.4); the divergence and its
+  evidence are recorded in the findings note. Date/Author: 2026-11-07,
   implementer, after review proposed the change.
 - D23. Decision: record that the delivered scope exceeded the plan's original
   tolerance, and the sponsor's revision of that tolerance to 15,000 net lines,
@@ -1262,8 +1262,8 @@ message, so `make test` aborted instead of failing one case. A scratch crate
 depending only on `serde_json` reproduced the abort on the same pin, which
 places the fault in the backend rather than in this decoder. `zmij` now builds
 with LLVM alone, under `[profile.dev.package.zmij]` in `.cargo/config.toml`, and
-`scripts/tests/test_build_standard.py` holds the exception. The developer guide
-names the exception beside the Cranelift default it displaces.
+`scripts/tests/test_build_standard.py` holds the exception. The developer
+guide names the exception beside the Cranelift default it displaces.
 
 ## Context and orientation
 
@@ -2214,6 +2214,6 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   developer guide. The corpus grows by one accepted fixture; no other scope
   change from revision 12.
 - Revision 14 (2026-11-12): recorded the pinned toolchain's Cranelift fault for
-  the float formatter `serde_json` uses, the LLVM override for `zmij` that keeps
-  the development and test profiles usable, its build-standard property test,
-  and the developer-guide note. No scope change from revision 13.
+  the float formatter `serde_json` uses, the LLVM override for `zmij` that
+  keeps the development and test profiles usable, its build-standard property
+  test, and the developer-guide note. No scope change from revision 13.
