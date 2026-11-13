@@ -1320,6 +1320,19 @@ The review also raised one outside-diff comment on the developer guide:
 3.14, and the prerequisites did not say so. The guide now lists `uv` and names
 `make interrogate` beside the 3.14 targets.
 
+The repairs landed as `9ad145b`. Pushing that head refreshed the pre-merge
+table to 13 passed and one warning: the checker itself moved Testing (Property
+/ Proof) to passed and cited the generated range checks, so the renderer
+warning is cleared by inspection of the new tree rather than by the reply.
+Domain Architecture is the remaining warning, declined in the review
+conversation and by D24. All three hosted workflows passed again on `9ad145b`.
+The gate sweep on the same tree ran every gate green: `check-fmt` and
+`markdownlint` with no findings, `typecheck`, `lint` (interrogate, Whitaker,
+rustdoc and Clippy), `test` (214 passed, 22 skipped, 1 doc test),
+`test-scripts` (139 passed; the fall from 172 is #46's removal of the local Z3
+installer and its two test modules), `design-check`, and `toolchain-smoke` (22
+passed, with the renderer executable reporting `renderer: 6784 checks passed`).
+
 ## Context and orientation
 
 Polean is a design scaffold. `src/lib.rs` holds a project name and a status
