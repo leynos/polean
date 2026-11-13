@@ -15,6 +15,8 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - Python 3.11 or later for the design harness;
 - `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
   checks;
+- `uv`, which `make interrogate` runs interrogate through, and so `make lint`
+  and `make all` need too;
 - `cargo-audit` for `make audit`, which is a periodic check rather than a
   commit gate; and
 - for the toolchain targets only: Python 3.14 built with `zstd` support (so
@@ -24,14 +26,17 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - for the Verus targets only: network access on the first `make install-verus`
   run, `uv`, and the pinned release and solver under `.verus/`.
 
-`make tools`, `make test-scripts`, and `make toolchain-smoke` are the only
-targets that need the 3.14 interpreter, because the tests import the script and
-it imports `compression.zstd` at load time. Point them at one with
+`make tools`, `make test-scripts`, and `make toolchain-smoke` need the 3.14
+interpreter, because the tests import the script and it imports
+`compression.zstd` at load time. Point them at one with
 `make toolchain-smoke PYTHON=...`. If no 3.14 interpreter with `pytest` is
 installed,
 `uv run --python 3.14 --with pytest==9.1.1 python -m pytest scripts/tests` runs
 the same suite in an ephemeral environment and leaves no `uv.lock` or `.venv`
-behind. `cargo-insta` is needed only to review a changed Regorus AST snapshot.
+behind. `make interrogate` asks `uv` for 3.14 as well
+(`uv tool run --python 3.14`), so `make lint` fetches an interpreter on a host
+that has none. `cargo-insta` is needed only to review a changed Regorus AST
+snapshot.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
 `mdtablefix` 0.6.1 or later and `markdownlint-cli2` to reproduce every

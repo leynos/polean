@@ -5,8 +5,10 @@
 //! show that the renderer bounds its walk over a *shared* expression graph. The
 //! Lean side, `lean/PoleanAuditRenderTests.lean`, drives `treeBounded` over
 //! spines and self-applying chains, and `truncateUtf8` at and beyond the
-//! contract's message bound; this module builds that executable with the pinned
-//! Lake and runs it.
+//! contract's message bound. It also generates inputs: mixed-width strings at
+//! every limit, and trees under every combination of depth and node bounds,
+//! checked against oracles that do not restate the implementation. This module
+//! builds that executable with the pinned Lake and runs it.
 //!
 //! The deadline is the point of the test. The guarded walk finishes in tens of
 //! milliseconds, but with the node-budget guard bypassed the same input expands
@@ -39,7 +41,7 @@ const POLL: Duration = Duration::from_millis(20);
 ///
 /// Pinned here so a check that silently disappears from the Lean list fails this
 /// test rather than shrinking it.
-const EXPECTED_CHECKS: usize = 28;
+const EXPECTED_CHECKS: usize = 6784;
 
 /// The renderer's own bound tests pass, and the node budget bounds the walk.
 ///

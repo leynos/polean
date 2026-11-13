@@ -47,9 +47,13 @@ executable, `polean-audit-render-tests`, that drives `treeBounded` directly
 over in-bound and over-bound spines and over a self-applying chain whose
 expanded tree is exponential in the graph it denotes, and drives `truncateUtf8`
 at and beyond the contract's message bound, including characters that would
-cross it. `tests/toolchain/smoke/audit/render.rs` builds it and runs it under a
-deadline, so a bypassed node budget fails as a timeout rather than hanging the
-gate.
+cross it. Beside those fixed cases it generates inputs: mixed-width strings at
+every limit, checked for prefix, fit and maximality against the input's own
+prefixes, and a tree family under every combination of depth and node bounds,
+checked against a fold over the `Expr` that counts nodes and depth from the
+grammar alone. `tests/toolchain/smoke/audit/render.rs` builds it and runs it
+under a deadline, so a bypassed node budget fails as a timeout rather than
+hanging the gate.
 
 ## What belongs here
 

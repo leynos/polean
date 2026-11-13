@@ -704,6 +704,22 @@ regression candidates for 4.3.2. Those affecting this milestone are below.
   worker's report, without new assurance. The reviewer's suggestion is
   promotion work (roadmap 2.2.4) if a domain name type is wanted where policy
   semantics live. Date/Author: 2026-11-08, implementer, after review raised it.
+- D25. Decision: answer the renderer-property warning with generated properties
+  inside the pinned package, stated so they do not restate the implementation,
+  rather than with a generator library or an independent renderer. Rationale:
+  `truncateUtf8` has a property that needs no oracle at all — the result is a
+  prefix of the input, fits the limit, and is at least as long as every fitting
+  prefix, so it owes nothing to `charBytes` — and `treeBounded` can be compared
+  with a fold over the `Expr` that counts nodes and depth from the grammar
+  alone. Enumerating a finite family keeps the package free of a testing
+  dependency and keeps each oracle visible beside the cases it judges.
+  Evidence: the executable reports 6 784 checks. Two seeded mutations were each
+  caught: widening the depth guard to `depth ≤ 1` failed 173 checks, including
+  the generated oracle cases, and letting a zero limit return its input failed
+  343 generated cases, which no fixed case covered. Date/Author: 2026-11-13,
+  implementer, after review round 13 raised the warning a third time. This
+  supersedes the renderer half of the round-11 disposition; the settlement half
+  is unchanged.
 
 ## Outcomes & retrospective
 
@@ -1210,12 +1226,13 @@ commit hash, so a pin update would churn both; `canonical` now replaces
 check is unchanged. The developer-documentation warning was the malformed
 scenario claim itself, which the repair removes.
 
-The remaining two warnings are dispositioned rather than repaired, for the
-reasons D24 records: generated Lean property tests with an independent tree
-oracle would need a generator inside the pinned package, and the plan keeps the
-Lean side to direct executable checks; and settlement's keys are the verified
-interface the proof is stated over, so a second domain representation is
-promotion work rather than this test-only demonstration.
+The remaining two warnings were dispositioned rather than repaired at that
+round: generated Lean property tests with an independent tree oracle would need
+a generator inside the pinned package, and the plan kept the Lean side to
+direct executable checks; and settlement's keys are the verified interface the
+proof is stated over, so a second domain representation is promotion work
+rather than this test-only demonstration (D24). Round 13 below repairs the
+first.
 
 Review round 12 ran on the round-11 head, `9be9393`, after the branch was
 rebased onto `main` at `9648ee6`. Its pre-merge table kept four rows and added
@@ -1271,6 +1288,37 @@ Every gate passed on `c7fbd9b` after the repairs: `make check-fmt` and
 (214 passed, 22 skipped, 1 doc test, 820 s), `make test-scripts` with the 3.14
 interpreter (10 s), `make design-check` (7 schemas, 224 comparisons, 64
 decisions), and `make toolchain-smoke` (22 passed, 802 s).
+
+Review round 13 ran on the round-12 head, `ee28aa1`, after a leased force-push.
+The refreshed pre-merge table held no errors and two warnings: the three errors
+of round 12 and its developer-documentation warning are cleared by the repairs
+above. All three hosted workflows passed on the head (`rust-and-docs` 6 m 7 s,
+`toolchain-smoke` 1 m 57 s, `design-check` 17 s).
+
+The renderer warning is repaired rather than declined (D25).
+`PoleanAuditRenderTests` now generates inputs beside its fixed cases: every
+string of up to four characters over an ASCII, two-, three-, and four-byte
+alphabet at every limit from zero to one byte past its size, and the leaves and
+two-deep applications of a small tree family at every depth bound from zero to
+four and every node budget from zero to five. The truncation property states
+prefix, fit and maximality against the input's own prefixes; the tree property
+compares the walk with a fold over the `Expr` that counts nodes and depth from
+the grammar. The executable reports 6 784 checks, and
+`tests/toolchain/smoke/audit/render.rs` pins that count.
+
+The domain warning stands declined under D24, and round 13 adds an argument the
+earlier rounds did not make: the suggestion has the adapter reject or classify
+any foundation name it does not recognise. Rejecting there would turn a
+settlement policy question — is this foundation approved? — into a decode
+failure, and the request contract admits an arbitrary foundation list precisely
+so settlement can refuse it; classifying there would move the allowlist out of
+the proved code, which is the design question D24 answers. Issue
+[#50](https://github.com/leynos/polean/issues/50) records the promotion work.
+
+The review also raised one outside-diff comment on the developer guide:
+`make lint` runs `make interrogate`, which needs `uv` and asks it for Python
+3.14, and the prerequisites did not say so. The guide now lists `uv` and names
+`make interrogate` beside the 3.14 targets.
 
 ## Context and orientation
 
@@ -2224,3 +2272,9 @@ added. The worker uses only the pinned Lean's own `Lean` library.
   the float formatter `serde_json` uses, the LLVM override for `zmij` that
   keeps the development and test profiles usable, its build-standard property
   test, and the developer-guide note. No scope change from revision 13.
+- Revision 15 (2026-11-13): recorded review round 13: the generated renderer
+  properties and their two seeded mutations under D25, the developer-guide
+  prerequisite correction for `make lint`, the third evidence-backed decline of
+  the settlement domain representation with issue #50 as its tracking record,
+  and the refreshed pre-merge table that holds no errors. No scope change from
+  revision 14.
