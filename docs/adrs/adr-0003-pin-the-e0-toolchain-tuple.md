@@ -187,6 +187,17 @@ recorded here so they are not rediscovered:
 
 None of this is implemented. 1.2.3 owns it.
 
+Note (addendum, 2026-11-06): the
+[1.2.3 ExecPlan](../execplans/1-2-3-demonstrate-type-and-axiom-auditing.md) and
+[ADR 0006](adr-0006-separate-proof-integrity-from-operational-integrity.md),
+accepted the same day, settle this use of these inputs. Input 1 is confirmed,
+and acceptance rests on an allowlist. The audit does not depend on `lake check`
+or `lake comparator`, so inputs 2 and 3 pass to roadmap 4.3.2 as an optional
+independent check. Input 4 is avoided: a worker given `LEAN_SYSROOT` runs with
+no `PATH`. Because ADR 0006 separates operational from proof integrity, the
+`bwrap` limitation recorded in open item 2 constrains roadmap 1.2.4 and 4.3.2
+but not the 1.2.3 experiment.
+
 ### Licences, as inputs to 5.2.2
 
 5.2.2 owns the dependency-distribution decision. This is the input:

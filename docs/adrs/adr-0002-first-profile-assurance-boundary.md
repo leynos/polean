@@ -101,6 +101,19 @@ extend to another frontend, another profile, or hostile sources.
 Technical design §13 lists the remaining prerequisites for E0 and for public
 release.
 
+### Note on item 2 (addendum, 2026-11-06)
+
+[ADR 0006](adr-0006-separate-proof-integrity-from-operational-integrity.md)
+separates proof integrity from operational integrity, and was accepted on
+2026-11-06. The statement above is unchanged and remains reserved for public
+`prove` and `verify`. Roadmap 4.2.2 permits the command contract before 4.3.2
+completes; what 4.3.2 gates, and what 5.2.1 carries, is the public assurance
+statement, not the commands. Development reports from E0 and E1 name the
+generated-module input model in technical design §2.1 instead of making that
+statement. Item 2's trust reads more precisely: toolchain `.olean` files are
+trusted rather than replayed, and "the integrity of the pinned proof package"
+is assumed until 4.3.2 enforces it.
+
 ## Alternatives considered
 
 Requiring checked source correspondence before v0 would remove the trusted

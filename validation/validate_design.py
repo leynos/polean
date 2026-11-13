@@ -32,7 +32,9 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
+
+from audit_contracts import check_audit_contracts
+from harness import NEGATIVE_CONTROL_HELP, check_schema, require
 
 ROOT = Path(__file__).resolve().parents[1]
 FACT_KEYS = ("same_tenant", "write_action", "admin_role", "owns_resource", "locked")
@@ -62,7 +64,6 @@ PROFILE_EXCLUDED = (
     "every", "built-in calls", "functions", "data references", "dynamic references",
     "numeric expressions", "collections", "arbitrary Lean source", "custom invariants",
 )
-NEGATIVE_CONTROL_HELP = "a negative control did not detect its injected fault"
 # Repository-relative, so the boundary classes below are the only place a path
 # is turned into a filesystem operation.
 WITNESS_DIRECTORY = "validation/witnesses"
@@ -264,24 +265,6 @@ def policy_folder(name: str) -> str:
     return f"examples/tenant-write/mutations/{name}"
 
 
-def check_schema(validators: dict[str, Draft202012Validator], name: str,
-                 value: Any, label: str) -> None:
-    """Require a document to satisfy its contract, naming it on rejection.
-
-    ``jsonschema`` raises a ``ValidationError`` whose message is a paragraph of
-    schema internals. A rejected document is a finding about a fixture or a
-    contract, not a defect in the harness, so it is reported in the same one
-    shape as every other check rather than as a traceback.
-    """
-    try:
-        validators[name].validate(value)
-    except ValidationError as error:
-        path = "/".join(str(part) for part in error.absolute_path) or "<root>"
-        raise AssertionError(
-            f"{label} does not satisfy the {name} contract at {path}: "
-            f"{error.message}") from error
-
-
 def load_schemas(repo: Repository) -> dict[str, Draft202012Validator]:
     """Meta-validate every contract schema and index it by contract name."""
     validators: dict[str, Draft202012Validator] = {}
@@ -393,12 +376,6 @@ def claims(f: dict[str, bool], allowed: bool) -> dict[str, bool]:
         "admin-write-available": not (t and w and a) or allowed,
         "owner-write-available": not (t and w and o and not locked) or allowed,
     }
-
-
-def require(condition: bool, message: str) -> None:
-    """Fail the run with a named diagnostic when a design check does not hold."""
-    if not condition:
-        raise AssertionError(message)
 
 
 def strict_json(raw: bytes) -> Any:
@@ -1072,6 +1049,7 @@ def run_checks(repo: Repository, workspace: Workspace) -> dict[str, Any]:
     check_unicode_handling(validators, fixtures.request)
     check_result_schema(validators)
     controls = negative_controls(validators, fixtures)
+    audit_controls_passed, audit_entries = check_audit_contracts(repo, validators)
     replays = publish_witnesses(workspace, review)
 
     summary = {
@@ -1086,6 +1064,9 @@ def run_checks(repo: Repository, workspace: Workspace) -> dict[str, Any]:
         "claim_registry_entries": claim_count,
         "witnesses_replayed": replays,
         "negative_controls_passed": controls,
+        "audit_contract_samples_checked": 2,
+        "audit_manifest_entries_checked": audit_entries,
+        "audit_contract_controls_passed": audit_controls_passed,
         "boundary_seam_checks_passed": boundaries,
         "malformed_request_shapes_rejected": malformed,
         "strict_decoding_negatives_rejected": negatives,

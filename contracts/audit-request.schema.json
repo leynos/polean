@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Polean v0 audit request",
+  "description": "The expected propositions and approved foundations Rust holds while auditing a Lean job. The expected statement is data and never reaches Lean. Structural validation is necessary, not sufficient: the decoder refuses an empty root list, and settlement also requires pairwise distinct root names and foundations drawn from the pinned table.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "polean.audit-request.v0"
+    },
+    "module": {
+      "$ref": "#/$defs/requestName"
+    },
+    "roots": {
+      "description": "The requested roots. At least one is required; the decoder refuses an empty list before settlement sees it.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/requestName"
+          },
+          "expected": {
+            "$ref": "#/$defs/tree"
+          }
+        },
+        "required": [
+          "name",
+          "expected"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "foundations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/requestName"
+      },
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "module",
+    "roots",
+    "foundations"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "requestName": {
+      "description": "A dotted Lean name, held as components so it can be passed as one argument without parsing Lean source.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_']*$"
+      }
+    },
+    "levels": {
+      "description": "Universe levels of a constant. The ground grammar admits only small naturals.",
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 4294967295
+      }
+    },
+    "tree": {
+      "description": "A ground statement tree: a constant applied to a spine of arguments, with no binder, literal, or variable form.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "const": {
+              "$ref": "#/$defs/requestName"
+            },
+            "levels": {
+              "$ref": "#/$defs/levels"
+            }
+          },
+          "required": [
+            "const",
+            "levels"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "app": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "$ref": "#/$defs/tree"
+              }
+            }
+          },
+          "required": [
+            "app"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

@@ -146,27 +146,37 @@ def test_runs_the_baseline_and_every_control(fake_tools: Path) -> None:
     lines = result.stdout.splitlines()
     assert len(lines) == len(controls.CONTROLS), "one evidence line per control"
     for control, line in zip(controls.CONTROLS, lines, strict=True):
-        assert line.startswith(f"{control.kind}:{control.name}: rejected at"), line
+        assert line.startswith(
+            f"{control.kind}:{control.name}: rejected; output contained"
+        ), line
     recorded = calls(fake_tools)
-    assert len(recorded) == len(controls.CONTROLS) + 1, (
-        "the baseline runs once before the controls"
+    assert len(recorded) == len(controls.CONTROLS) + len(controls.TREES), (
+        "each tree's baseline runs once before its controls"
     )
     assert all(call["z3"] == str(z3) for call in recorded), (
         "the runner forwards the pinned Z3 path"
     )
-    assert recorded[0]["argv"] == [controls.PROOF_FILE.as_posix()], (
-        "the runner names the staged proof entry point"
+    entries = {call["argv"][0] for call in recorded}
+    assert entries == {tree.entry.as_posix() for tree in controls.TREES}, (
+        "the runner names each staged proof entry point"
     )
-    staged = Path(recorded[0]["cwd"])
-    assert all(Path(call["cwd"]) == staged for call in recorded), (
-        "every run uses the same staged root, so each control edits one tree"
-    )
-    assert staged.name.startswith("polean-verus-controls-"), (
-        "the working directory is the script's own scratch tree"
-    )
-    assert not staged.is_relative_to(ROOT), (
-        "the verifier runs on the staged copy, leaving the source unchanged"
-    )
+    for tree in controls.TREES:
+        staged = {
+            Path(call["cwd"])
+            for call in recorded
+            if call["argv"][0] == tree.entry.as_posix()
+        }
+        assert len(staged) == 1, (
+            "every run of one tree uses the same staged root, so each control "
+            "edits one tree"
+        )
+        (directory,) = staged
+        assert directory.name.startswith(f"polean-verus-controls-{tree.name}-"), (
+            "the working directory is the script's own scratch tree"
+        )
+        assert not directory.is_relative_to(ROOT), (
+            "the verifier runs on the staged copy, leaving the source unchanged"
+        )
 
 
 @pytest.mark.parametrize("missing", ["verus", "z3"])

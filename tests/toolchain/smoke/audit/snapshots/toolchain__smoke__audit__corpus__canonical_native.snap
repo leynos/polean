@@ -1,0 +1,54 @@
+---
+source: tests/toolchain/smoke/audit/corpus.rs
+expression: text
+---
+{
+  "githash": "<pinned>",
+  "module": [
+    "AuditFixture",
+    "Native"
+  ],
+  "replay": {
+    "modules": [
+      [
+        "AuditFixture",
+        "Goal"
+      ],
+      [
+        "AuditFixture",
+        "Native"
+      ]
+    ],
+    "status": "accepted"
+  },
+  "roots": [
+    {
+      "declaration": {
+        "axioms": [
+          [
+            "AuditFixture",
+            "Native",
+            "helper",
+            "_native",
+            "native_decide",
+            "ax_1_1"
+          ]
+        ],
+        "kind": "theorem",
+        "statement": {
+          "const": [
+            "AuditFixture",
+            "Goal"
+          ],
+          "levels": []
+        }
+      },
+      "name": [
+        "AuditFixture",
+        "Native",
+        "root"
+      ]
+    }
+  ],
+  "schema_version": "polean.audit-report.v0"
+}

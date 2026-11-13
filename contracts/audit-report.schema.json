@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Polean v0 audit report",
+  "description": "One observation of a Lean job, emitted by the trusted worker. The report carries no verdict and no comparison result: Rust settlement alone decides acceptance. Structural validation is necessary, not sufficient. The decoder additionally enforces a 4,096-node and depth-60 statement bound — depth counted as one level per constant or application, the same way the worker counts it — a byte bound on the replay message, and a whole-report size bound, none of which JSON Schema can express.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "polean.audit-report.v0"
+    },
+    "githash": {
+      "description": "The Lean build's commit, compared with the identity entry of the pinned tuple. Any non-empty string parses, so a wrong or unknown hash is a toolchain mismatch rather than a malformed report.",
+      "type": "string",
+      "minLength": 1
+    },
+    "module": {
+      "$ref": "#/$defs/name"
+    },
+    "replay": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "accepted"
+            },
+            "modules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              }
+            }
+          },
+          "required": [
+            "status",
+            "modules"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "rejected"
+            },
+            "message": {
+              "description": "Diagnostic text. The decoder also requires at most 4,096 UTF-8 bytes; a character bound is the necessary condition a schema can state.",
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/name"
+          },
+          "declaration": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "theorem",
+                      "axiom",
+                      "definition",
+                      "opaque",
+                      "quotient",
+                      "constructor",
+                      "recursor",
+                      "inductive"
+                    ]
+                  },
+                  "statement": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "$ref": "#/$defs/tree"
+                      }
+                    ]
+                  },
+                  "axioms": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/name"
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "statement",
+                  "axioms"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "declaration"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "githash",
+    "module",
+    "replay",
+    "roots"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "name": {
+      "description": "A Lean name as the worker reports it. Private names contain numeric components, and a component may be empty.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18446744073709551615
+          }
+        ]
+      }
+    },
+    "tree": {
+      "description": "A ground statement tree: a constant applied to a spine of arguments, with no binder, literal, or variable form.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "const": {
+              "$ref": "#/$defs/name"
+            },
+            "levels": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          },
+          "required": [
+            "const",
+            "levels"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "app": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "$ref": "#/$defs/tree"
+              }
+            }
+          },
+          "required": [
+            "app"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

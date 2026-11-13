@@ -8,7 +8,7 @@ machine-readable result is [design-validation.json](design-validation.json).
 
 | Check performed                       | Result                                                                                                                                                                                                                                                                             |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| JSON Schema meta-validation           | Five schemas accepted by the installed Draft 2020-12 validator.                                                                                                                                                                                                                    |
+| JSON Schema meta-validation           | Seven schemas accepted by the installed Draft 2020-12 validator.                                                                                                                                                                                                                   |
 | Profile contract                      | The profile document conforms to its schema, and its atom, fact, claim, exclusion, limit, and assurance entries match the reviewed constants.                                                                                                                                      |
 | Claim registry                        | The claim manifest lists exactly the six fixed requirements.                                                                                                                                                                                                                       |
 | Baseline and mutation IR              | Seven policy variants conform to the proposed policy schema, and each variant differs from the baseline only inside its rule list.                                                                                                                                                 |
@@ -27,6 +27,13 @@ machine-readable result is [design-validation.json](design-validation.json).
 | Negative controls                     | Nineteen injected fixture faults each detected by the check meant to catch them.                                                                                                                                                                                                   |
 | Storage-boundary seams                | Two seams: reviewing the loaded fixtures leaves every witness in `witnesses/` unchanged in size, modification time, and SHA-256 digest, and publishing through a temporary root writes there and leaves the observed repository documents — the witnesses and the summary — alone. |
 | Boundary tests                        | Eleven independent tests of the orchestration and storage boundary, each falsified against a targeted injected fault.                                                                                                                                                              |
+
+`validate_design.py` keeps the orchestration, the storage boundaries, and the
+policy checks. The audit wire contracts, their samples, and the hand-written
+corpus manifest are checked in `audit_contracts.py`, which `run_checks` calls
+once; the diagnostics the two share live in `harness.py`, so the audit checks
+do not import the module that drives them. Every file in this directory is run
+by path from `validation/`, which is also where the imports resolve.
 
 `property_fixtures.py` states the same model-side obligations as properties and
 searches the admitted input domain for counterexamples, with Hypothesis
@@ -145,12 +152,20 @@ same predicate to accept the reviewed fixture and reject one targeted fault.
 
 ## Checks not performed
 
-Lean, OPA, Regorus, and a Rust toolchain were not available as installed
-executables for this drafting run. No Lean proof was compiled or kernel
-checked; no OPA/Regorus source parsing or runtime conformance comparison ran;
-no Rust orchestrator, sandbox, evidence verifier, or axiom-audit implementation
-was built. Those remain the technical design's explicit implementation and
-release gates.
+These omissions describe the 2026-10-04 drafting run, not the repository today.
+That run had no Lean, OPA, Regorus, or Rust toolchain installed, so it compiled
+no Lean proof, ran no OPA/Regorus conformance comparison, and built no Rust
+orchestrator, sandbox, evidence verifier, or axiom audit.
+
+Since then the repository has grown separate lanes that this harness still does
+not exercise: 1.2.1 added the Rust scaffold, 1.2.2 the test-only admission
+spike and its Verus proof, and 1.2.3 the audit worker, the Verus-verified
+settlement, and the end-to-end corpus. `make toolchain-smoke` runs the pinned
+Lean and OPA observations, and `make verus` runs the two proofs. The harness
+here checks design-fixture consistency only, and none of those lanes upgrades
+what a passing design-check establishes. Production orchestration, sandboxing,
+evidence verification, and policy proof generation remain the technical
+design's implementation and release gates.
 
 Python enumeration is a finite design sanity check. The proposed universal
 request theorem requires the Lean abstraction, coverage, checker-soundness, and
@@ -163,9 +178,10 @@ same shape as those obligations and give evidence that the statements are not
 vacuous, but a passing Hypothesis run is sampling, not kernel-checked
 quantification: it cannot discharge a `∀` over the request domain, and it
 depends on the same Python definitions whose soundness a Lean development would
-establish independently. No Lean package exists in this repository, and the
-theorem interfaces in the technical design remain signatures rather than
-compiled source.
+establish independently. The `lean/` package now holds the smoke library and
+the 1.2.3 audit worker, but neither states these obligations; the theorem
+interfaces in the technical design remain signatures rather than compiled
+source.
 
 ## Reproduction
 

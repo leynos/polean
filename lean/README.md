@@ -23,6 +23,38 @@ semantics and is never imported by the future worker. 2.2.4 generates its
 modules inside isolated job directories against this package's trusted library,
 not against `PoleanSmoke`.
 
+## The audit worker
+
+`PoleanAudit.lean` is the 1.2.3 worker, declared in `lakefile.toml` as the
+`polean-audit` executable. It is not a verifier. Given a module and a list of
+roots, it replays the module's non-toolchain imports over a base of the
+toolchain's `Init` plus the toolchain modules those imports directly use,
+collects each root's transitive axioms with `Lean.collectAxioms`, and prints
+one compact JSON report. It never sees the expected statement and emits no
+verdict; Rust settlement decides.
+
+The worker fails closed on anything outside its grammar. It reports a statement
+tree over 4,096 nodes or depth 60 as `null` and never truncates it. It reports
+a replay failure and does not work around it. `tests/toolchain/smoke/` builds
+the worker and runs it over the corpus in `examples/audit/`.
+
+## The bounded-output module and its tests
+
+The statement renderer and the diagnostic truncation live in
+`PoleanAudit/Render.lean` rather than in the worker, so they can be tested
+without the worker's `main`. `PoleanAuditRenderTests.lean` is a second
+executable, `polean-audit-render-tests`, that drives `treeBounded` directly
+over in-bound and over-bound spines and over a self-applying chain whose
+expanded tree is exponential in the graph it denotes, and drives `truncateUtf8`
+at and beyond the contract's message bound, including characters that would
+cross it. Beside those fixed cases it generates inputs: mixed-width strings at
+every limit, checked for prefix, fit and maximality against the input's own
+prefixes, and a tree family under every combination of depth and node bounds,
+checked against a fold over the `Expr` that counts nodes and depth from the
+grammar alone. `tests/toolchain/smoke/audit/render.rs` builds it and runs it
+under a deadline, so a bypassed node budget fails as a timeout rather than
+hanging the gate.
+
 ## What belongs here
 
 Repository-owned Lake configuration, toolchain selection, trusted package

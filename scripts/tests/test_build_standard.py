@@ -46,6 +46,15 @@ def test_cargo_defaults_select_the_fast_build() -> None:
     )
 
 
+def test_the_float_formatter_is_built_with_llvm() -> None:
+    """Cranelift cannot lower the SSE2 intrinsic `zmij` formats floats with."""
+    package = _config()["profile"]["dev"]["package"]["zmij"]
+    assert package["codegen-backend"] == "llvm", (
+        "zmij must build with LLVM: Cranelift cannot lower llvm.x86.sse2.pmulhu.w, "
+        "and formatting a floating-point diagnostic aborts the process"
+    )
+
+
 def test_mold_is_linux_only() -> None:
     """mold ships for Linux alone, so no platform-wide source names it."""
     assert MOLD not in _config()["build"]["rustflags"], "[build] must not name mold"

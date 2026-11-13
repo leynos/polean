@@ -83,12 +83,23 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
     AST node kinds are observed, and the recognizer kernel proves with no
     `assume`, `admit`, or `external_body`. The record finds no E0 blocking
     issue. The spike is test-only; 2.1.1 and 2.1.2 own production admission.
-- [ ] 1.2.3. Demonstrate declaration-type and transitive-axiom auditing.
+- [x] 1.2.3. Demonstrate declaration-type and transitive-axiom auditing.
   - Requires 1.2.1.
-  - See technical-design.md §§5 and 6.2.
+  - See technical-design.md §§2.1, 5, and 6.2; [ADR 0006][adr-0006].
   - Success: a pinned audit interface accepts an expected proposition and
     approved foundations, rejects `sorryAx`, native-computation trust axioms,
-    and undeclared assumptions, and emits machine-readable results.
+    and undeclared assumptions, and emits machine-readable results. It reports
+    kernel replay and exact root coverage, and establishes proof integrity under
+    the generated-module input model. Environment integrity is 4.3.2.
+  - Recorded: the pinned worker replays non-toolchain modules and emits a
+    bounded JSON report without seeing the expected statement. Rust settlement
+    decides acceptance, and Verus verifies 64 obligations over it with ten
+    negative controls; the recognizer proof still verifies 89 with five. The
+    twenty-five-module corpus matches its hand-written manifest in every case,
+    including `sorryAx`, native-computation axioms, undeclared assumptions,
+    wrong statements, wrong kinds, and both forgery fixtures. `make
+    toolchain-smoke` runs it end to end. The demonstration is test-only;
+    promotion is 2.2.4 and environment integrity is 4.3.2.
 - [ ] 1.2.4. Record an enforceable Linux execution-boundary decision.
   - Requires 1.2.1.
   - See technical-design.md §§2 and 11; terms-of-reference.md §8.2, A4–A6.
@@ -169,9 +180,11 @@ technical-design.md §§3, 5–6, and 10, V1–V5.
 - [ ] 2.2.4. Implement fixed-data Lean jobs and worker acceptance.
   - Requires 2.2.3 and 1.2.3.
   - See technical-design.md §§2 and 6.2; repository-layout.md.
-  - Success: only enum/list literals enter trusted templates; acceptance
-    checks exact policy propositions, requested roots, and transitive axioms.
-    Missing, contradictory, or malformed worker output is a tool failure.
+  - Success: only enum/list literals enter trusted templates, which emit no
+    `prelude`, options, or metaprograms, so generated jobs stay inside the §2.1
+    input model; claims are stated as a named predicate over a ground literal.
+    Acceptance checks exact policy propositions, requested roots, and transitive
+    axioms. Missing, contradictory, or malformed worker output is a tool failure.
 
 ### 2.3. Join proof, source replay, and diagnostics in the E0 demonstration
 
@@ -311,6 +324,9 @@ technical-design.md §8 and §10, V8.
     be hidden by incomplete logical results or a report-supplied exit value.
 - [ ] 4.2.2. Expose the complete public `prove` and `verify` command contract.
   - Requires 4.2.1.
+  - Until 4.3.2 completes, success outcomes are development reports that name
+    the generated-module input model rather than the ADR 0002 public statement.
+    4.3.2 gates that statement, not this task; 5.2.1 carries the gate.
   - See technical-design.md §8; ../contracts/cli.txt; users-guide.md.
   - Success: exits 0 and 2–8 match the contract in text and JSON; stdout has
     one bounded result, stderr has escaped diagnostics, and witnesses require
@@ -334,8 +350,10 @@ technical-design.md §8 and §10, V8.
 ### 4.3. Demonstrate replay within enforced local budgets
 
 Does clean reviewer execution remain bounded when inputs and subprocesses are
-hostile? The answer supplies E2 exit evidence rather than assumed performance.
-See technical-design.md §§11–12; terms-of-reference.md §7, SC5–SC7.
+hostile, and is the answering Lean environment the one the evidence names? The
+answer supplies E2 exit evidence rather than assumed performance or an assumed
+environment. See technical-design.md §§2.1 and 11–12; terms-of-reference.md §7,
+SC5–SC7.
 
 - [ ] 4.3.1. Harden supervisor containment and remaining-budget accounting.
   - Requires 4.2.3 and 1.2.4.
@@ -345,8 +363,19 @@ See technical-design.md §§11–12; terms-of-reference.md §7, SC5–SC7.
     escapes leave no running job children; absent isolation fails.
     The 60-second, 2 GiB, and 1 MiB defaults are enforced end to end, not reset
     per oracle invocation, and exhausted bounds are named in the result.
-- [ ] 4.3.2. Deliver a clean-environment replay and resource acceptance harness.
-  - Requires 4.3.1.
+- [ ] 4.3.2. Establish Lean environment integrity for replayed proofs.
+  - Requires 4.1.3 and 4.3.1.
+  - See technical-design.md §§2.1, 6.2, and 10, V12; [ADR 0006][adr-0006];
+    [lean-environment-integrity-findings.md](lean-environment-integrity-findings.md).
+  - Success: the worker fixes its search order and classes each module by where
+    it resolved; replay always runs on the toolchain's `Init`; every statement
+    constant comes from the trusted proof package; and the loaded package
+    matches the identity 4.1.1 binds. The recorded shadowing and
+    privileged-name fixtures yield non-success. A measured decision settles
+    toolchain replay depth and any independent checker. Evidence binding, fresh
+    regeneration, and enforced isolation stay with 4.1.1, 4.1.3, and 4.3.1.
+- [ ] 4.3.3. Deliver a clean-environment replay and resource acceptance harness.
+  - Requires 4.3.2.
   - See technical-design.md §§11–12, E2; terms-of-reference.md §8.2, A4–A6.
   - Success: offline replay after provisioning checks baseline and maximum
     admitted policies, measures warm wall time and peak memory, and records
@@ -369,7 +398,7 @@ Their recorded assessment determines whether to release, revise, or stop. See
 technical-design.md §12; terms-of-reference.md §§4–5 and 7, SC8.
 
 - [ ] 5.1.1. Run a sponsor-reviewed policy-change demonstration.
-  - Requires 4.3.2.
+  - Requires 4.3.3.
   - See terms-of-reference.md §§7–9, SC8 and OQ1–OQ4;
     technical-design.md §12, First user review.
   - Success: the intended users inspect a meaningful change and its assurance
@@ -383,11 +412,12 @@ step closes distribution and documentation gates before public availability.
 See technical-design.md §§11–14; terms-of-reference.md §9, OQ5.
 
 - [ ] 5.2.1. Document the implemented workflow and assurance ledger.
-  - Requires 5.1.1.
+  - Requires 5.1.1 and 4.3.2, so the guides cannot quote the ADR 0002 public
+    assurance statement before environment integrity is established.
   - See users-guide.md; developers-guide.md; repository-layout.md;
     documentation-style-guide.md; technical-design.md §§9–10 and 14.
   - Success: guides, contents, layout, contracts, and validation records agree
-    on actual commands, enforced limits, V1–V10 evidence, SC1–SC8 closure, and
+    on actual commands, enforced limits, V1–V12 evidence, SC1–SC8 closure, and
     residual trust. Python fixture checks retain their distinct status.
 - [ ] 5.2.2. Package the pinned local release and dependency provenance.
   - Requires 5.2.1 and 1.1.2.
@@ -453,3 +483,4 @@ See technical-design.md §§7, 11, and 13; terms-of-reference.md §6.2.
 [adr-0001]: adrs/adr-0001-bootstrap-polean-from-the-combobulate-scaffold.md
 [adr-0003]: adrs/adr-0003-pin-the-e0-toolchain-tuple.md
 [adr-0005]: adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md
+[adr-0006]: adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md

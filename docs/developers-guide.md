@@ -15,6 +15,8 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - Python 3.11 or later for the design harness;
 - `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
   checks;
+- `uv`, which `make interrogate` runs interrogate through, and so `make lint`
+  and `make all` need too;
 - `cargo-audit` for `make audit`, which is a periodic check rather than a
   commit gate; and
 - for the toolchain targets only: Python 3.14 built with `zstd` support (so
@@ -24,14 +26,17 @@ technical design rather than racing ahead to a broad Rego interpreter.
 - for the Verus targets only: network access on the first `make install-verus`
   run, `uv`, and the pinned release and solver under `.verus/`.
 
-`make tools`, `make test-scripts`, and `make toolchain-smoke` are the only
-targets that need the 3.14 interpreter, because the tests import the script and
-it imports `compression.zstd` at load time. Point them at one with
+`make tools`, `make test-scripts`, and `make toolchain-smoke` need the 3.14
+interpreter, because the tests import the script and it imports
+`compression.zstd` at load time. Point them at one with
 `make toolchain-smoke PYTHON=...`. If no 3.14 interpreter with `pytest` is
 installed,
 `uv run --python 3.14 --with pytest==9.1.1 python -m pytest scripts/tests` runs
 the same suite in an ephemeral environment and leaves no `uv.lock` or `.venv`
-behind. `cargo-insta` is needed only to review a changed Regorus AST snapshot.
+behind. `make interrogate` asks `uv` for 3.14 as well
+(`uv tool run --python 3.14`), so `make lint` fetches an interpreter on a host
+that has none. `cargo-insta` is needed only to review a changed Regorus AST
+snapshot.
 
 Hosted CI installs Markdown tooling separately. Local contributors may install
 `mdtablefix` 0.6.1 or later and `markdownlint-cli2` to reproduce every
@@ -55,9 +60,9 @@ targets are:
 | `make test`              | Run Rust unit, integration, and documentation tests.                |
 | `make test-scripts`      | Test the provisioning script with pytest.                           |
 | `make tools`             | Provision the digest-checked OPA and Lean artefacts.                |
-| `make toolchain-smoke`   | Provision, then run the ignored OPA and Lean observations.          |
+| `make toolchain-smoke`   | Provision, then run the ignored OPA, Lean, and audit observations.  |
 | `make install-verus`     | Install the pinned Verus release and Z3 solver (on demand).         |
-| `make verus`             | Run the Verus proof entry point (on demand; not in `make all`).     |
+| `make verus`             | Run both Verus proof entry points and their controls (on demand).   |
 | `make design-check`      | Validate schemas, policy fixtures, abstractions, and witnesses.     |
 | `make design-properties` | Search the admitted input domain for model-side counterexamples.    |
 | `make design-boundary`   | Test the harness's orchestration and storage boundaries.            |
@@ -92,8 +97,9 @@ in scope. `make all` runs the commit gates, but run them individually while
 iterating, so a failure is attributable to one gate. Do not run these
 concurrently: the build cache serializes better sequentially, and concurrent
 gate runs interleave their output. `make verus` is an on-demand proof check,
-not part of that loop or of `make all`; run it when the recognizer kernel, its
-specification, or its lemmas change.
+not part of that loop or of `make all`; run it when the recognizer kernel, the
+settlement decision, or either proof's specification or lemmas change. It runs
+both entry points and then replays the fifteen negative controls.
 
 `make toolchain-smoke` depends on `make tools`, so one command covers
 provisioning. The first run downloads 628 MiB; later runs verify whatever is
@@ -103,8 +109,8 @@ already installed and use no network. `.polean/tools/` is untracked, and
 `make test` also observes the pinned Regorus, because that needs no
 provisioning: it parses the baseline source, snapshots the AST JSON, and
 evaluates four requests. `make toolchain-smoke` adds the provisioned OPA and
-Lean observations. OPA agreeing with Regorus on four requests is not
-conformance evidence; see the assurance boundary in
+Lean observations, including the audit corpus. OPA agreeing with Regorus on
+four requests is not conformance evidence; see the assurance boundary in
 [the technical design](technical-design.md).
 
 `make test-scripts` and `make toolchain-smoke` need the Python 3.14 interpreter
@@ -139,8 +145,15 @@ every commit. It is not in `make all` for that reason.
   `-Zthreads=8`; and
 - the Cranelift backend as the `dev` profile default. The whole suite
   (`make test`, which leaves the ignored toolchain smoke tests that need the
-  provisioned tools) passes under it on `nightly-2026-08-27`, measured on
-  2026-10-31.
+  provisioned tools) passes under it on `nightly-2026-11-11`, measured on
+  2026-11-12, with one per-package exception. `zmij`, the float formatter
+  `serde_json` uses in its diagnostics, renders an `f64` through an SSE2
+  intrinsic that Cranelift does not lower (`llvm.x86.sse2.pmulhu.w`;
+  rustc_codegen_cranelift#171). The resulting panic cannot unwind, so
+  formatting a diagnostic about a floating-point value would abort the process
+  rather than refuse a document. `[profile.dev.package.zmij]` therefore selects
+  LLVM for that crate alone, and `scripts/tests/test_build_standard.py` holds
+  the exception in place.
 
 Assigning `RUSTFLAGS` replaces every `rustflags` source, so the `typecheck`
 recipe restates the flags through `STANDARD_RUSTFLAGS`. The Whitaker route
@@ -194,7 +207,11 @@ record of why the tuple is what it is. A pin change is a tuple change:
    changed; a rebuild that produces no content change needs no commit.
 5. If a Regorus change alters the AST snapshot, review it with
    `cargo insta review` and accept only a difference with a documented cause.
-6. Update ADR-003 with the new tuple, its provenance, and the reason, and
+6. For a Lean pin, review the audit corpus's pin-bound evidence: `PIN` in
+   `tests/toolchain/audit/wire/mod.rs`, the canonical snapshots, and the
+   foundation names. [The audit corpus](#the-audit-corpus-123) lists what each
+   holds and why.
+7. Update ADR-003 with the new tuple, its provenance, and the reason, and
    refresh any prose that repeats the version.
 
 Never edit an installed file under `.polean/tools/` to make an observation
@@ -249,14 +266,125 @@ fixture pass: the profile is the specification, and the design check and the
 record both depend on it staying fixed.
 
 `make install-verus` installs the Verus release and Z3 solver pinned in
-`tools/verus/`, digest-checked. `make verus` runs the proof entry point
+`tools/verus/`, digest-checked. `make verus` runs two proof entry points:
 `verus/admission_recognizer.rs`, which compiles the recognizer kernel through
-`#[path]`. Both are on-demand: `make all` and CI do not need a solver, a
-network connection, or several gigabytes of disk for Verus. The proof
-establishes the kernel's byte-level soundness for sources of any length. It
-does not establish that the AST walk maps Regorus faithfully, that the renderer
-chooses the right tokens, or that Rego means what the model means. Those remain
-tested or open as the record describes.
+`#[path]`, and `verus/audit_settlement.rs`, which compiles the settlement
+decision through `#[path]`. It then replays the negative controls that
+`scripts/check_verus_controls.py` holds. Each control requires a non-zero Verus
+exit, an error, and the expected output substrings, and each substring is
+searched for independently over the combined output. A passing control shows
+that its edit was detected and that the expected failure kind and source path
+appear somewhere; it does not show that the intended obligation rejected the
+defect. Both are on-demand: `make all` and CI do not need a solver, a network
+connection, or several gigabytes of disk for Verus. The recognizer proof
+establishes the kernel's byte-level soundness for sources of any length. Its
+completeness result is stated only for a canonical-token predicate, which is a
+sufficient condition for a successful recognition rather than a
+characterization of every input it accepts. The settlement proof establishes
+what acceptance means for a report settlement is given; it does not establish
+that the worker told the truth. Neither proof establishes that the AST walk
+maps Regorus faithfully, that the renderer chooses the right tokens, or that
+Rego means what the model means. Those remain tested or open as the record
+describes.
+
+## The audit corpus (1.2.3)
+
+`tests/toolchain/audit/` and `tests/toolchain/smoke/audit/` are the 1.2.3
+feasibility demonstration. They show that a Lean worker can observe a
+declaration's type and transitive axioms, and that Rust can decide acceptance
+from that observation. They do not make the worker trustworthy, and nothing
+under `src/` is involved: 2.2.4 owns promotion.
+
+The pieces:
+
+- `lean/PoleanAudit.lean` is the worker, built as the `polean-audit` executable
+  by `lean/lakefile.toml`. It replays the requested non-toolchain modules over
+  a base of the toolchain's `Init` plus the toolchain modules those imports
+  directly use, collects axioms with `Lean.collectAxioms`, and prints one
+  compact JSON report. It never sees the expected statement and emits no
+  verdict. Making that base fixed, and classifying each module by where it
+  resolved, is roadmap 4.3.2.
+- `contracts/audit-request.schema.json` and `contracts/audit-report.schema.json`
+  are the wire contracts. `tests/toolchain/audit/wire/` decodes them strictly:
+  unknown and duplicate fields, missing nullable keys, out-of-range values, and
+  trees over 4,096 nodes or depth 60 are refused before settlement sees them.
+- `tests/toolchain/audit/settlement/decision/` is the acceptance authority.
+  `verus/audit_settlement.rs` proves its obligations, and `make verus` runs it.
+- `examples/audit/lean/AuditFixture/` holds the fixtures, and
+  `examples/audit/manifest.json` is the hand-written expectation for each one.
+  `examples/audit/sample-request.json` and `sample-report.json` show the wire
+  shapes.
+- `tests/toolchain/smoke/audit/` builds the worker, compiles the fixtures with
+  the pinned Lean, runs the worker with a cleared environment, and compares
+  each settlement with its manifest line.
+
+### Reading a report
+
+A report names the toolchain `githash`, the module, the replay result, and one
+observation per requested root. `replay.status` is `accepted` or `rejected`; a
+rejected replay carries a bounded `message` and no roots. Each root carries
+`declaration`, which is `null` when the replayed environment has none, and
+otherwise a `kind`, a `statement` tree, and the transitive `axioms`. A
+`statement` of `null` means the type was outside the tree grammar or over
+bound, which settlement treats as a mismatch rather than as agreement.
+
+Settlement, not the report, decides. `accepted` means the report says the
+kernel replayed the module, every requested root is a theorem of exactly the
+expected statement, and every reported axiom is an approved foundation. That
+conclusion depends on an accurate and complete worker report; settlement does
+not verify the report itself. `rejected` carries findings naming the root and,
+for an axiom, its position, except that a rejected replay yields one
+`KernelRejected` finding with no root or item. `tool_failure` means the report
+did not answer the request at all.
+
+### Adding a fixture
+
+1. Add the module under `examples/audit/lean/AuditFixture/`, importing only
+   what it needs.
+2. Add its line to `examples/audit/manifest.json`, naming the settlement and
+   the exact findings in order.
+3. Add the same line to `AUDIT_CORPUS` in `validation/audit_contracts.py`. That
+   tuple is the reviewed authority the manifest is checked against, so editing
+   the manifest alone fails `make design-check`.
+4. Add its request to `tests/toolchain/smoke/audit/requests.rs`, building the
+   expected statement from Lean's term encoding rather than copying it from a
+   report.
+5. Add the module to `FIXTURES` in `tests/toolchain/smoke/audit/corpus.rs`,
+   dependencies first.
+6. Run `make toolchain-smoke` and review the canonical snapshot diff with
+   `cargo insta review` rather than accepting it unread.
+7. Run `make design-check`.
+
+Do not widen the grammar or the bounds to make a fixture pass. A new policy
+atom or input distinction needs model semantics, abstraction analysis,
+fixtures, claims or proof updates, and source-runtime conformance coverage.
+
+### Pin-change evidence
+
+A Lean pin change moves five things that the audit corpus holds fixed:
+
+- `PIN` in `tests/toolchain/audit/wire/mod.rs` is the pinned githash. The
+  decoder accepts any non-empty `githash`; settlement reports
+  `ToolchainMismatch` as a tool failure when it differs from the supplied pin.
+- `githash` in `examples/audit/sample-report.json` must equal `PIN`.
+  `decode_report_accepts_the_shared_sample` compares them, so changing only
+  `PIN` fails `make test`.
+- The canonical snapshots under `tests/toolchain/smoke/audit/snapshots/` pin
+  the report shape with `githash` redacted to `<pinned>`, so a pin bump does
+  not churn them. Settlement separately compares the worker's `githash` with
+  `PIN`, so the pin is checked at the settlement boundary rather than by a
+  snapshot. Review any other diff with `cargo insta review`.
+- The foundation names in `tests/toolchain/smoke/audit/requests.rs` and the
+  settlement's literal keys are the pinned axioms. A toolchain that renames or
+  adds one changes what acceptance means.
+- The worker uses `Lean.collectAxioms`, `Environment.replay`, and `findOLean`.
+  A Lean release that changes those APIs fails the worker build, which is the
+  intended signal rather than a reason to pin an older API.
+
+The Verus control anchors in `scripts/check_verus_controls.py` name exact
+source text in the settlement and recognizer proofs. Moving that code without
+updating the anchor fails `make test-scripts`, so a control cannot become a
+silent no-op.
 
 ## Planned CLI configuration boundary
 
@@ -306,6 +434,14 @@ boundary tests give evidence that they do not.
   run that fails a check before publication writes nothing; a failure inside
   publication can leave the witnesses it had already written, but never
   `design-validation.json`.
+
+The audit wire contracts, their samples, and the hand-written corpus manifest
+are checked in `validation/audit_contracts.py`, which `run_checks()` calls
+once. The diagnostics it shares with the rest of the harness — `require`,
+`check_schema`, and the negative-control message — live in
+`validation/harness.py`, so neither module imports the other's orchestration.
+The split keeps each file's subject visible; it does not change what any check
+establishes.
 
 `validation/property_fixtures.py` states the same model-side obligations as
 Hypothesis properties. It requires one explicit `load_admitted()` call, made by
