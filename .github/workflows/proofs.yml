@@ -16,6 +16,9 @@ name: Proofs
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'verus/**'
+      # The proofs verify these production bodies through `#[path]`.
+      - 'tests/admission/recognizer/kernel/**'
+      - 'tests/toolchain/audit/settlement/decision/**'
       - 'tools/verus/**'
       - 'tools/rust-prover-tools/**'
       - 'scripts/check_verus_controls.py'
@@ -26,6 +29,9 @@ name: Proofs
     branches: [main]
     paths:
       - 'verus/**'
+      # The proofs verify these production bodies through `#[path]`.
+      - 'tests/admission/recognizer/kernel/**'
+      - 'tests/toolchain/audit/settlement/decision/**'
       - 'tools/verus/**'
       - 'tools/rust-prover-tools/**'
       - 'scripts/check_verus_controls.py'
