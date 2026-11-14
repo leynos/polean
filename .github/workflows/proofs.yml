@@ -1,0 +1,74 @@
+name: Proofs
+
+# The Verus proofs under `verus/` (the admission recognizer and the audit
+# settlement) and the negative controls that show each proof rejects a mutated
+# body or a weakened specification. Proof code that no job runs is a comment, so
+# this workflow runs it: on a pull request that touches what the proofs verify or
+# how they are run, on every push to `main` that does, and weekly.
+#
+# Verus and Z3 are installed only through the shared install-prover-tools
+# action, which reads the release from tools/verus/VERSION and installs the
+# estate's pinned rust-prover-tools revision by default. `make verus` then runs
+# the proofs and the controls on the installed release.
+
+'on':
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'verus/**'
+      # The proofs verify these production bodies through `#[path]`.
+      - 'tests/admission/recognizer/kernel/**'
+      - 'tests/toolchain/audit/settlement/decision/**'
+      - 'tools/verus/**'
+      - 'tools/rust-prover-tools/**'
+      - 'scripts/check_verus_controls.py'
+      - 'rust-toolchain.toml'
+      - 'Makefile'
+      - '.github/workflows/proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'verus/**'
+      # The proofs verify these production bodies through `#[path]`.
+      - 'tests/admission/recognizer/kernel/**'
+      - 'tests/toolchain/audit/settlement/decision/**'
+      - 'tools/verus/**'
+      - 'tools/rust-prover-tools/**'
+      - 'scripts/check_verus_controls.py'
+      - 'rust-toolchain.toml'
+      - 'Makefile'
+      - '.github/workflows/proofs.yml'
+  schedule:
+    - cron: '41 4 * * 3' # Weekly, Wednesday 04:41 UTC
+  workflow_dispatch:
+
+# A second push to a pull request supersedes the run already in flight; a
+# scheduled, pushed or dispatched run is never replaced.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verus:
+    name: Verus
+    # GitHub-hosted: the job needs no compiler cache and compute there is free.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install Verus and Z3
+        uses: leynos/shared-actions/.github/actions/install-prover-tools@88ac795de687eda016db24983f87a25d6db49fdb
+        with:
+          tools: verus
+          runner-image: ubuntu2404
+      - name: Run the Verus proofs and their negative controls
+        run: make verus
