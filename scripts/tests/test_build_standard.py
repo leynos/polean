@@ -1,7 +1,7 @@
 """Contract tests for the development build standard (``rust-build-defaults``).
 
-The Concordat rule needs the parallel frontend and the Cranelift backend as
-Cargo defaults, the ``mold`` linker as a Linux-only default, the fast flags
+The Concordat rule needs the parallel frontend as a Cargo default (the
+Cranelift backend selection is disabled, and LLVM is the default), the ``mold`` linker as a Linux-only default, the fast flags
 restated wherever a gate recipe assigns ``RUSTFLAGS``, and the Whitaker route
 isolated from all of it. Each property lives in a file an unrelated edit could
 quietly break, so each is held here.
@@ -35,14 +35,19 @@ def _recipe(target: str) -> str:
 
 
 def test_cargo_defaults_select_the_fast_build() -> None:
-    """Every rustflags source repeats the frontend flag; Cranelift is the dev backend."""
+    """Every rustflags source repeats the frontend flag; the dev backend is not Cranelift."""
     config = _config()
     assert THREADS in config["build"]["rustflags"], "[build] must carry -Zthreads=8"
     linux = config["target"][LINUX_TABLE]["rustflags"]
     assert {THREADS, MOLD} <= set(linux), "the Linux table must repeat -Zthreads=8"
     assert config["unstable"]["codegen-backend"] is True, "the backend key needs its gate"
-    assert config["profile"]["dev"]["codegen-backend"] == "cranelift", (
-        "Cranelift must be the development default"
+    assert config["profile"]["dev"].get("codegen-backend") in (None, "llvm"), (
+        "the development backend must be unset or LLVM"
+    )
+    manifest = tomllib.loads((ROOT / "Cargo.toml").read_text("utf-8"))
+    manifest_dev = manifest.get("profile", {}).get("dev", {})
+    assert manifest_dev.get("codegen-backend") in (None, "llvm"), (
+        "Cargo.toml must leave the development backend unset or LLVM"
     )
 
 
@@ -61,7 +66,7 @@ def test_mold_is_linux_only() -> None:
 
 
 def test_the_toolchain_ships_the_cranelift_component() -> None:
-    """The pin lists the component the dev backend needs."""
+    """The pin keeps the component an opt-in to the Cranelift backend needs."""
     pin = tomllib.loads((ROOT / "rust-toolchain.toml").read_text("utf-8"))
     assert "rustc-codegen-cranelift-preview" in pin["toolchain"]["components"]
 
@@ -74,7 +79,7 @@ def test_typecheck_restates_the_fast_flags() -> None:
 
 
 def test_ci_installs_mold_and_the_whitaker_cranelift_component() -> None:
-    """Hosted jobs that build with the Linux table need mold; Whitaker needs Cranelift."""
+    """Hosted jobs that build with the Linux table need mold; Whitaker keeps the Cranelift input."""
     for workflow in ("ci.yml", "toolchain.yml"):
         text = (ROOT / ".github" / "workflows" / workflow).read_text("utf-8")
         step = SETUP_RUST_STEP.search(text)

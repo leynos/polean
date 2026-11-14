@@ -77,12 +77,12 @@ with `cargo binstall whitaker-installer`) and run
 `rustc-codegen-cranelift` for Whitaker's own toolchain. The
 `make lint-whitaker` route selects LLVM for the development profile, so the
 suite itself does not need the component; it stays so that a bare `cargo`
-command under that toolchain, which still meets the repository's Cranelift
-default, can build. The repository's `rust-toolchain.toml` component does not
-cover it. The installer installs the lint libraries and writes the `whitaker`
-and `whitaker-ls` wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`); add that
-directory to `PATH`. Run lints through the `whitaker` wrapper, which points
-Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
+command under that toolchain can build if a Cranelift opt-in (the repository
+default is LLVM) is enabled. The repository's `rust-toolchain.toml` component
+does not cover it. The installer installs the lint libraries and writes the
+`whitaker` and `whitaker-ls` wrappers to `~/.local/bin` (or `$XDG_BIN_HOME`);
+add that directory to `PATH`. Run lints through the `whitaker` wrapper, which
+points Dylint at Whitaker's verified Clippy snapshot; bare `cargo dylint` is
 unsupported. The first run builds the Dylint driver once. Whitaker's driver
 uses its own pinned toolchain, so it coexists with the repository's.
 
@@ -143,26 +143,27 @@ every commit. It is not in `make all` for that reason.
 - the `mold` linker, in a Linux-only target table. Cargo selects a single
   `rustflags` source rather than merging them, so the Linux table repeats
   `-Zthreads=8`; and
-- the Cranelift backend as the `dev` profile default. The whole suite
-  (`make test`, which leaves the ignored toolchain smoke tests that need the
-  provisioned tools) passes under it on `nightly-2026-11-11`, measured on
-  2026-11-12, with one per-package exception. `zmij`, the float formatter
-  `serde_json` uses in its diagnostics, renders an `f64` through an SSE2
-  intrinsic that Cranelift does not lower (`llvm.x86.sse2.pmulhu.w`;
-  rustc_codegen_cranelift#171). The resulting panic cannot unwind, so
-  formatting a diagnostic about a floating-point value would abort the process
-  rather than refuse a document. `[profile.dev.package.zmij]` therefore selects
-  LLVM for that crate alone, and `scripts/tests/test_build_standard.py` holds
-  the exception in place.
+- LLVM as the `dev` profile default. The estate standard is LLVM, with review
+  due 14 May 2027 under the
+  [estate ADR](https://github.com/leynos/concordat/blob/main/docs/adrs/adr-0004-cranelift-is-not-part-of-the-rust-build-standard.md).
+  The `[profile.dev] codegen-backend = "cranelift"` selection in
+  `.cargo/config.toml` is commented out; uncommenting it is a persistent opt-in
+  that also needs `scripts/tests/test_build_standard.py` updated. The
+  `[unstable] codegen-backend` key and the component stay. Cranelift does not
+  unwind, so no test may rely on a caught panic under it. The
+  `[profile.dev.package.zmij]` override stays for that opt-in: `zmij`, the
+  float formatter `serde_json` uses in its diagnostics, renders an `f64`
+  through an SSE2 intrinsic that Cranelift does not lower
+  (`llvm.x86.sse2.pmulhu.w`; rustc_codegen_cranelift#171).
 
 Assigning `RUSTFLAGS` replaces every `rustflags` source, so the `typecheck`
 recipe restates the flags through `STANDARD_RUSTFLAGS`. The Whitaker route
 takes none of them: an `env` prefix on the Whitaker command clears the
 inherited encoded flags and target settings, assigns `RUSTFLAGS` the warning
 policy alone (unset, Cargo would still read the configuration's `rustflags`),
-and sets `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to displace the Cranelift
-default (with `CARGO_UNSTABLE_CODEGEN_BACKEND=true`, which opts in the
-temporary Cargo project where Dylint builds its driver), so its
+and sets `CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to displace any opted-in
+Cranelift selection (with `CARGO_UNSTABLE_CODEGEN_BACKEND=true`, which opts in
+the temporary Cargo project where Dylint builds its driver), so its
 installer-managed toolchain builds without repository development flags.
 `scripts/tests/test_build_standard.py` holds the other build-standard properties
 (`make test-scripts`); the Concordat rule is the check for the Whitaker route.
