@@ -1,10 +1,10 @@
 # Repository-wide Cargo defaults for the development build standard.
 #
-# The parallel `rustc` frontend and the Cranelift backend are the defaults for
-# every development build, and the mold linker is the default on Linux. Cargo
-# auto-discovers this file, so a bare `cargo build` gets all three. Coverage and
-# release builds assign `RUSTFLAGS` or select LLVM, which displaces the
-# development defaults.
+# The parallel `rustc` frontend is the default for every development build, and
+# the mold linker is the default on Linux. The backend is LLVM, the estate
+# standard; the Cranelift selection below is disabled. Cargo auto-discovers this
+# file, so a bare `cargo build` gets the defaults. Coverage and release builds
+# assign `RUSTFLAGS`, which displaces the development defaults.
 #
 # Cargo selects a single `rustflags` source rather than merging them: a
 # matching `[target.*]` table replaces `[build] rustflags` outright. Every flag
@@ -16,7 +16,8 @@ embed-metadata = false
 codegen-backend = true
 
 [profile.dev]
-codegen-backend = "cranelift"
+# Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+# codegen-backend = "cranelift"
 
 # `zmij` renders an `f64` with SSE2 intrinsics, and the pinned Cranelift has no
 # lowering for `llvm.x86.sse2.pmulhu.w` (rustc_codegen_cranelift#171). It is
