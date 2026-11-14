@@ -32,6 +32,7 @@ The module split proposed by the technical design is not yet implemented.
 | `.github/workflows/ci.yml`        | Hosted Rust, Markdown, and basic repository gate.                                                                                                      |
 | `.github/workflows/design.yml`    | Independent design-contract validation lane.                                                                                                           |
 | `.github/workflows/toolchain.yml` | Path-filtered provisioning and smoke run for the pinned tuple, its example policy, and the audit corpus.                                               |
+| `.github/workflows/proofs.yml`    | Verus proofs and negative controls (`make verus`), path-filtered, plus a weekly run.                                                                   |
 | `.github/dependabot.yml`          | Cargo and GitHub Actions dependency updates.                                                                                                           |
 | `Cargo.toml`, `Cargo.lock`        | Package metadata, lint policy, and dependency lockfile.                                                                                                |
 | `rust-toolchain.toml`             | Pinned Rust toolchain and required components.                                                                                                         |
@@ -78,9 +79,10 @@ lanes with distinct result language.
 `verus/` and `tools/` support the recognizer and settlement proofs, not
 production admission. They are not part of the E0 toolchain tuple in
 `toolchain-pins.json`, the installed release under `.verus/` is untracked, and
-`make verus` is an on-demand check rather than a commit gate. The admission
-spike in `tests/admission/` is test-only: its IR is a throwaway type, and
-production ingestion and admission remain roadmap 2.1.1 and 2.1.2 work.
+`make verus` is a proof check run by `proofs.yml` rather than a commit gate.
+The admission spike in `tests/admission/` is test-only: its IR is a throwaway
+type, and production ingestion and admission remain roadmap 2.1.1 and 2.1.2
+work.
 
 `examples/audit/` and the audit modules under `tests/toolchain/` are the 1.2.3
 feasibility demonstration, not a production checker. The worker observes and

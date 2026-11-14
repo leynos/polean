@@ -257,8 +257,10 @@ The theorem is about the kernel only. It does not establish that:
 - Regorus assigns the tokens the meaning Polean reads — that is the translation
   claim, which remains open.
 
-`make verus` is an on-demand target. It is not part of `make all` or CI, so an
-ordinary build needs neither the Verus release nor the pinned Z3 solver.
+`make verus` is not part of `make all`, so an ordinary build needs neither the
+Verus release nor the pinned Z3 solver. `.github/workflows/proofs.yml` runs it
+in CI, on a pull request or push that touches the proofs and weekly, so a proof
+that stops verifying fails a job.
 
 ## 9. Assurance boundaries
 

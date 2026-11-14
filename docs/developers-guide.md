@@ -61,8 +61,8 @@ targets are:
 | `make test-scripts`      | Test the provisioning script with pytest.                           |
 | `make tools`             | Provision the digest-checked OPA and Lean artefacts.                |
 | `make toolchain-smoke`   | Provision, then run the ignored OPA, Lean, and audit observations.  |
-| `make install-verus`     | Install the pinned Verus release and Z3 solver (on demand).         |
-| `make verus`             | Run both Verus proof entry points and their controls (on demand).   |
+| `make install-verus`     | Install the pinned Verus release and Z3 solver locally.             |
+| `make verus`             | Run both Verus proof entry points and their controls.               |
 | `make design-check`      | Validate schemas, policy fixtures, abstractions, and witnesses.     |
 | `make design-properties` | Search the admitted input domain for model-side counterexamples.    |
 | `make design-boundary`   | Test the harness's orchestration and storage boundaries.            |
@@ -96,10 +96,13 @@ The usual loop is `make check-fmt`, `make typecheck`, `make lint`, `make test`,
 in scope. `make all` runs the commit gates, but run them individually while
 iterating, so a failure is attributable to one gate. Do not run these
 concurrently: the build cache serializes better sequentially, and concurrent
-gate runs interleave their output. `make verus` is an on-demand proof check,
-not part of that loop or of `make all`; run it when the recognizer kernel, the
-settlement decision, or either proof's specification or lemmas change. It runs
-both entry points and then replays the fifteen negative controls.
+gate runs interleave their output. `make verus` is a proof check, not part of
+that loop or of `make all`; run it when the recognizer kernel, the settlement
+decision, or either proof's specification or lemmas change. It runs both entry
+points and then replays the fifteen negative controls. CI runs it through
+`.github/workflows/proofs.yml` on GitHub-hosted runners, installing Verus and
+Z3 only through the shared `install-prover-tools` action, on pull requests and
+pushes that touch the proofs and weekly.
 
 `make toolchain-smoke` depends on `make tools`, so one command covers
 provisioning. The first run downloads 628 MiB; later runs verify whatever is
