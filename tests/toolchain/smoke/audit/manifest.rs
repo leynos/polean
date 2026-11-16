@@ -72,8 +72,8 @@ fn parse_line(line: &str, index: usize) -> Result<Expectation, String> {
     let context = format!("manifest line {}", index + 1);
     let document = parse_json(line, &context)?;
     let findings = parse_findings(&document, &context)?;
-    let module = parse_module(&document, &context)?;
     let reason = optional_string(field(&document, "reason", &context)?, &context)?;
+    let module = parse_module(&document, &context)?;
     let fixture = string(&document, "fixture", &context)?.to_owned();
     let settlement = string(&document, "settlement", &context)?.to_owned();
     Ok(Expectation {

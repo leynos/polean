@@ -91,9 +91,13 @@ pub fn profile(text: &str) -> Result<Profile, String> {
 
 /// Read the profile from its root object.
 fn profile_of(root: &Map<String, Json>) -> Result<Profile, String> {
+    // The reads keep the contract's original diagnostic order: the `rules`
+    // object, the package, the import, entrypoint and default, the four counts,
+    // then the atoms, so a contract with several faults reports the same first one.
+    let rules = object(required(root, "rules")?, "`rules`")?;
     let package = string(root, "package")?;
-    let ((rule_min, rule_max), (body_min, body_max)) = rule_limits(root)?;
     let (import, rule_name, default) = import_entrypoint_default(root, package)?;
+    let ((rule_min, rule_max), (body_min, body_max)) = rule_limits(rules)?;
     let atoms = atoms(root)?;
     Ok(Profile {
         package: package.to_owned(),
@@ -112,8 +116,7 @@ fn profile_of(root: &Map<String, Json>) -> Result<Profile, String> {
 type Bounds = (usize, usize);
 
 /// Read the rule-count and body-length bounds as `(min, max)` pairs.
-fn rule_limits(root: &Map<String, Json>) -> Result<(Bounds, Bounds), String> {
-    let rules = object(required(root, "rules")?, "`rules`")?;
+fn rule_limits(rules: &Map<String, Json>) -> Result<(Bounds, Bounds), String> {
     Ok((
         count_pair(rules, "min", "max")?,
         count_pair(rules, "body_min", "body_max")?,

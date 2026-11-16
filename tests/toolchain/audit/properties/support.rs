@@ -349,8 +349,7 @@ fn decode_const(reader: &mut KeyReader<'_>) -> Option<Tree> {
 /// Decode a counted run of universe levels that the bytes left can satisfy.
 fn decode_levels(reader: &mut KeyReader<'_>) -> Option<Vec<u32>> {
     let count = usize::try_from(reader.u64()?).ok()?;
-    // Each level spends eight bytes, so a count that cannot fit in the bytes
-    // left is malformed rather than merely large.
+    // A level spends eight bytes, so a count the bytes left cannot hold is malformed.
     if count.checked_mul(LEVEL_BYTES)? > reader.remaining() {
         return None;
     }
