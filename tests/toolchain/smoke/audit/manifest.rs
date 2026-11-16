@@ -273,3 +273,29 @@ fn compare_findings(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    //! A manifest line with several faults reports the first in read order.
+
+    use super::parse_line;
+
+    #[test]
+    fn a_mistyped_reason_is_reported_ahead_of_an_invalid_module() {
+        let line =
+            r#"{"findings": [], "reason": 7, "module": [1], "fixture": "f", "settlement": "s"}"#;
+
+        let error = match parse_line(line, 0) {
+            Ok(expectation) => panic!(
+                "the faulty line must be refused, got fixture {}",
+                expectation.fixture
+            ),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error, "manifest line 1: field `reason` is neither null nor a string",
+            "`reason` is read before `module`, so its fault comes first"
+        );
+    }
+}
