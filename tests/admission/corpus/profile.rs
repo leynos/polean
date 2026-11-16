@@ -86,20 +86,56 @@ impl Profile {
 pub fn profile(text: &str) -> Result<Profile, String> {
     let value: Json =
         serde_json::from_str(text).map_err(|error| format!("the profile is not JSON: {error}"))?;
-    let root = object(&value, "the profile")?;
+    profile_of(object(&value, "the profile")?)
+}
+
+/// Read the profile from its root object.
+fn profile_of(root: &Map<String, Json>) -> Result<Profile, String> {
+    // The reads keep the contract's original diagnostic order: the `rules`
+    // object, the package, the import, entrypoint and default, the four counts,
+    // then the atoms, so a contract with several faults reports the same first one.
     let rules = object(required(root, "rules")?, "`rules`")?;
     let package = string(root, "package")?;
+    let (import, rule_name, default) = import_entrypoint_default(root, package)?;
+    let ((rule_min, rule_max), (body_min, body_max)) = rule_limits(rules)?;
+    let atoms = atoms(root)?;
     Ok(Profile {
         package: package.to_owned(),
-        import: string(root, "import")?.to_owned(),
-        rule_name: rule_name(string(root, "entrypoint")?, package)?,
-        default: boolean(root, "default")?,
-        rule_min: count(rules, "min")?,
-        rule_max: count(rules, "max")?,
-        body_min: count(rules, "body_min")?,
-        body_max: count(rules, "body_max")?,
-        atoms: atoms(root)?,
+        import,
+        rule_name,
+        default,
+        rule_min,
+        rule_max,
+        body_min,
+        body_max,
+        atoms,
     })
+}
+
+/// A lower and an upper bound on a count.
+type Bounds = (usize, usize);
+
+/// Read the rule-count and body-length bounds as `(min, max)` pairs.
+fn rule_limits(rules: &Map<String, Json>) -> Result<(Bounds, Bounds), String> {
+    Ok((
+        count_pair(rules, "min", "max")?,
+        count_pair(rules, "body_min", "body_max")?,
+    ))
+}
+
+/// Read a lower and an upper count member.
+fn count_pair(map: &Map<String, Json>, low: &str, high: &str) -> Result<Bounds, String> {
+    Ok((count(map, low)?, count(map, high)?))
+}
+
+/// Read the import, the entrypoint's rule name and the default rule's value.
+fn import_entrypoint_default(
+    root: &Map<String, Json>,
+    package: &str,
+) -> Result<(String, String, bool), String> {
+    let import = string(root, "import")?.to_owned();
+    let rule = rule_name(string(root, "entrypoint")?, package)?;
+    Ok((import, rule, boolean(root, "default")?))
 }
 
 /// Read the rule name from the entrypoint's `data.<package>.<rule>` path.

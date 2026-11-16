@@ -323,3 +323,38 @@ fn every_fixture_is_reviewable() {
         "fixtures must stay under 90 lines: {long:?}"
     );
 }
+
+/// A rejected entry with an unknown stage and no `code` reports the missing
+/// code, because both texts are read before either is looked up.
+#[test]
+fn a_rejected_entry_with_several_faults_names_the_missing_code_first() {
+    let line = r#"{"path": "a.rego", "covers": [], "expected": {"outcome": "rejected", "stage": "nonsense"}}"#;
+
+    let error = match super::manifest::parse(line) {
+        Ok(entries) => panic!("the faulty entry must be refused, got {entries:?}"),
+        Err(error) => error,
+    };
+
+    assert_eq!(
+        error, "a rejected entry needs a `code`",
+        "the missing code must be reported ahead of the unknown stage"
+    );
+}
+
+/// A contract with several faults reports the first in read order: the
+/// package and import come before the rule counts, so a missing `import` is
+/// named ahead of a mistyped count.
+#[test]
+fn a_profile_with_several_faults_reports_the_first_in_read_order() {
+    let text = r#"{"rules": {"min": "many"}, "package": "p"}"#;
+
+    let error = match super::profile::profile(text) {
+        Ok(profile) => panic!("the faulty profile must be refused, got {profile:?}"),
+        Err(error) => error,
+    };
+
+    assert_eq!(
+        error, "the profile has no `import` key",
+        "the first fault in read order must be the one reported"
+    );
+}

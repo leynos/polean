@@ -71,16 +71,35 @@ pub fn load() -> Result<Vec<Expectation>, String> {
 fn parse_line(line: &str, index: usize) -> Result<Expectation, String> {
     let context = format!("manifest line {}", index + 1);
     let document = parse_json(line, &context)?;
-    let findings = array(&document, "findings", &context)?
+    let findings = parse_findings(&document, &context)?;
+    let reason = optional_string(field(&document, "reason", &context)?, &context)?;
+    let module = parse_module(&document, &context)?;
+    let fixture = string(&document, "fixture", &context)?.to_owned();
+    let settlement = string(&document, "settlement", &context)?.to_owned();
+    Ok(Expectation {
+        fixture,
+        module,
+        settlement,
+        findings,
+        reason,
+    })
+}
+
+/// Read the `findings` array of one manifest line.
+fn parse_findings(document: &Value, context: &str) -> Result<Vec<ExpectedFinding>, String> {
+    array(document, "findings", context)?
         .iter()
         .map(|finding| {
-            let root = optional_root(field(finding, "root", &context)?, &context)?;
-            let code = string(finding, "code", &context)?.to_owned();
+            let root = optional_root(field(finding, "root", context)?, context)?;
+            let code = string(finding, "code", context)?.to_owned();
             Ok(ExpectedFinding { root, code })
         })
-        .collect::<Result<Vec<_>, String>>()?;
-    let reason = optional_string(field(&document, "reason", &context)?, &context)?;
-    let module = array(&document, "module", &context)?
+        .collect()
+}
+
+/// Read the `module` name components of one manifest line.
+fn parse_module(document: &Value, context: &str) -> Result<Vec<String>, String> {
+    array(document, "module", context)?
         .iter()
         .map(|component| {
             component
@@ -88,14 +107,7 @@ fn parse_line(line: &str, index: usize) -> Result<Expectation, String> {
                 .map(str::to_owned)
                 .ok_or_else(|| format!("{context}: module component is not a string"))
         })
-        .collect::<Result<Vec<_>, String>>()?;
-    Ok(Expectation {
-        fixture: string(&document, "fixture", &context)?.to_owned(),
-        module,
-        settlement: string(&document, "settlement", &context)?.to_owned(),
-        findings,
-        reason,
-    })
+        .collect()
 }
 
 /// A finding's `root`: `null` for a whole-report finding, or a root index.
@@ -260,4 +272,30 @@ fn compare_findings(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    //! A manifest line with several faults reports the first in read order.
+
+    use super::parse_line;
+
+    #[test]
+    fn a_mistyped_reason_is_reported_ahead_of_an_invalid_module() {
+        let line =
+            r#"{"findings": [], "reason": 7, "module": [1], "fixture": "f", "settlement": "s"}"#;
+
+        let error = match parse_line(line, 0) {
+            Ok(expectation) => panic!(
+                "the faulty line must be refused, got fixture {}",
+                expectation.fixture
+            ),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error, "manifest line 1: field `reason` is neither null nor a string",
+            "`reason` is read before `module`, so its fault comes first"
+        );
+    }
 }

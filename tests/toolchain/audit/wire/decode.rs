@@ -22,7 +22,9 @@ use std::collections::BTreeSet;
 use super::{
     document::{
         AcceptedReplayDocument,
+        AppTreeDocument,
         ComponentDocument,
+        ConstTreeDocument,
         DeclarationDocument,
         KindDocument,
         RejectedReplayDocument,
@@ -276,16 +278,33 @@ fn convert_tree_with(
     tree: TreeDocument,
     convert: fn(Vec<ComponentDocument>) -> Result<Name, DecodeError>,
 ) -> Result<Tree, DecodeError> {
-    Ok(match tree {
-        TreeDocument::Const(node) => Tree::Const {
-            name: convert(node.name)?,
-            levels: node.levels,
-        },
-        TreeDocument::App(node) => Tree::App(
-            Box::new(convert_tree_with(*node.app.0, convert)?),
-            Box::new(convert_tree_with(*node.app.1, convert)?),
-        ),
+    match tree {
+        TreeDocument::Const(node) => convert_const_tree(node, convert),
+        TreeDocument::App(node) => convert_app_tree(node, convert),
+    }
+}
+
+/// Convert a constant tree, naming the constant with `convert`.
+fn convert_const_tree(
+    node: ConstTreeDocument,
+    convert: fn(Vec<ComponentDocument>) -> Result<Name, DecodeError>,
+) -> Result<Tree, DecodeError> {
+    Ok(Tree::Const {
+        name: convert(node.name)?,
+        levels: node.levels,
     })
+}
+
+/// Convert an application tree, converting the operator and then the operand.
+fn convert_app_tree(
+    node: AppTreeDocument,
+    convert: fn(Vec<ComponentDocument>) -> Result<Name, DecodeError>,
+) -> Result<Tree, DecodeError> {
+    let (operator, operand) = node.app;
+    Ok(Tree::App(
+        Box::new(convert_tree_with(*operator, convert)?),
+        Box::new(convert_tree_with(*operand, convert)?),
+    ))
 }
 
 /// Convert a declaration.

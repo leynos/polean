@@ -339,23 +339,31 @@ fn admitted_expected(expected: &Map<String, Json>) -> Result<Expected, String> {
 
 /// Read a rejected entry's stage and reason code.
 fn rejected_expected(expected: &Map<String, Json>) -> Result<Expected, String> {
-    check_keys(expected, &["outcome", "stage", "code"])?;
-    let stage = string(
-        expected
-            .get("stage")
-            .ok_or_else(|| "a rejected entry needs a `stage`".to_owned())?,
-        "stage",
-    )?;
-    let code = string(
-        expected
-            .get("code")
-            .ok_or_else(|| "a rejected entry needs a `code`".to_owned())?,
-        "code",
-    )?;
+    let (stage, code) = rejected_texts(expected)?;
     Ok(Expected::Rejected {
         stage: Stage::from_wire(stage).ok_or_else(|| format!("unknown stage `{stage}`"))?,
         code: ReasonCode::from_wire(code).ok_or_else(|| format!("unknown reason code `{code}`"))?,
     })
+}
+
+/// Read a rejected entry's stage and code texts. Both are read, and both must
+/// be strings, before either is looked up, so a missing code is reported ahead
+/// of an unknown stage.
+fn rejected_texts(expected: &Map<String, Json>) -> Result<(&str, &str), String> {
+    check_keys(expected, &["outcome", "stage", "code"])?;
+    let stage = required_text(expected, "stage", "a rejected entry needs a `stage`")?;
+    let code = required_text(expected, "code", "a rejected entry needs a `code`")?;
+    Ok((stage, code))
+}
+
+/// Read the string member `key`, or fail with `missing` when it is absent.
+fn required_text<'a>(
+    object: &'a Map<String, Json>,
+    key: &str,
+    missing: &str,
+) -> Result<&'a str, String> {
+    let value = object.get(key).ok_or_else(|| missing.to_owned())?;
+    string(value, key)
 }
 
 /// Require `value` to be an object.

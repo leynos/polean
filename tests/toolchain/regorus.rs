@@ -191,6 +191,13 @@ fn default_rule_for_another_name_is_rejected() {
 fn spec_body_length(rule: &Json, kind: &str) -> Result<usize, String> {
     const CONTEXT: &str = "rule.Spec";
     let payload = rule_payload(rule, kind, CONTEXT)?;
+    check_spec_head(payload)?;
+    statement_count(single_body(payload)?)
+}
+
+/// A `Spec` rule's head is a `Compr` head that refers to `allow`.
+fn check_spec_head(payload: &Json) -> Result<(), String> {
+    const CONTEXT: &str = "rule.Spec";
     let head = field(payload, "head", CONTEXT)?;
     expect_equal(
         &single_tag(head, "rule head", "rule.Spec.head")?,
@@ -201,13 +208,22 @@ fn spec_body_length(rule: &Json, kind: &str) -> Result<usize, String> {
         &head.pointer("/Compr/refr/Var/value").and_then(Json::as_str),
         &Some("allow"),
         &format!("{CONTEXT}: head refers to `allow`"),
-    )?;
+    )
+}
+
+/// The one body a `Spec` rule carries.
+fn single_body(payload: &Json) -> Result<&Json, String> {
+    const CONTEXT: &str = "rule.Spec";
     let bodies = array(payload, "bodies", CONTEXT)?;
     expect_equal(&bodies.len(), &1, &format!("{CONTEXT}: one body expected"))?;
-    let body = bodies
+    bodies
         .first()
-        .ok_or_else(|| format!("{CONTEXT}: body missing"))?;
-    let query = field(body, "query", CONTEXT)?;
+        .ok_or_else(|| format!("{CONTEXT}: body missing"))
+}
+
+/// The number of statements in a rule body's query.
+fn statement_count(body: &Json) -> Result<usize, String> {
+    let query = field(body, "query", "rule.Spec")?;
     Ok(array(query, "stmts", "rule.Spec.body.query")?.len())
 }
 
@@ -262,13 +278,22 @@ fn check_rules(module_ast: &Json) -> Result<(), String> {
 fn baseline_ast_has_the_expected_structure() -> Result<(), String> {
     let ast = ast_json(BASELINE_SOURCE)?;
     let root = parse_json(&ast, "baseline AST JSON")?;
+    check_baseline_module(sole_module(&root)?)
+}
+
+/// The one policy module in the baseline AST JSON array.
+fn sole_module(root: &Json) -> Result<&Json, String> {
     let documents = root
         .as_array()
         .ok_or_else(|| "baseline AST JSON is not an array".to_owned())?;
     expect_equal(&documents.len(), &1, "one policy module expected")?;
-    let module = documents
+    documents
         .first()
-        .ok_or_else(|| "baseline AST JSON is empty".to_owned())?;
+        .ok_or_else(|| "baseline AST JSON is empty".to_owned())
+}
+
+/// The module records its source, declares the package and carries the rules.
+fn check_baseline_module(module: &Json) -> Result<(), String> {
     check_recorded_source(module)?;
     let module_ast = field(module, "ast", "module")?;
     check_package(module_ast)?;
