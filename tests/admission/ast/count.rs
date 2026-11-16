@@ -45,29 +45,40 @@ fn bump(counts: &mut KindCounts, kind: NodeKind) { *counts.entry(kind).or_defaul
 /// Count one rule.
 fn visit_rule(rule: &Rule, counts: &mut KindCounts) {
     match rule {
-        Rule::Spec { head, bodies, .. } => {
-            bump(counts, NodeKind::RuleSpec);
-            visit_head(head, counts);
-            for body in bodies {
-                visit_body(body, counts);
-            }
-        }
+        Rule::Spec { head, bodies, .. } => visit_spec_rule(head, bodies, counts),
         Rule::Default {
             refr,
             args,
             op,
             value,
             ..
-        } => {
-            bump(counts, NodeKind::RuleDefault);
-            bump(counts, assign_op_kind(*op));
-            visit_expr(refr, counts);
-            for arg in args {
-                visit_expr(arg, counts);
-            }
-            visit_expr(value, counts);
-        }
+        } => visit_default_rule(refr, args, (*op, value), counts),
     }
+}
+
+/// Count a normal rule: its head, then each body in source order.
+fn visit_spec_rule(head: &Head, bodies: &[Body], counts: &mut KindCounts) {
+    bump(counts, NodeKind::RuleSpec);
+    visit_head(head, counts);
+    for body in bodies {
+        visit_body(body, counts);
+    }
+}
+
+/// Count a default rule: its operator, reference, arguments and value.
+fn visit_default_rule(
+    refr: &Expr,
+    args: &[Expr],
+    (op, value): (AssignOp, &Expr),
+    counts: &mut KindCounts,
+) {
+    bump(counts, NodeKind::RuleDefault);
+    bump(counts, assign_op_kind(op));
+    visit_expr(refr, counts);
+    for arg in args {
+        visit_expr(arg, counts);
+    }
+    visit_expr(value, counts);
 }
 
 /// Count one rule head, including any value assignment it carries.

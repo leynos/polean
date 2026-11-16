@@ -24,11 +24,21 @@ use crate::{
 pub fn render() -> Result<String, String> {
     let entries = corpus::entries()?;
     let profile = corpus::profile_contract()?;
-    let mut lines = Vec::with_capacity(entries.len());
-    for entry in &entries {
-        lines.push((entry.label(), describe(entry, &profile)?));
-    }
+    snapshot_text(&described_lines(&entries, &profile)?)
+}
+
+/// Describe every entry, sorted by its label.
+fn described_lines(entries: &[Entry], profile: &Profile) -> Result<Vec<(String, String)>, String> {
+    let mut lines = entries
+        .iter()
+        .map(|entry| describe(entry, profile).map(|description| (entry.label(), description)))
+        .collect::<Result<Vec<_>, _>>()?;
     lines.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(lines)
+}
+
+/// Join the described entries, one `label  description` line each.
+fn snapshot_text(lines: &[(String, String)]) -> Result<String, String> {
     let mut rendered = String::new();
     for (label, description) in lines {
         writeln!(rendered, "{label}  {description}")

@@ -342,18 +342,19 @@ const LEVEL_BYTES: usize = 8;
 /// Decode the constant node whose tag the cursor has already consumed.
 fn decode_const(reader: &mut KeyReader<'_>) -> Option<Tree> {
     let name = decode_name(reader)?;
+    let levels = decode_levels(reader)?;
+    Some(Tree::Const { name, levels })
+}
+
+/// Decode a counted run of universe levels that the bytes left can satisfy.
+fn decode_levels(reader: &mut KeyReader<'_>) -> Option<Vec<u32>> {
     let count = usize::try_from(reader.u64()?).ok()?;
     // Each level spends eight bytes, so a count that cannot fit in the bytes
     // left is malformed rather than merely large.
-    let needed = count.checked_mul(LEVEL_BYTES)?;
-    if needed > reader.remaining() {
+    if count.checked_mul(LEVEL_BYTES)? > reader.remaining() {
         return None;
     }
-    let mut levels = Vec::with_capacity(count.min(64));
-    for _ in 0..count {
-        levels.push(reader.level()?);
-    }
-    Some(Tree::Const { name, levels })
+    (0..count).map(|_| reader.level()).collect()
 }
 
 /// Decode the tree at the cursor, or return `None` if the bytes are not one.

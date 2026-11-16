@@ -73,23 +73,29 @@ pub(super) fn envelope(root: &Json, source: &str, out: &mut Collector) -> Result
 /// Visit one node and everything below it.
 pub(super) fn visit(value: &Json, path: &mut Vec<Step>, source: &str, out: &mut Collector) {
     match value {
-        Json::Object(map) => {
-            object_mutants(map, path, source, out);
-            for (key, child) in map {
-                path.push(Step::Key(key.clone()));
-                visit(child, path, source, out);
-                path.pop();
-            }
-        }
-        Json::Array(items) => {
-            array_mutants(items, path, out);
-            for (index, child) in items.iter().enumerate() {
-                path.push(Step::Index(index));
-                visit(child, path, source, out);
-                path.pop();
-            }
-        }
+        Json::Object(map) => visit_object(map, path, source, out),
+        Json::Array(items) => visit_array(items, path, source, out),
         Json::Null | Json::Bool(_) | Json::Number(_) | Json::String(_) => {}
+    }
+}
+
+/// Visit one object's own mutations, then each of its members.
+fn visit_object(map: &Map<String, Json>, path: &mut Vec<Step>, source: &str, out: &mut Collector) {
+    object_mutants(map, path, source, out);
+    for (key, child) in map {
+        path.push(Step::Key(key.clone()));
+        visit(child, path, source, out);
+        path.pop();
+    }
+}
+
+/// Visit one array's own mutations, then each of its items.
+fn visit_array(items: &[Json], path: &mut Vec<Step>, source: &str, out: &mut Collector) {
+    array_mutants(items, path, out);
+    for (index, child) in items.iter().enumerate() {
+        path.push(Step::Index(index));
+        visit(child, path, source, out);
+        path.pop();
     }
 }
 

@@ -189,29 +189,34 @@ fn operator(fields: Fields<'_>, source: &str, span: Span, tag: &str) -> Result<E
     let lhs = Box::new(expr(fields.value("lhs")?, source)?);
     let rhs = Box::new(expr(fields.value("rhs")?, source)?);
     let op = as_string(fields.value("op")?)?;
-    let kind = match tag {
-        "BinExpr" => ExprKind::Bin {
-            op: BinOp::from_tag(op).ok_or_else(|| unknown_operator(op))?,
+    Ok(Expr::new(span, operator_kind(tag, op, lhs, rhs)?))
+}
+
+/// Pick the expression kind for an operator tag and parse its operator text.
+fn operator_kind(tag: &str, text: &str, lhs: Box<Expr>, rhs: Box<Expr>) -> Result<ExprKind, Fault> {
+    match tag {
+        "BinExpr" => {
+            known_operator(BinOp::from_tag(text), text).map(|op| ExprKind::Bin { op, lhs, rhs })
+        }
+        "BoolExpr" => known_operator(BoolOp::from_tag(text), text).map(|op| ExprKind::Compare {
+            op,
             lhs,
             rhs,
-        },
-        "BoolExpr" => ExprKind::Compare {
-            op: BoolOp::from_tag(op).ok_or_else(|| unknown_operator(op))?,
+        }),
+        "ArithExpr" => {
+            known_operator(ArithOp::from_tag(text), text).map(|op| ExprKind::Arith { op, lhs, rhs })
+        }
+        _ => known_operator(AssignOp::from_tag(text), text).map(|op| ExprKind::Assign {
+            op,
             lhs,
             rhs,
-        },
-        "ArithExpr" => ExprKind::Arith {
-            op: ArithOp::from_tag(op).ok_or_else(|| unknown_operator(op))?,
-            lhs,
-            rhs,
-        },
-        _ => ExprKind::Assign {
-            op: AssignOp::from_tag(op).ok_or_else(|| unknown_operator(op))?,
-            lhs,
-            rhs,
-        },
-    };
-    Ok(Expr::new(span, kind))
+        }),
+    }
+}
+
+/// Require a parsed operator, or report the text that named none.
+fn known_operator<T>(parsed: Option<T>, text: &str) -> Result<T, Fault> {
+    parsed.ok_or_else(|| unknown_operator(text))
 }
 
 /// Decode a membership test.

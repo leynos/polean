@@ -106,6 +106,15 @@ pub fn canonical_tokens<'a>(
 /// Split one atom's canonical text at its separating spaces, keeping a quoted
 /// string whole so that a value containing a space stays one token.
 fn split(canonical: &str) -> Result<Vec<&str>, String> {
+    let parts = token_parts(canonical)?;
+    if parts.is_empty() {
+        return Err(format!("the canonical text `{canonical}` has no tokens"));
+    }
+    Ok(parts)
+}
+
+/// Collect the tokens of `canonical`, skipping the spaces between them.
+fn token_parts(canonical: &str) -> Result<Vec<&str>, String> {
     let bytes = canonical.as_bytes();
     let mut parts = Vec::new();
     let mut at = 0;
@@ -114,21 +123,27 @@ fn split(canonical: &str) -> Result<Vec<&str>, String> {
             at += 1;
             continue;
         }
-        let start = at;
-        at = if byte == b'"' {
-            quoted_end(canonical, at)?
-        } else {
-            bare_end(bytes, at)
-        };
-        let part = canonical
-            .get(start..at)
-            .ok_or_else(|| format!("the canonical text `{canonical}` splits off a character"))?;
-        parts.push(part);
-    }
-    if parts.is_empty() {
-        return Err(format!("the canonical text `{canonical}` has no tokens"));
+        let end = token_end(canonical, at, byte)?;
+        parts.push(token_text(canonical, at, end)?);
+        at = end;
     }
     Ok(parts)
+}
+
+/// The offset just past the token that starts at `at` with `first`.
+fn token_end(canonical: &str, at: usize, first: u8) -> Result<usize, String> {
+    if first == b'"' {
+        quoted_end(canonical, at)
+    } else {
+        Ok(bare_end(canonical.as_bytes(), at))
+    }
+}
+
+/// The text of `canonical` between `start` and `end`, which must fall on characters.
+fn token_text(canonical: &str, start: usize, end: usize) -> Result<&str, String> {
+    canonical
+        .get(start..end)
+        .ok_or_else(|| format!("the canonical text `{canonical}` splits off a character"))
 }
 
 /// Whether a byte separates tokens in a canonical atom text.

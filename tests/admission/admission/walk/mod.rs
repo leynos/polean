@@ -40,21 +40,33 @@ pub(super) type Ir = Vec<Vec<String>>;
 ///
 /// Returns the first profile-stage rejection, in the order D16 fixes.
 pub(super) fn map(profile: &Profile, module: &Module) -> Result<Ir, Rejection> {
-    check_package(profile, module)?;
-    check_imports(profile, module)?;
-    check_target(module)?;
-    check_default(profile, module)?;
-    check_order(module)?;
+    check_module_shape(profile, module)?;
     let specs = specs(module);
     check_rule_limit(profile, &specs)?;
     check_heads(profile, &specs)?;
     let bodies = only_bodies(&specs)?;
-    check_body_limits(profile, &bodies)?;
-    check_literals(&bodies)?;
-    check_with(&bodies)?;
-    check_expressions(&bodies)?;
-    check_operators(&bodies)?;
+    check_bodies(profile, &bodies)?;
     collect_atoms(&bodies)
+}
+
+/// Run the module-level checks that precede any rule: package, imports,
+/// target, default and rule order, in the order D16 fixes.
+fn check_module_shape(profile: &Profile, module: &Module) -> Result<(), Rejection> {
+    check_package(profile, module)?;
+    check_imports(profile, module)?;
+    check_target(module)?;
+    check_default(profile, module)?;
+    check_order(module)
+}
+
+/// Run the checks over the collected rule bodies: limits, literals, `with`,
+/// expressions and operators, in the order D16 fixes.
+fn check_bodies(profile: &Profile, bodies: &[&Body]) -> Result<(), Rejection> {
+    check_body_limits(profile, bodies)?;
+    check_literals(bodies)?;
+    check_with(bodies)?;
+    check_expressions(bodies)?;
+    check_operators(bodies)
 }
 
 /// The parts of a normal rule the walk reads.
