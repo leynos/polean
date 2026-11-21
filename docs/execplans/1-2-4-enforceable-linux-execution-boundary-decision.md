@@ -5,10 +5,12 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 3). On 2026-11-21 the user accepted D1 and D3 and
+Status: APPROVED (revision 3). On 2026-11-21 the user accepted D1 and D3,
 installed bubblewrap 0.10.0 on the probe host, and asked for the size limits to
-be checked against past outcomes; revision 3 recalibrates them. Do not begin
-implementation until the user confirms the revised tolerances.
+be checked against past outcomes; revision 3 recalibrates them. The user
+confirmed the revised tolerances and authorised implementation on 2026-11-21.
+The ADR this plan produces stays `Proposed` until the user accepts it in
+conversation.
 
 Roadmap item: [1.2.4](../roadmap.md). Branch:
 `1-2-4-enforceable-linux-execution-boundary-decision`.
@@ -1090,7 +1092,8 @@ section and in each ADR.
 - [x] 2026-11-21: the user accepted D1 and D3 and installed bubblewrap 0.10.0.
 - [x] 2026-11-21: recalibrated the size limits against the delivered sizes of
   1.2.2 and 1.2.3 (revision 3).
-- [ ] User confirmation of the revised tolerances.
+- [x] 2026-11-21: the user confirmed the revised tolerances and authorised
+  implementation; the plan status moved from `DRAFT` to `APPROVED`.
 - [ ] EP-M1.
 - [ ] EP-M2.
 - [ ] EP-M3.
