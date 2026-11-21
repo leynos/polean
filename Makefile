@@ -6,7 +6,7 @@ CARGO ?= cargo
 WHITAKER ?= whitaker
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint interrogate lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke install-verus verus verus-installed verus-proof verus-controls
+.PHONY: help all build clean test typecheck lint interrogate lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke boundary-probe install-verus verus verus-installed verus-proof verus-controls
 
 SHELL := bash
 
@@ -109,6 +109,12 @@ test-scripts: ## Test the provisioning script with pytest
 
 toolchain-smoke: tools ## Provision the pinned tools, then run the ignored smoke tests
 	$(CARGO) test --locked --all-features --test toolchain -- --ignored smoke::
+
+# The probes start hostile children and create one scope each, so they run on a
+# single test thread: the host is shared with other work and the unit names and
+# cgroups are per-run state.
+boundary-probe: tools ## Run the execution-boundary probes on one test thread
+	$(CARGO) test --locked --all-features --test toolchain -- --ignored --test-threads=1 boundary::probe::
 
 # The Verus pins are read through $(shell ...), so the path and the pins are
 # fixed with `override :=` and validated before either can be interpolated.

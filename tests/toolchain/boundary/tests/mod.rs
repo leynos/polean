@@ -10,7 +10,9 @@
 //! runs the real `systemctl --user is-system-running` when a test calls it;
 //! that test asserts only on the controls it injected.
 
+mod canary;
 mod hostile;
 mod outcome;
 mod platform;
+mod probe;
 mod support;

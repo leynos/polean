@@ -169,6 +169,9 @@ pub struct Observation {
     pub exit: ExitForm,
     /// Whether the job's control group was empty after teardown.
     pub cgroup_empty: bool,
+    /// Whether any process outlived the process-group kill and was removed only
+    /// by the cgroup kill.
+    pub survivors: bool,
     /// Missing enforcement controls, empty when the platform check was ready.
     pub unavailable: Vec<MissingControl>,
 }
@@ -194,13 +197,16 @@ pub enum Outcome {
 /// a child failure, then completion. A missing control outranks everything
 /// because no job should have started; a surviving process outranks any bound
 /// because it is the one failure that makes every other observation untrustworthy.
+/// A process that outlived the process-group kill is a containment failure even
+/// when the cgroup kill then removed it: the process-group cancellation the
+/// boundary promises did not reach every process.
 #[must_use]
 pub fn classify(observation: &Observation) -> Outcome {
     if !observation.unavailable.is_empty() {
         return Outcome::Unavailable(observation.unavailable.clone());
     }
     let fired = observation.bounds.listed();
-    if !observation.cgroup_empty {
+    if !observation.cgroup_empty || observation.survivors {
         return Outcome::ContainmentFailure(fired);
     }
     if !fired.is_empty() {

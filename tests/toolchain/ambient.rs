@@ -96,6 +96,40 @@ pub fn set_mode(path: &Path, mode: u32) -> io::Result<()> {
     root()?.set_permissions(beneath_root(path)?, Permissions::from_mode(mode))
 }
 
+/// List the entry names in the directory `path`.
+///
+/// The names are returned as text because the caller is a `/proc` listing whose
+/// entries are numbers. A name that is not valid UTF-8 is rendered lossily
+/// rather than failing the listing.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn read_dir_names(path: &Path) -> io::Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in root()?.read_dir(beneath_root(path)?)? {
+        names.push(entry?.file_name().to_string_lossy().into_owned());
+    }
+    Ok(names)
+}
+
+/// Open `path` for writing, creating or truncating it.
+///
+/// The handle is a capability file, so a hostile child that uses it still goes
+/// through the same authority as every other filesystem access here.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn create(path: &Path) -> io::Result<cap_std::fs::File> { root()?.create(beneath_root(path)?) }
+
+/// Remove the file `path`.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn remove_file(path: &Path) -> io::Result<()> { root()?.remove_file(beneath_root(path)?) }
+
 /// Remove the empty directory `path`.
 ///
 /// # Errors

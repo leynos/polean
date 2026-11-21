@@ -1121,7 +1121,12 @@ section and in each ADR.
   "you've used all 10 included reviews currently available"; it reviewed
   nothing, so this is an evidence gap rather than a pass. Retry once the
   documented wait has elapsed, then record the findings.
-- [ ] EP-M2.
+- [x] 2026-11-21: EP-M2 implemented: `scope.rs`, `supervisor/` (with
+  `teardown.rs`), the six hostile behaviour families, `boundary/canary.rs` (the
+  report parser), `probe/unconfined.rs`, and the `make boundary-probe` target.
+  The outcome observation gained `survivors` and a cgroup diagnosis. Five
+  consecutive `boundary::probe::` runs pass (5 probes each; 4-6 s warm), the 88
+  boundary unit tests pass, and `make lint` is green.
 - [ ] EP-M3.
 - [ ] EP-M4, and the user's acceptance of ADR 0007.
 
@@ -1161,6 +1166,24 @@ section and in each ADR.
 - 2026-11-21: `scripts/tests/test_verus_make_targets.py` pinning the exact
   two-entry proof list had to grow to three entries; the controls suite already
   derives its counts from the configured tuples.
+- 2026-11-21: libtest names a test by its module path **without** the crate
+  name, so `module_path!()` (`toolchain::boundary::hostile`) had to lose its
+  first component before being used as the `--exact` filter. With the crate
+  name in the filter the child ran zero tests and exited 0, which looked like a
+  clean job.
+- 2026-11-21: a probe child that finishes in milliseconds can exit before the
+  supervisor's first successful scope poll, because `systemd-run --scope`
+  creates the scope and moves the command into it before executing it but
+  garbage-collects a successful scope immediately afterwards. The child now
+  holds a 250 ms observation window after its start line (D13). Without it,
+  three consecutive runs failed the offline probe with a fail-closed
+  `ContainmentFailure`.
+- 2026-11-21: reading `/proc/self/fd` reports the listing's own descriptor, and
+  a capability refuses to read any link whose target is absolute, so the
+  descriptor probe uses the intersection of two listings: each excludes the
+  other's transient descriptor. A Unix socket file cannot live under the
+  scratch directory because its path exceeds `SUN_LEN`; the socket-file probe
+  uses a unique `/tmp` name and removes it.
 
 ## Decision log
 
@@ -1224,6 +1247,20 @@ section and in each ADR.
   before the plan's flat file list. The unit-test trace already allows three
   files; this keeps each module and test file under the ceiling without moving
   behaviour. No public shape changes.
+- **D13, 2026-11-21:** every hostile child holds a 250 ms observation window
+  after its start line. `systemd-run --scope` creates the scope before it
+  executes the command, so the job is inside its cgroup from its first
+  instruction, but a job that finishes in milliseconds can be gone before the
+  supervisor's poll sees the scope, and systemd garbage-collects a successful
+  scope at once. The window makes "the supervisor observed the job inside its
+  scope" deterministic while changing nothing the job does; a missed scope
+  remains a fail-closed `ContainmentFailure`.
+- **D14, 2026-11-21:** the outcome observation carries `survivors` separately
+  from `cgroup_empty`. A process that outlived the process-group kill is a
+  containment failure even when the cgroup kill then removed it, because the
+  process-group cancellation the boundary promises did not reach every process.
+  This is the AC4 distinction between "the group kill was sufficient" and "the
+  cgroup was the authority".
 
 ## Outcomes & retrospective
 

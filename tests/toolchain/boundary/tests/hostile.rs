@@ -13,7 +13,7 @@ use crate::scratch::{check, check_eq};
 fn the_hostile_entry_name_is_pinned() -> Result<(), String> {
     check_eq!(
         hostile::entry_name(),
-        "toolchain::boundary::hostile::entry".to_owned(),
+        "boundary::hostile::entry".to_owned(),
         "a module move must be noticed here rather than in a silent probe"
     );
     Ok(())

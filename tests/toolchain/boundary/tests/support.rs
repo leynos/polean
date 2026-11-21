@@ -43,24 +43,47 @@ pub(super) fn platform_states() -> [Vec<MissingControl>; 2] {
     [Vec::new(), vec![missing_programs()]]
 }
 
-/// Every exit form paired with both control-group states.
-pub(super) fn exit_states() -> Vec<(ExitForm, bool)> {
+/// Every exit form paired with both control-group states and both survivor
+/// states.
+pub(super) fn failure_states() -> Vec<(ExitForm, bool, bool)> {
     let mut states = Vec::new();
     for exit in exit_forms() {
         for cgroup_empty in [true, false] {
-            states.push((exit, cgroup_empty));
+            for survivors in [true, false] {
+                states.push((exit, cgroup_empty, survivors));
+            }
         }
     }
     states
 }
 
+/// One observation the completion rule quantifies over.
+pub(super) struct Case {
+    /// Which bounds fired.
+    pub bounds: Bounds,
+    /// How the direct child ended.
+    pub exit: ExitForm,
+    /// Whether the cgroup was empty.
+    pub cgroup_empty: bool,
+    /// Whether a process outlived the process-group kill.
+    pub survivors: bool,
+    /// The missing controls.
+    pub unavailable: Vec<MissingControl>,
+}
+
 /// Every combination the completion rule quantifies over.
-pub(super) fn completion_cases() -> Vec<(Bounds, ExitForm, bool, Vec<MissingControl>)> {
+pub(super) fn completion_cases() -> Vec<Case> {
     let mut cases = Vec::new();
     for bounds in bound_sets() {
-        for (exit, cgroup_empty) in exit_states() {
+        for (exit, cgroup_empty, survivors) in failure_states() {
             for unavailable in platform_states() {
-                cases.push((bounds, exit, cgroup_empty, unavailable));
+                cases.push(Case {
+                    bounds,
+                    exit,
+                    cgroup_empty,
+                    survivors,
+                    unavailable,
+                });
             }
         }
     }

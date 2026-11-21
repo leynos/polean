@@ -20,12 +20,21 @@
 //! with the process, cannot be planted by another local user, and is inert in
 //! every other context.
 //!
-//! # Milestone
+//! # Behaviour families
 //!
-//! EP-M1 establishes the entry point and its token contract only. The behaviour
-//! families (canary, offline, memory, output, escapee, storage) arrive with the
-//! supervisor in EP-M2, so until then the entry parses its token and returns.
-//! No probe runs before EP-M2.
+//! Each family is one module and reports every attempt it makes as a line of its
+//! own, so a probe can require positive evidence per attempt rather than one
+//! opaque exit status. The families are finite by construction: no fork bomb,
+//! no unbounded allocation, and every path is supplied by the probe.
+
+use std::{io::Write as _, path::PathBuf, thread, time::Duration};
+
+mod canary;
+mod escapee;
+mod memory;
+mod offline;
+mod output;
+mod storage;
 
 /// The module path the entry point is reached through.
 pub const MODULE: &str = module_path!();
@@ -175,9 +184,125 @@ pub fn names() -> String {
     names
 }
 
-/// The exact libtest path of the entry point.
+/// The exact libtest filter that selects the entry point.
+///
+/// libtest names each test by its module path inside the test binary, without
+/// the crate name `module_path!()` carries. The filter must match that name
+/// exactly, because the supervisor passes `--exact`.
 #[must_use]
-pub fn entry_name() -> String { format!("{MODULE}::entry") }
+pub fn entry_name() -> String {
+    match MODULE.split_once("::") {
+        Some((_crate_name, path)) => format!("{path}::entry"),
+        None => format!("{MODULE}::entry"),
+    }
+}
+
+/// The prefix of every report line.
+pub const REPORT_PREFIX: &str = "polean-hostile";
+
+/// The prefix of a probe-supplied target argument.
+pub const TARGET_PREFIX: &str = "polean-target=";
+
+/// How long the child stays alive after its start line.
+///
+/// `systemd-run --scope` creates the scope before it executes the command, so a
+/// job is always inside its scope when it starts. A job that finishes in a few
+/// milliseconds can, however, be gone before the supervisor's first successful
+/// poll, which would leave the supervisor unable to confirm the containment it
+/// must report on. This window, far longer than the supervisor's poll interval,
+/// makes the observation deterministic without changing what the job does.
+pub const OBSERVATION_WINDOW: Duration = Duration::from_millis(250);
+
+/// Host inputs a behaviour may need, supplied by the probe as arguments.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Targets {
+    /// A loopback TCP address on the host to try to reach.
+    pub tcp: Option<String>,
+    /// An abstract Unix socket name on the host to try to reach.
+    pub abstract_name: Option<String>,
+    /// A Unix socket file the probe created to try to reach.
+    pub socket: Option<PathBuf>,
+    /// A host directory path to try to write into.
+    pub host: Option<PathBuf>,
+    /// The memory behaviour's mode: `allocate` or `fill`.
+    pub memory: Option<String>,
+    /// The run's nonce, used to name a marker the host must not keep.
+    pub marker: Option<String>,
+}
+
+/// Parse every target token from an argument list.
+///
+/// An argument that is not a target token is ignored, because libtest's own
+/// arguments share the list. A target token that cannot be parsed is an error:
+/// the supervisor built the list, so a malformed target is a probe defect and a
+/// silently ignored one would make a probe pass vacuously.
+///
+/// # Errors
+///
+/// Returns a diagnostic naming the malformed token.
+pub fn targets(args: &[String]) -> Result<Targets, String> {
+    let mut targets = Targets::default();
+    for argument in args {
+        let Some(token) = argument.strip_prefix(TARGET_PREFIX) else {
+            continue;
+        };
+        let Some((kind, value)) = token.split_once(':') else {
+            return Err(format!("the target token {token:?} must be <kind>:<value>"));
+        };
+        match kind {
+            "tcp" => targets.tcp = Some(value.to_owned()),
+            "abstract" => targets.abstract_name = Some(value.to_owned()),
+            "socket" => targets.socket = Some(PathBuf::from(value)),
+            "host" => targets.host = Some(PathBuf::from(value)),
+            "memory" => targets.memory = Some(value.to_owned()),
+            "marker" => targets.marker = Some(value.to_owned()),
+            other => {
+                return Err(format!(
+                    "the target kind {other:?} is not one of tcp, abstract, socket, host, memory, \
+                     marker"
+                ));
+            }
+        }
+    }
+    Ok(targets)
+}
+
+/// Write one report line to standard output.
+///
+/// Writing directly avoids the printing macros the repository denies, and a
+/// closed pipe ends the report rather than panicking: the supervisor may already
+/// have killed this process.
+pub fn report(text: &str) {
+    let mut out = std::io::stdout().lock();
+    let mut line = String::from(REPORT_PREFIX);
+    line.push(' ');
+    line.push_str(text);
+    line.push('\n');
+    if out.write_all(line.as_bytes()).is_err() {
+        return;
+    }
+    drop(out.flush());
+}
+
+/// Report one attempt and its observation.
+pub fn attempt(name: &str, detail: &str) { report(&format!("attempt {name} {detail}")); }
+
+/// Run the behaviour the request names.
+///
+/// # Errors
+///
+/// Returns a diagnostic for a failure the behaviour could not report as an
+/// observation.
+pub fn run(request: &Request, targets: &Targets) -> Result<(), String> {
+    match request.behaviour {
+        Behaviour::Canary => canary::run(),
+        Behaviour::Offline => offline::run(targets),
+        Behaviour::Memory => memory::run(targets),
+        Behaviour::Output => output::run(),
+        Behaviour::Escapee => escapee::run(),
+        Behaviour::Storage => storage::run(targets),
+    }
+}
 
 /// The hostile child's entry point.
 ///
@@ -188,9 +313,20 @@ pub fn entry_name() -> String { format!("{MODULE}::entry") }
 #[ignore = "run only by the execution-boundary probe"]
 fn entry() {
     let args: Vec<String> = std::env::args().collect();
-    let Ok(Some(_request)) = request(&args) else {
+    let Ok(Some(parsed)) = request(&args) else {
         return;
     };
-    // The behaviour families arrive with the supervisor in EP-M2. Until then the
-    // entry point is inert: no probe runs, and a stray token starts nothing.
+    let targets = match targets(&args) {
+        Ok(targets) => targets,
+        Err(reason) => {
+            report(&format!("failed {reason}"));
+            return;
+        }
+    };
+    report(&format!("start {}", parsed.nonce));
+    thread::sleep(OBSERVATION_WINDOW);
+    match run(&parsed, &targets) {
+        Ok(()) => report("done"),
+        Err(reason) => report(&format!("failed {reason}")),
+    }
 }

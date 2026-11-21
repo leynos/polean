@@ -29,11 +29,15 @@
 //! translation, or runtime correspondence, the four claims in `AGENTS.md`. It
 //! concerns only the environment in which those claims are later checked.
 
+pub(crate) mod canary;
 pub(crate) mod capture;
 pub(crate) mod hostile;
 pub(crate) mod launch;
 pub(crate) mod outcome;
 pub(crate) mod platform;
+pub(crate) mod probe;
+pub(crate) mod scope;
+pub(crate) mod supervisor;
 
 #[cfg(test)]
 mod tests;

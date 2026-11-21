@@ -11,33 +11,31 @@ use super::{
         Bounds,
         ControlKind,
         ExitForm,
-        MissingControl,
         Observation,
         Outcome,
         Verdict,
         classify,
         verdict,
     },
-    support::{bound_sets, completion_cases, exit_forms, missing_programs},
+    support::{Case, bound_sets, completion_cases, exit_forms, missing_programs},
 };
 use crate::scratch::{check, check_eq};
 
 /// Check the completion rule for one combination of observations.
-fn check_completion_rule(
-    bounds: Bounds,
-    exit: ExitForm,
-    cgroup_empty: bool,
-    unavailable: &[MissingControl],
-) -> Result<(), String> {
+fn check_completion_rule(case: &Case) -> Result<(), String> {
     let observation = Observation {
-        bounds,
-        exit,
-        cgroup_empty,
-        unavailable: unavailable.to_vec(),
+        bounds: case.bounds,
+        exit: case.exit,
+        cgroup_empty: case.cgroup_empty,
+        survivors: case.survivors,
+        unavailable: case.unavailable.clone(),
     };
     let completed = matches!(classify(&observation), Outcome::Completed);
-    let may_complete =
-        bounds.is_empty() && cgroup_empty && exit == ExitForm::Exited(0) && unavailable.is_empty();
+    let may_complete = case.bounds.is_empty()
+        && case.cgroup_empty
+        && !case.survivors
+        && case.exit == ExitForm::Exited(0)
+        && case.unavailable.is_empty();
     check_eq!(
         completed,
         may_complete,
@@ -48,8 +46,37 @@ fn check_completion_rule(
 /// Classify never reports completion unless every condition holds.
 #[test]
 fn classify_never_completes_under_failure() -> Result<(), String> {
-    for (bounds, exit, cgroup_empty, unavailable) in completion_cases() {
-        check_completion_rule(bounds, exit, cgroup_empty, &unavailable)?;
+    for case in completion_cases() {
+        check_completion_rule(&case)?;
+    }
+    Ok(())
+}
+
+/// Check one containment observation.
+fn check_containment(
+    bounds: Bounds,
+    exit: ExitForm,
+    cgroup_empty: bool,
+    survivors: bool,
+) -> Result<(), String> {
+    let observation = Observation {
+        bounds,
+        exit,
+        cgroup_empty,
+        survivors,
+        unavailable: Vec::new(),
+    };
+    match classify(&observation) {
+        Outcome::ContainmentFailure(listed) => check_eq!(
+            listed,
+            bounds.listed(),
+            "the containment failure must list every fired bound"
+        ),
+        other => {
+            return Err(format!(
+                "a surviving process must outrank {observation:?}, got {other:?}"
+            ));
+        }
     }
     Ok(())
 }
@@ -60,25 +87,8 @@ fn classify_never_completes_under_failure() -> Result<(), String> {
 fn containment_failure_outranks_every_other_observation() -> Result<(), String> {
     for bounds in bound_sets() {
         for exit in exit_forms() {
-            let observation = Observation {
-                bounds,
-                exit,
-                cgroup_empty: false,
-                unavailable: Vec::new(),
-            };
-            match classify(&observation) {
-                Outcome::ContainmentFailure(listed) => {
-                    check_eq!(
-                        listed,
-                        bounds.listed(),
-                        "the containment failure must list every fired bound"
-                    );
-                }
-                other => {
-                    return Err(format!(
-                        "a surviving process must outrank {observation:?}, got {other:?}"
-                    ));
-                }
+            for (cgroup_empty, survivors) in [(false, false), (true, true)] {
+                check_containment(bounds, exit, cgroup_empty, survivors)?;
             }
         }
     }
@@ -93,6 +103,7 @@ fn every_fired_bound_is_listed() -> Result<(), String> {
             bounds,
             exit: ExitForm::Signalled(9),
             cgroup_empty: true,
+            survivors: false,
             unavailable: Vec::new(),
         };
         match classify(&observation) {
@@ -124,6 +135,7 @@ fn a_memory_kill_and_a_deadline_are_both_named() -> Result<(), String> {
         bounds,
         exit: ExitForm::Signalled(9),
         cgroup_empty: true,
+        survivors: false,
         unavailable: Vec::new(),
     };
     check_eq!(
@@ -141,6 +153,7 @@ fn a_clean_exit_with_a_survivor_is_a_containment_failure() -> Result<(), String>
         bounds: Bounds::none(),
         exit: ExitForm::Exited(0),
         cgroup_empty: false,
+        survivors: false,
         unavailable: Vec::new(),
     };
     check_eq!(
@@ -160,6 +173,7 @@ fn an_unavailable_platform_outranks_every_observation() -> Result<(), String> {
         bounds,
         exit: ExitForm::Signalled(9),
         cgroup_empty: false,
+        survivors: true,
         unavailable: vec![missing_programs()],
     };
     check_eq!(
