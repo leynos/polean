@@ -49,6 +49,7 @@ Runner = Callable[[Path, Path, Path, Path], subprocess.CompletedProcess[str]]
 ROOT = Path(__file__).resolve().parents[1]
 KERNEL_DIR = Path("tests/admission/recognizer/kernel")
 SETTLEMENT_DIR = Path("tests/toolchain/audit/settlement/decision")
+CAPTURE_DIR = Path("tests/toolchain/boundary/capture")
 PROOF_DIR = Path("verus")
 VERSION_FILE = Path("tools/verus/VERSION")
 
@@ -83,7 +84,12 @@ SETTLEMENT = ProofTree(
     entry=PROOF_DIR / "audit_settlement.rs",
     sources=(PROOF_DIR, SETTLEMENT_DIR),
 )
-TREES: tuple[ProofTree, ...] = (ADMISSION, SETTLEMENT)
+CAPTURE = ProofTree(
+    name="capture",
+    entry=PROOF_DIR / "boundary_capture.rs",
+    sources=(PROOF_DIR, CAPTURE_DIR),
+)
+TREES: tuple[ProofTree, ...] = (ADMISSION, SETTLEMENT, CAPTURE)
 
 
 @dataclass(frozen=True)
@@ -393,6 +399,67 @@ CONTROLS: tuple[Control, ...] = (
 }
 """,
         expects=("assertion failed", "audit_settlement_witnesses.rs"),
+    ),
+    Control(
+        tree=CAPTURE,
+        kind="body",
+        name="whole-chunk-kept",
+        path=CAPTURE_DIR / "mod.rs",
+        anchor="""        let mut index: usize = 0;
+        while index < keep
+""",
+        replacement="""        let mut index: usize = 0;
+        // NEGATIVE CONTROL: the whole chunk is kept, not the part below the cap.
+        while index < chunk.len()
+""",
+        expects=("invariant not satisfied", "index <= keep", "boundary/capture/mod.rs"),
+    ),
+    Control(
+        tree=CAPTURE,
+        kind="body",
+        name="crossing-chunk-dropped",
+        path=CAPTURE_DIR / "mod.rs",
+        anchor="""        let keep = if chunk.len() < remaining {
+            chunk.len()
+        } else {
+            remaining
+        };
+""",
+        replacement="""        // NEGATIVE CONTROL: a chunk that crosses the cap contributes nothing.
+        let keep = if chunk.len() < remaining { chunk.len() } else { 0 };
+""",
+        expects=(
+            "invariant not satisfied",
+            "keep as int == keep_count",
+            "boundary/capture/mod.rs",
+        ),
+    ),
+    Control(
+        tree=CAPTURE,
+        kind="body",
+        name="trip-at-cap",
+        path=CAPTURE_DIR / "mod.rs",
+        anchor="""        let tripped = chunk.len() > remaining;
+""",
+        replacement="""        // NEGATIVE CONTROL: reaching the cap trips, rather than passing it.
+        let tripped = chunk.len() >= remaining;
+""",
+        expects=("postcondition not satisfied", "boundary/capture/mod.rs"),
+    ),
+    Control(
+        tree=CAPTURE,
+        kind="spec",
+        name="prefix-clause-dropped",
+        path=PROOF_DIR / "boundary_capture_spec.rs",
+        anchor="""    let s = stream_at(chunks, index);
+    kept.len() <= cap && kept == prefix(s, prefix_len(cap, s))
+        && tripped == (s.len() as int > cap as int)
+""",
+        replacement="""    let s = stream_at(chunks, index);
+    // NEGATIVE CONTROL: the prefix clause is dropped from the specification.
+    kept.len() <= cap && tripped == (s.len() as int > cap as int)
+""",
+        expects=("assertion failed", "kept == prefix", "boundary_capture_witnesses.rs"),
     ),
 )
 

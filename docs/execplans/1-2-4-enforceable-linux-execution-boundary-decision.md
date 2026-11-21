@@ -1094,7 +1094,23 @@ section and in each ADR.
   1.2.2 and 1.2.3 (revision 3).
 - [x] 2026-11-21: the user confirmed the revised tolerances and authorised
   implementation; the plan status moved from `DRAFT` to `APPROVED`.
-- [ ] EP-M1.
+- [x] 2026-11-21: re-probed the host before EP-M2. `bwrap --version` reports
+  `bubblewrap 0.10.0`; the user manager answers `degraded`; the caller's cgroup
+  is `…/user@1000.service/app.slice/lody-daemon.service`; the manager delegates
+  `cpu memory pids`; a 256 MiB allocation in a scope with `MemoryMax=64M` and
+  `MemorySwapMax=0` was killed with status 137 and `Result=oom-kill`;
+  `memory.max`, `memory.swap.max`, `pids.max`, and `memory.oom.group` read back
+  the requested values while the scope was active; `cgroup.kill` is writable
+  and kills the group.
+- [x] 2026-11-21: EP-M1 implemented. `tests/toolchain/boundary/` holds
+  `capture/`, `outcome.rs`, `platform/`, `launch/`, and `hostile/`; the unit
+  tests are `boundary/tests.rs`, `capture/tests.rs`, and `launch/tests.rs`.
+  `verus/boundary_capture.rs` verifies 29 obligations with zero errors, and the
+  four new controls (`whole-chunk-kept`, `crossing-chunk-dropped`,
+  `trip-at-cap`, `prefix-clause-dropped`) are each rejected.
+  `make install-verus` installed the pinned release and Z3.
+- [ ] EP-M1 gates: `make check-fmt`, `make typecheck`, `make lint`,
+  `make test`, `make verus`, and `make test-scripts`.
 - [ ] EP-M2.
 - [ ] EP-M3.
 - [ ] EP-M4, and the user's acceptance of ADR 0007.
@@ -1110,6 +1126,22 @@ section and in each ADR.
 - 2026-11-14: systemd accepts limits it cannot apply, and a `bwrap` set-up
   failure looks like a child failure, so presence checks alone could make a
   probe pass vacuously. The canary and the limit read-back answer this.
+- 2026-11-21: `bwrap --dev /dev` mounts a writable tmpfs that includes
+  `/dev/shm`, so a sandboxed job **could** write there: not to the host's
+  `/dev/shm`, but to an area outside the `--size` bound. AC5 as written
+  ("writes to `/dev/shm` fail") therefore needed `--remount-ro /dev` after
+  `--dev /dev`. Verified by hand: with the remount a write to `/dev/shm` fails
+  with `EROFS`, `/dev/null` stays writable, and a scratch fill still fails with
+  `ENOSPC`. Recorded as D11.
+- 2026-11-21: `systemctl --user is-system-running` reports `degraded` on the
+  probe host, which exits non-zero. The check accepts `running` and `degraded`
+  and refuses `starting`, `maintenance`, `stopping`, and `offline`; a degraded
+  manager is reachable and can create scopes, and the canary and limit
+  read-back still observe whether the scope took effect.
+- 2026-11-21: Verus needs `#[verifier::fuel]`-equivalent help for concrete
+  witness computation (`reveal_with_fuel(fold_at, 8)`) and `final(self)` for a
+  `&mut self` postcondition. Neither changed the specification or the planned
+  interface.
 
 ## Decision log
 
@@ -1161,6 +1193,18 @@ section and in each ADR.
   `SHA256SUMS` row, the proof tolerance rises from 300 to 450 lines in line
   with the settlement proof's 581, and an 80 per cent checkpoint replaces
   discovering an overrun at the limit.
+- **D11, 2026-11-21:** remount `/dev` read-only as well as `/`. Bubblewrap's
+  `--dev` creates a writable tmpfs that includes `/dev/shm`, so without the
+  remount a job has a second writable area outside the `--size` bound and AC5's
+  "/dev/shm writes fail" is false. The remount keeps `/dev/null` and the other
+  device nodes usable, and makes `/dev/shm` writes fail with `EROFS`. This is a
+  tightening within the design's `--remount-ro` family, not a new mechanism,
+  and it needs no change to technical design §11.
+- **D12, 2026-11-21:** `platform/` and `launch/` are directory modules, with the
+  launch tests in `launch/tests.rs`, because the 400-line module rule binds
+  before the plan's flat file list. The unit-test trace already allows three
+  files; this keeps each module and test file under the ceiling without moving
+  behaviour. No public shape changes.
 
 ## Outcomes & retrospective
 

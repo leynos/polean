@@ -119,7 +119,7 @@ $(error PROVER_TOOLS_REF missing or malformed; expected "ref: <40-hex>" in $(PRO
 endif
 override PROVER_TOOLS_SOURCE := git+https://github.com/leynos/rust-prover-tools.git@$(PROVER_TOOLS_REF)
 override PROVER_TOOLS := uv tool run --from "$(PROVER_TOOLS_SOURCE)" prover-tools
-VERUS_PROOF_FILES ?= verus/admission_recognizer.rs verus/audit_settlement.rs
+VERUS_PROOF_FILES ?= verus/admission_recognizer.rs verus/audit_settlement.rs verus/boundary_capture.rs
 VERUS_FLAGS ?=
 VERUS_Z3_PATH := $(CURDIR)/.verus/z3/z3
 override VERUS_VERSION := $(shell awk 'NR == 1 && /^[0-9A-Za-z.]+$$/ { print; exit }' tools/verus/VERSION 2>/dev/null)
