@@ -5,8 +5,10 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 2). Awaiting approval. Do not begin implementation
-until the user explicitly approves this plan.
+Status: DRAFT (revision 3). On 2026-11-21 the user accepted D1 and D3 and
+installed bubblewrap 0.10.0 on the probe host, and asked for the size limits to
+be checked against past outcomes; revision 3 recalibrates them. Do not begin
+implementation until the user confirms the revised tolerances.
 
 Roadmap item: [1.2.4](../roadmap.md). Branch:
 `1-2-4-enforceable-linux-execution-boundary-decision`.
@@ -224,15 +226,45 @@ each source.
 
 ### Size history from comparable plans
 
-The previous spikes underestimated their size. The 1.2.1 plan set 30 files and
-about 1,200 net lines and reached 36 changed files without an escalation. The
-1.2.2 plan ended at 96 non-fixture files and 14,072 net lines against a revised
-40 files and 4,000 lines. The 1.2.3 plan set 30 files and 3,000 net lines,
-measured 66 files and 9,406 net lines, and the sponsor raised the limit after
-the fact; its decision log says "the estimate was wrong, not the scope". The
-causes were review-driven repairs, documentation and fixture growth, and
-untraced test infrastructure. This task has no fixture corpus, so the budgets
-below come from a traced file list with explicit room for two review rounds.
+The previous spikes overran their limits. The 1.2.1 plan set 30 files and about
+1,200 net lines and reached 36 changed files without an escalation. The 1.2.2
+plan set 40 files and 4,000 net lines and ended at 96 non-fixture files and
+14,072 net lines. The 1.2.3 plan set 30 files and 3,000 net lines; the sponsor
+raised the limit after the fact, and its decision log says "the estimate was
+wrong, not the scope". In each case the limit was a guess scaled from the
+previous plan rather than a sum over traced components, and review repairs then
+added more: the 1.2.2 assessment repair alone added 5 files and 1,402 lines.
+
+The squash commits measure what each task actually delivered, classified as in
+`Tolerances` below:
+
+| Category      | 1.2.2 (`de8a85e`) | 1.2.3 (`ad217c8`) |
+| ------------- | ----------------- | ----------------- |
+| Code          | 73 files, 14,698  | 53 files, 7,851   |
+| Documentation | 10 files, 720     | 13 files, 958     |
+| Configuration | 5 files, 139      | 9 files, 341      |
+| Fixtures      | 109 files, 1,350  | 31 files, 708     |
+| Snapshots     | 2 files, 126      | 2 files, 111      |
+
+_Table 1: Net lines delivered by the two previous spikes, excluding their
+ExecPlans._
+
+Most of 1.2.2's code was its admission corpus machinery, which has no
+counterpart here. 1.2.3 is the closer analogue: a test-only kernel with a Verus
+proof, a runner for provisioned tools, behavioural bindings, and new Verus
+controls. Its code divides as follows: wire decoding, properties, and fixture
+builders 2,914; the smoke runner and its probes 1,246; the settlement kernel
+865; Verus specification, lemmas, witnesses, and entry 592; behavioural
+bindings 530; the Lean worker 517; control-script and other script changes 401;
+validation contracts 397; and other tests 388. Removing the parts with no
+counterpart in 1.2.4 (wire, properties, and fixtures; the Lean worker; the
+validation contracts) leaves about 4,000 net lines, which is the right order
+for this task. Its documentation included a 406-line findings record; without
+it, documentation came to about 550 lines.
+
+The budgets in `Tolerances` are therefore built from a component trace
+calibrated against those figures, with contingency sized from the observed
+repair growth, rather than scaled from earlier limits.
 
 ## Conformance basis
 
@@ -362,27 +394,51 @@ git diff --numstat "$(git merge-base main HEAD)" -- . \
   ':(exclude)docs/execplans/1-2-4-enforceable-linux-execution-boundary-decision.md'
 ```
 
-Each category is enforced on its own:
+Each category is enforced on its own. Spare capacity in one category never
+offsets another.
 
-- **Code**, meaning Rust under `tests/`, Verus under `verus/`, Python under
-  `scripts/`, `.feature` files, and `Makefile` recipes: traced at about 2,700
-  net lines in about 26 files. The trace is `boundary/mod.rs`, `capture/mod.rs`,
-  `outcome.rs`, `platform.rs`, `canary.rs`, `launch.rs`, `scope.rs`,
-  `supervisor.rs`, `hostile/mod.rs` with one module per behaviour family,
-  `probe/mod.rs` with `unconfined.rs`, `bubblewrap.rs`, and `tools.rs`,
-  `bdd.rs`, and `tests.rs`; three Verus files plus the entry; the
-  control-script entries and their test counts; the feature file; and the
-  `Makefile` target. Limit: **3,500 net lines and 32 files**.
-- **Configuration** (`Cargo.toml`, `Cargo.lock`, `.config/`, `.github/`):
-  expected none. Limit: **20 net lines and 2 files**. Any new dependency is an
-  exception whatever its size.
-- **Documentation** (Markdown outside `docs/execplans/`, and `AGENTS.md`):
-  traced at about 600 net lines in 9 files: the ADR, the technical design, the
-  developers' guide, the repository layout, the contents page, the roadmap, ADR
-  0003 and ADR 0006 pointers, and `AGENTS.md`. Limit: **850 net lines and 10
-  files**.
-- **Generated:** reviewed `insta` snapshots are excluded from line counts and
-  limited to **2 files**.
+**Code** means Rust under `tests/`, Verus under `verus/`, Python under
+`scripts/`, `.feature` files, and `Makefile` recipes. The trace, with the 1.2.3
+analogue for each component:
+
+| Component                                            | 1.2.3 analogue | Estimate | Files |
+| ---------------------------------------------------- | -------------- | -------- | ----- |
+| Kernels: capture, outcome, platform, launch          | 865            | 700      | 6     |
+| Verus specification, lemmas, witnesses, and entry    | 592            | 400      | 4     |
+| Supervisor, scope, and canary                        | 1,246 (runner) | 900      | 4     |
+| Hostile behaviours, one module per family            | none           | 450      | 6     |
+| Probes: `unconfined`, `bubblewrap`, and `tools`      | in runner      | 1,000    | 6     |
+| Behavioural bindings and the feature file            | 530            | 450      | 3     |
+| Unit tests, split to stay under 400 lines per module | 388            | 450      | 3     |
+| Control entries, their tests, `Makefile`, `main.rs`  | 401            | 100      | 5     |
+| **Total**                                            |                | 4,450    | 37    |
+
+_Table 2: Code trace for 1.2.4, in net lines._
+
+Limit: **5,800 net lines and 42 files**. The contingency of about 30 per cent
+covers two review rounds at the scale of the 1.2.2 repair.
+
+**Configuration** means `Cargo.toml`, `Cargo.lock`, `SHA256SUMS`, `.config/`,
+`.github/`, and other declarative settings. Expected: the `SHA256SUMS` row for
+`docs/technical-design.md`, which must be regenerated after §§2, 11, and 13
+change (net 0, two changed lines). Limit: **20 net lines and 3 files**. Any new
+dependency is an exception whatever its size.
+
+**Documentation** means Markdown outside `docs/execplans/`, and `AGENTS.md`.
+The trace is ADR 0007 (about 350, against ADR 0006's 192, because it compares
+seven alternatives and records the observed matrix), the technical design
+(about 110), the developers' guide (about 150), and the repository layout,
+contents page, roadmap, ADR 0003 and ADR 0006 addenda, and `AGENTS.md` (about
+70 together): about 680 net lines in 9 files. Limit: **950 net lines and 12
+files**.
+
+**Generated:** reviewed `insta` snapshots are excluded from line counts and
+limited to **2 files**.
+
+Treat a limit as a stop, not a target. If a category reaches 80 per cent of its
+limit before EP-M4, record the cause in `Decision log` and compare the
+remaining trace with the remaining budget; if the trace no longer fits,
+escalate then rather than at the limit.
 
 Other triggers:
 
@@ -393,7 +449,7 @@ Other triggers:
   `make boundary-probe` runs, stop and escalate. Do not add retries.
 - **Duration:** if `make boundary-probe` takes longer than five minutes after
   the tools are provisioned, escalate before tuning.
-- **Proof:** if the capture proof needs more than about 300 lines of
+- **Proof:** if the capture proof needs more than about 450 lines of
   specification, lemmas, and witnesses, or forces a change to the kernel's
   planned interface, escalate. Do not weaken the specification to fit.
 - **Scope:** if the work needs a design element not described here, such as a
@@ -402,9 +458,9 @@ Other triggers:
 
 ## Risks
 
-- **R1. Bubblewrap is absent.** The user is asked to run
-  `sudo dnf install bubblewrap` as part of approving this plan. EP-M1 and EP-M2
-  need no `bwrap`; EP-M3 does not start without it.
+- **R1. Bubblewrap is absent.** Resolved on 2026-11-21: the user installed
+  the distribution's bubblewrap, and `/usr/bin/bwrap --version` reports
+  `bubblewrap 0.10.0`. If a later host lacks it, EP-M3 does not start there.
 - **R2. `systemd-run` cannot reach the user manager from a cleared
   environment.** It needs `XDG_RUNTIME_DIR`. Pass exactly
   `XDG_RUNTIME_DIR=/run/user/<uid>`, with the user ID read from the scratch
@@ -945,14 +1001,18 @@ Requirements: AC8. End state:
   `AGENTS.md` name the new module, ADR, plan, and target.
 - `docs/roadmap.md`: 1.2.4 is marked done with a short "Recorded" note once the
   user has accepted the ADR.
+- `SHA256SUMS`: the row for `docs/technical-design.md` is replaced with the
+  output of `sha256sum docs/technical-design.md`, because the manifest pins
+  that document. No other pinned file changes.
 
 `docs/users-guide.md` and `docs/terms-of-reference.md` do not change: no user
 behaviour changes, and the probe resolves neither A4 nor A6.
 
 Acceptance: `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
-`make design-check` pass. Conformance check: every link in `Conformance basis`
-is current, and no document claims more than the probe showed. Recovery:
-documentation commits revert independently.
+`make design-check` pass, and `sha256sum -c SHA256SUMS` reports every entry
+`OK`. Conformance check: every link in `Conformance basis` is current, and no
+document claims more than the probe showed. Recovery: documentation commits
+revert independently.
 
 ## Concrete steps
 
@@ -1027,7 +1087,10 @@ section and in each ADR.
 - [x] 2026-11-14: drafted revision 1.
 - [x] 2026-11-14: expert panel review (sandbox security, Rust testing and
   verification, assurance and proportionality); revision 2 addresses it.
-- [ ] User approval, acceptance of D1 and D3, and installation of bubblewrap.
+- [x] 2026-11-21: the user accepted D1 and D3 and installed bubblewrap 0.10.0.
+- [x] 2026-11-21: recalibrated the size limits against the delivered sizes of
+  1.2.2 and 1.2.3 (revision 3).
+- [ ] User confirmation of the revised tolerances.
 - [ ] EP-M1.
 - [ ] EP-M2.
 - [ ] EP-M3.
@@ -1055,7 +1118,7 @@ section and in each ADR.
   alternatives were a systemd user service with private namespaces (no install,
   but a denylist view) and rootless `crun` (installed and declarative, but with
   container state). Either is the fallback if bubblewrap cannot be installed or
-  H1 fails. Needs the user's acceptance with the plan.
+  H1 fails. Accepted by the user on 2026-11-21.
 - **D2, 2026-11-14:** limit memory through cgroups, not `RLIMIT_AS`, because
   Go reserves address space at start-up and a cgroup limit measures memory
   used. Use `OOMPolicy=kill` and `KillSignal=SIGKILL`, because the default
@@ -1066,9 +1129,7 @@ section and in each ADR.
   lines. The plan keeps it because the output cap is the one bound the
   supervisor enforces itself, the simplified kernel needs no counter, and the
   1.2.3 settlement proof set the precedent of proving a test-only kernel before
-  promotion. Needs the user's acceptance with the plan; if the user prefers to
-  defer it, drop V-CAP, the Verus files, and the four controls, and keep the
-  `proptest` property and named cases.
+  promotion. Accepted by the user on 2026-11-21.
 - **D4, 2026-11-14:** keep the util-linux composition out of the code; the ADR
   records it with the reproducible command.
 - **D5, 2026-11-14:** select hostile behaviours by an argument token, not a
@@ -1087,6 +1148,16 @@ section and in each ADR.
 - **D9, 2026-11-14:** do not use `bwrap --json-status-fd`. Passing it an extra
   descriptor would need `pre_exec`, and sharing standard error lets the child
   forge status lines. The canary detects set-up failure instead.
+- **D10, 2026-11-21:** recalibrate the size limits from the measured squash
+  commits of 1.2.2 and 1.2.3 rather than from their limits. Revision 2's code
+  limit of 3,500 net lines rested on a 2,700-line trace that omitted the
+  witnesses file, the 400-line splits, and a realistic size for the probes; the
+  comparable part of 1.2.3 alone delivered about 4,000. The new trace is 4,450
+  lines in 37 files, with limits of 5,800 lines and 42 files. Documentation
+  rises to 950 lines and 12 files for a longer ADR, configuration now names the
+  `SHA256SUMS` row, the proof tolerance rises from 300 to 450 lines in line
+  with the settlement proof's 581, and an 80 per cent checkpoint replaces
+  discovering an overrun at the limit.
 
 ## Outcomes & retrospective
 
@@ -1109,3 +1180,10 @@ Not started.
   owners. Budgets were re-traced to 32 code files. The remaining work is
   unchanged in order; approval now also asks for D1, D3, and the bubblewrap
   installation.
+- Revision 3, 2026-11-21: recorded the user's acceptance of D1 and D3 and the
+  installation of bubblewrap 0.10.0, which resolves R1. Recalibrated every size
+  limit against the delivered sizes of 1.2.2 and 1.2.3 (D10): code 5,800 net
+  lines and 42 files, configuration 20 lines and 3 files including the
+  `SHA256SUMS` row, documentation 950 lines and 12 files, and the proof 450
+  lines, with an 80 per cent checkpoint. Added the `SHA256SUMS` regeneration to
+  EP-M4. Implementation waits only for confirmation of these limits.
