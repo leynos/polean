@@ -55,7 +55,7 @@ pub fn validate_unit(unit: &str) -> Result<(), String> {
 /// Returns a diagnostic for a key that cannot be expressed as `KEY=VALUE`.
 pub fn validate_env(env: &[(String, String)]) -> Result<(), String> {
     for (key, value) in env {
-        if key.is_empty() || key.contains('=') || key.contains('\0') {
+        if !valid_env_key(key) {
             return Err(format!("the environment key {key:?} is not a valid name"));
         }
         if value.contains('\0') {
@@ -64,6 +64,9 @@ pub fn validate_env(env: &[(String, String)]) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Whether `key` can be written as the left side of `KEY=VALUE`.
+fn valid_env_key(key: &str) -> bool { !key.is_empty() && !key.contains('=') && !key.contains('\0') }
 
 /// Validate the read-only binds.
 ///
