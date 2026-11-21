@@ -1109,8 +1109,18 @@ section and in each ADR.
   four new controls (`whole-chunk-kept`, `crossing-chunk-dropped`,
   `trip-at-cap`, `prefix-clause-dropped`) are each rejected.
   `make install-verus` installed the pinned release and Z3.
-- [ ] EP-M1 gates: `make check-fmt`, `make typecheck`, `make lint`,
-  `make test`, `make verus`, and `make test-scripts`.
+- [x] 2026-11-21: EP-M1 gates all green at `f23f920`, run sequentially by the
+  scrutineer: `make check-fmt` (2 s), `make typecheck` (50 s), `make lint` (186
+  s), `make test` (589 s; 294 passed, 23 skipped), `make design-check`,
+  `make design-properties`, `make design-boundary`, `make markdownlint`,
+  `make verus` (136 s; 89 + 64 + 29 verified, all 19 controls rejected),
+  `test-scripts` (152 passed), and `make toolchain-smoke` (262 s after
+  provisioning; 22 passed). Pushed as `f23f920`.
+- [ ] EP-M1 milestone CodeRabbit CLI review. The CLI (`0.9.6`) refused with
+  `rate_limit`, `recoverable: true`, `waitTime: 7 minutes and 51 seconds`, and
+  "you've used all 10 included reviews currently available"; it reviewed
+  nothing, so this is an evidence gap rather than a pass. Retry once the
+  documented wait has elapsed, then record the findings.
 - [ ] EP-M2.
 - [ ] EP-M3.
 - [ ] EP-M4, and the user's acceptance of ADR 0007.
@@ -1142,6 +1152,15 @@ section and in each ADR.
   witness computation (`reveal_with_fuel(fold_at, 8)`) and `final(self)` for a
   `&mut self` postcondition. Neither changed the specification or the planned
   interface.
+- 2026-11-21: the installed Whitaker suite is newer than the one the branch
+  started from. It added `module-max-lines`, `conditional-max-n-branches`, and
+  `bumpy-road-function`, which flagged the single 765-line boundary test module
+  and two pre-existing admission helpers. Both admission findings were repaired
+  by behaviour-preserving extraction, and the boundary tests were split into
+  `boundary/tests/`. `make lint` is green.
+- 2026-11-21: `scripts/tests/test_verus_make_targets.py` pinning the exact
+  two-entry proof list had to grow to three entries; the controls suite already
+  derives its counts from the configured tuples.
 
 ## Decision log
 
