@@ -58,7 +58,7 @@ mod wait;
 pub(crate) use self::wait::retain_seen;
 use self::{
     reader::{Readers, drain_readers, finish_readers, readers},
-    run::{Target, note, read_limits, read_result},
+    run::{Target, note, read_limits, read_result, reset_failed_unit},
     teardown::{Inputs, tear_down},
     wait::{Waiting, snapshot_fds, wait},
 };
@@ -259,6 +259,7 @@ impl Supervisor<'_> {
         let (stdout, stderr, mut bounds) =
             finish_readers(readers, waiting.bounds, &mut diagnostics);
         let result = read_result(&scope, &mut diagnostics);
+        reset_failed_unit(&scope, result.as_deref());
         if result.as_deref() == Some("oom-kill") {
             bounds.insert(Bound::Memory);
         }

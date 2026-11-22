@@ -63,7 +63,7 @@ targets are:
 | `make toolchain-smoke`   | Provision, then run the ignored OPA, Lean, and audit observations.  |
 | `make boundary-probe`    | Provision, then run the execution-boundary probes on one thread.    |
 | `make install-verus`     | Install the pinned Verus release and Z3 solver locally.             |
-| `make verus`             | Run both Verus proof entry points and their controls.               |
+| `make verus`             | Run all three Verus proof entry points and their controls.          |
 | `make design-check`      | Validate schemas, policy fixtures, abstractions, and witnesses.     |
 | `make design-properties` | Search the admitted input domain for model-side counterexamples.    |
 | `make design-boundary`   | Test the harness's orchestration and storage boundaries.            |
@@ -271,26 +271,27 @@ fixture pass: the profile is the specification, and the design check and the
 record both depend on it staying fixed.
 
 `make install-verus` installs the Verus release and Z3 solver pinned in
-`tools/verus/`, digest-checked. `make verus` runs two proof entry points:
+`tools/verus/`, digest-checked. `make verus` runs three proof entry points:
 `verus/admission_recognizer.rs`, which compiles the recognizer kernel through
-`#[path]`, and `verus/audit_settlement.rs`, which compiles the settlement
-decision through `#[path]`. It then replays the negative controls that
-`scripts/check_verus_controls.py` holds. Each control requires a non-zero Verus
-exit, an error, and the expected output substrings, and each substring is
-searched for independently over the combined output. A passing control shows
-that its edit was detected and that the expected failure kind and source path
-appear somewhere; it does not show that the intended obligation rejected the
-defect. Both are on-demand: `make all` and CI do not need a solver, a network
-connection, or several gigabytes of disk for Verus. The recognizer proof
-establishes the kernel's byte-level soundness for sources of any length. Its
-completeness result is stated only for a canonical-token predicate, which is a
-sufficient condition for a successful recognition rather than a
-characterization of every input it accepts. The settlement proof establishes
-what acceptance means for a report settlement is given; it does not establish
-that the worker told the truth. Neither proof establishes that the AST walk
-maps Regorus faithfully, that the renderer chooses the right tokens, or that
-Rego means what the model means. Those remain tested or open as the record
-describes.
+`#[path]`, `verus/audit_settlement.rs`, which compiles the settlement decision
+through `#[path]`, and `verus/boundary_capture.rs`, which compiles the
+execution boundary's stream-capture kernel through `#[path]`. It then replays
+the negative controls that `scripts/check_verus_controls.py` holds. Each
+control requires a non-zero Verus exit, an error, and the expected output
+substrings, and each substring is searched for independently over the combined
+output. A passing control shows that its edit was detected and that the
+expected failure kind and source path appear somewhere; it does not show that
+the intended obligation rejected the defect. Both are on-demand: `make all` and
+CI do not need a solver, a network connection, or several gigabytes of disk for
+Verus. The recognizer proof establishes the kernel's byte-level soundness for
+sources of any length. Its completeness result is stated only for a
+canonical-token predicate, which is a sufficient condition for a successful
+recognition rather than a characterization of every input it accepts. The
+settlement proof establishes what acceptance means for a report settlement is
+given; it does not establish that the worker told the truth. Neither proof
+establishes that the AST walk maps Regorus faithfully, that the renderer
+chooses the right tokens, or that Rego means what the model means. Those remain
+tested or open as the record describes.
 
 ## The execution-boundary probe (1.2.4)
 

@@ -112,15 +112,23 @@ pub(super) fn note(result: Result<(), String>, diagnostics: &mut Vec<String>) {
 
 /// Read systemd's final result, recording a query failure.
 pub(super) fn read_result(scope: &Scope<'_>, diagnostics: &mut Vec<String>) -> Option<String> {
-    let result = match scope.wait_for_result() {
+    match scope.wait_for_result() {
         Ok(result) => result,
         Err(reason) => {
             diagnostics.push(reason);
             None
         }
-    };
-    if !matches!(result.as_deref(), None | Some("success")) {
+    }
+}
+
+/// Clear the failed state of the exact unit this run created.
+///
+/// This is a cleanup step, not part of reading the result: a failed unit stays
+/// in systemd's failed list, and the next run uses a fresh nonce, but leaving
+/// failures behind would accumulate state on the host. Only the exact unit name
+/// is named, never a pattern.
+pub(super) fn reset_failed_unit(scope: &Scope<'_>, result: Option<&str>) {
+    if !matches!(result, None | Some("success")) {
         scope.reset_failed();
     }
-    result
 }
