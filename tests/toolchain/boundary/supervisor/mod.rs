@@ -171,6 +171,45 @@ impl Clock {
     fn remaining(self) -> Duration { self.deadline.saturating_sub(self.started.elapsed()) }
 }
 
+/// Record a scope the supervisor could not observe.
+///
+/// A tool job that finished before its first poll records the unobserved scope
+/// without failing closed: its containment evidence is the unit's success and
+/// the canary (D21). A job that claimed containment fails closed.
+fn scope_observation(
+    job: &Job,
+    join_error: Option<String>,
+    diagnostics: &mut Vec<String>,
+    notes: &mut Vec<String>,
+) {
+    let Some(reason) = join_error else {
+        return;
+    };
+    if job.require_scope {
+        diagnostics.push(reason);
+    } else {
+        notes.push(format!("the scope was not observed: {reason}"));
+    }
+}
+
+/// Whether the job's containment can be called empty.
+///
+/// An observation the supervisor could not make is never a pass, except for a
+/// tool job that never required the scope observation: its containment evidence
+/// is the unit's recorded success and the canary (D21).
+fn cgroup_is_empty(
+    job: &Job,
+    cgroup: Option<&Path>,
+    report: &teardown::Report,
+    diagnostics: &[String],
+) -> bool {
+    if job.require_scope || cgroup.is_some() {
+        report.cgroup_empty && diagnostics.is_empty()
+    } else {
+        diagnostics.is_empty()
+    }
+}
+
 impl Supervisor<'_> {
     /// Run one job to completion, teardown included.
     ///
@@ -180,10 +219,6 @@ impl Supervisor<'_> {
     /// vector cannot be spawned, or a stream reader cannot be started. A job
     /// that fails its bounds, escapes containment, or cannot be fully observed
     /// is a [`Run`] with diagnostics, not an error.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "the orchestration is one documented sequence; each step is a named helper"
-    )]
     pub fn run(&self, job: &Job) -> Result<Run, String> {
         job.spec.validate()?;
         let clock = Clock {
@@ -199,16 +234,7 @@ impl Supervisor<'_> {
             mut diagnostics,
         } = self.start(job, clock)?;
         let mut notes = Vec::new();
-        if let Some(reason) = join_error {
-            if job.require_scope {
-                diagnostics.push(reason);
-            } else {
-                // A tool job that finished before its first poll records the
-                // unobserved scope without failing closed: its containment
-                // evidence is the unit's success and the canary (D21).
-                notes.push(format!("the scope was not observed: {reason}"));
-            }
-        }
+        scope_observation(job, join_error, &mut diagnostics, &mut notes);
         let limits = read_limits(cgroup.as_deref(), job.read_limits, &mut diagnostics);
         let readers = readers(&mut child, job)?;
         let mut snapshot = || snapshot_fds(job, pgid, cgroup.as_deref());
@@ -237,14 +263,7 @@ impl Supervisor<'_> {
             bounds.insert(Bound::Memory);
         }
         let exit = exit_form(status);
-        // An observation the supervisor could not make is never a pass, except
-        // for a tool job that never required the scope observation: its
-        // containment evidence is the unit's recorded success and the canary.
-        let cgroup_empty = if job.require_scope || cgroup.is_some() {
-            report.cgroup_empty && diagnostics.is_empty()
-        } else {
-            diagnostics.is_empty()
-        };
+        let cgroup_empty = cgroup_is_empty(job, cgroup.as_deref(), &report, &diagnostics);
         let outcome = classify(&Observation {
             bounds,
             exit,

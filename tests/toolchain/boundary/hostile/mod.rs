@@ -29,6 +29,8 @@
 
 use std::{io::Write as _, path::PathBuf, thread, time::Duration};
 
+use super::naming::is_bare_name;
+
 mod canary;
 mod escapee;
 mod memory;
@@ -160,10 +162,7 @@ pub fn validate_nonce(nonce: &str) -> Result<(), String> {
     if nonce.len() > 64 {
         return Err("the hostile nonce is longer than 64 bytes".to_owned());
     }
-    if !nonce
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
-    {
+    if !is_bare_name(nonce) {
         return Err(format!(
             "the hostile nonce {nonce:?} must use only ASCII letters, digits, `-`, and `_`"
         ));

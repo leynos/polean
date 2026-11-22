@@ -23,49 +23,80 @@ pub fn evaluate_canary(
 /// Control 4: the canary saw the isolation the boundary promises.
 #[must_use]
 pub fn canary_isolation(report: &CanaryReport) -> Availability {
-    if !report.started {
-        return Availability::Missing("the canary did not print its start line".to_owned());
+    let checks = [
+        started(report),
+        no_new_privileges(report),
+        no_capabilities(report),
+        loopback_only(report),
+        outbound_unreachable(report),
+        standard_descriptors(report),
+    ];
+    checks
+        .into_iter()
+        .find_map(Result::err)
+        .map_or(Availability::Available, Availability::Missing)
+}
+
+/// The canary printed its start line.
+fn started(report: &CanaryReport) -> Result<(), String> {
+    if report.started {
+        return Ok(());
     }
-    if report.no_new_privs.as_deref() != Some("1") {
-        return Availability::Missing(format!(
-            "the canary reported NoNewPrivs {:?}, not 1",
-            report.no_new_privs
-        ));
+    Err("the canary did not print its start line".to_owned())
+}
+
+/// The canary runs with no new privileges.
+fn no_new_privileges(report: &CanaryReport) -> Result<(), String> {
+    if report.no_new_privs.as_deref() == Some("1") {
+        return Ok(());
     }
+    Err(format!(
+        "the canary reported NoNewPrivs {:?}, not 1",
+        report.no_new_privs
+    ))
+}
+
+/// The canary retained no capabilities.
+fn no_capabilities(report: &CanaryReport) -> Result<(), String> {
     let Some(caps) = report.cap_eff.as_deref() else {
-        return Availability::Missing("the canary reported no CapEff".to_owned());
+        return Err("the canary reported no CapEff".to_owned());
     };
     match u64::from_str_radix(caps, 16) {
-        Ok(0) => (),
-        Ok(_) => {
-            return Availability::Missing(format!(
-                "the canary retained capabilities: CapEff {caps}"
-            ));
-        }
-        Err(error) => {
-            return Availability::Missing(format!("CapEff {caps:?} is not hexadecimal: {error}"));
-        }
+        Ok(0) => Ok(()),
+        Ok(_) => Err(format!("the canary retained capabilities: CapEff {caps}")),
+        Err(error) => Err(format!("CapEff {caps:?} is not hexadecimal: {error}")),
     }
-    if report.interfaces.as_slice() != ["lo"] {
-        return Availability::Missing(format!(
-            "the canary saw interfaces {:?}, not only loopback",
-            report.interfaces
-        ));
+}
+
+/// The canary saw only the loopback interface.
+fn loopback_only(report: &CanaryReport) -> Result<(), String> {
+    if report.interfaces.as_slice() == ["lo"] {
+        return Ok(());
     }
+    Err(format!(
+        "the canary saw interfaces {:?}, not only loopback",
+        report.interfaces
+    ))
+}
+
+/// An outbound connection reported that the network is unreachable.
+fn outbound_unreachable(report: &CanaryReport) -> Result<(), String> {
     match report.outbound_error.as_deref() {
-        Some(error) if error.contains("Network is unreachable") => (),
-        other => {
-            return Availability::Missing(format!(
-                "an outbound connection reported {other:?}, not `Network is unreachable`"
-            ));
-        }
+        Some(error) if error.contains("Network is unreachable") => Ok(()),
+        other => Err(format!(
+            "an outbound connection reported {other:?}, not `Network is unreachable`"
+        )),
     }
+}
+
+/// The canary inherited exactly its three standard streams.
+fn standard_descriptors(report: &CanaryReport) -> Result<(), String> {
     match &report.descriptors {
-        Some(descriptors) if descriptors.as_slice() == [0, 1, 2] => Availability::Available,
-        Some(descriptors) => Availability::Missing(format!(
+        Some(descriptors) if descriptors.as_slice() == [0, 1, 2] => Ok(()),
+        Some(descriptors) => Err(format!(
             "the canary inherited descriptors {descriptors:?}, not only 0, 1, and 2"
         )),
-        None => Availability::Missing("the canary reported no descriptor listing".to_owned()),
+        None => Err("the canary reported no descriptor listing".to_owned()),
     }
 }
 

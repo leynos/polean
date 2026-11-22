@@ -83,14 +83,7 @@ fn the_memory_limit_kills_the_allocation() -> Result<(), String> {
 
 /// The allocation property, for the feature scenario.
 pub(super) fn memory_limit_kills_the_allocation() -> Result<(), String> {
-    let probe = Probe::new("boundary-bubblewrap-memory")?;
-    let options = Options::new(Boundary::Bubblewrap)
-        .memory(limits().memory_bytes)
-        .deadline(Duration::from_secs(20))
-        .target("polean-target=memory:allocate");
-    let run = probe.run(Behaviour::Memory, &options)?;
-    drop(started(&run, &probe)?);
-    require_memory_kill(&run)
+    memory_kill("boundary-bubblewrap-memory", "allocate", None)
 }
 
 /// A scratch fill larger than the memory limit is killed by the memory limit,
@@ -98,12 +91,23 @@ pub(super) fn memory_limit_kills_the_allocation() -> Result<(), String> {
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
 fn the_scratch_fill_is_killed_by_the_memory_limit() -> Result<(), String> {
-    let probe = Probe::new("boundary-bubblewrap-scratch-oom")?;
-    let options = Options::new(Boundary::Bubblewrap)
+    memory_kill(
+        "boundary-bubblewrap-scratch-oom",
+        "fill",
+        Some(128 * 1024 * 1024),
+    )
+}
+
+/// Run one memory behaviour and require the out-of-memory kill.
+fn memory_kill(probe_name: &str, mode: &str, scratch: Option<u64>) -> Result<(), String> {
+    let probe = Probe::new(probe_name)?;
+    let mut options = Options::new(Boundary::Bubblewrap)
         .memory(limits().memory_bytes)
-        .scratch(128 * 1024 * 1024)
         .deadline(Duration::from_secs(20))
-        .target("polean-target=memory:fill");
+        .target(format!("polean-target=memory:{mode}"));
+    if let Some(bytes) = scratch {
+        options = options.scratch(bytes);
+    }
     let run = probe.run(Behaviour::Memory, &options)?;
     drop(started(&run, &probe)?);
     require_memory_kill(&run)

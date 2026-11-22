@@ -33,6 +33,7 @@ pub(crate) mod canary;
 pub(crate) mod capture;
 pub(crate) mod hostile;
 pub(crate) mod launch;
+pub(crate) mod naming;
 pub(crate) mod outcome;
 pub(crate) mod platform;
 pub(crate) mod probe;

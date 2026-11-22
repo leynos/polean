@@ -312,17 +312,23 @@ pub fn wait_until_gone(pid: u32) -> Result<(), String> {
     let path = PathBuf::from(format!("/proc/{pid}"));
     let started = Instant::now();
     loop {
-        match ambient::metadata(&path) {
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(format!("cannot inspect {}: {error}", path.display())),
-            Ok(_metadata) => {
-                if started.elapsed() >= GONE_BOUND {
-                    return Err(format!(
-                        "the process {pid} is still present after {GONE_BOUND:?}"
-                    ));
-                }
-                thread::sleep(GONE_POLL);
-            }
+        if !present(&path)? {
+            return Ok(());
         }
+        if started.elapsed() >= GONE_BOUND {
+            return Err(format!(
+                "the process {pid} is still present after {GONE_BOUND:?}"
+            ));
+        }
+        thread::sleep(GONE_POLL);
+    }
+}
+
+/// Whether `path` exists, reporting an inspection failure other than absence.
+fn present(path: &Path) -> Result<bool, String> {
+    match ambient::metadata(path) {
+        Ok(_metadata) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("cannot inspect {}: {error}", path.display())),
     }
 }

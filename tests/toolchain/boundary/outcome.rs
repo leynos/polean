@@ -86,20 +86,7 @@ impl Bounds {
 
     /// Whether no bound fired.
     #[must_use]
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "the index is a Bound discriminant below the array length"
-    )]
-    pub const fn is_empty(self) -> bool {
-        let mut index = 0;
-        while index < Self::COUNT {
-            if self.fired[index] {
-                return false;
-            }
-            index += 1;
-        }
-        true
-    }
+    pub const fn is_empty(self) -> bool { self.count() == 0 }
 
     /// Record that `bound` fired.
     #[expect(

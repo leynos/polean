@@ -14,6 +14,7 @@
 use std::path::Path;
 
 use super::ReadOnlyBind;
+use crate::boundary::naming::is_bare_name;
 
 /// Validate a bare transient unit name.
 ///
@@ -37,10 +38,7 @@ pub fn validate_unit(unit: &str) -> Result<(), String> {
             "the unit name {unit:?} must be a bare name without a suffix or a path separator"
         ));
     }
-    if !unit
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
-    {
+    if !is_bare_name(unit) {
         return Err(format!(
             "the unit name {unit:?} must use only ASCII letters, digits, `-`, and `_`"
         ));
@@ -66,7 +64,7 @@ pub fn validate_env(env: &[(String, String)]) -> Result<(), String> {
 }
 
 /// Whether `key` can be written as the left side of `KEY=VALUE`.
-fn valid_env_key(key: &str) -> bool { !key.is_empty() && !key.contains('=') && !key.contains('\0') }
+fn valid_env_key(key: &str) -> bool { is_bare_name(key) && !key.contains('=') }
 
 /// Validate the read-only binds.
 ///
@@ -77,23 +75,7 @@ fn valid_env_key(key: &str) -> bool { !key.is_empty() && !key.contains('=') && !
 pub fn validate_binds(binds: &[ReadOnlyBind]) -> Result<(), String> {
     let reserved = ["/", "/proc", "/dev", "/dev/shm", "/job/work", "/job/bin"];
     for bind in binds {
-        if !bind.source.is_absolute() {
-            return Err(format!(
-                "the bind source {} is not absolute",
-                bind.source.display()
-            ));
-        }
-        if !bind.target.starts_with('/') {
-            return Err(format!("the bind target {:?} is not absolute", bind.target));
-        }
-        for path in reserved {
-            if bind.target == path {
-                return Err(format!(
-                    "the bind target {:?} is a path the launch vector owns",
-                    bind.target
-                ));
-            }
-        }
+        validate_bind(bind, &reserved)?;
     }
     let mut targets: Vec<&str> = binds.iter().map(|bind| bind.target.as_str()).collect();
     targets.sort_unstable();
@@ -101,6 +83,26 @@ pub fn validate_binds(binds: &[ReadOnlyBind]) -> Result<(), String> {
     targets.dedup();
     if targets.len() != before {
         return Err("two binds share one target".to_owned());
+    }
+    Ok(())
+}
+
+/// Validate one bind against the paths the launcher itself creates.
+fn validate_bind(bind: &ReadOnlyBind, reserved: &[&str]) -> Result<(), String> {
+    if !bind.source.is_absolute() {
+        return Err(format!(
+            "the bind source {} is not absolute",
+            bind.source.display()
+        ));
+    }
+    if !bind.target.starts_with('/') {
+        return Err(format!("the bind target {:?} is not absolute", bind.target));
+    }
+    if reserved.iter().any(|path| bind.target == *path) {
+        return Err(format!(
+            "the bind target {:?} is a path the launch vector owns",
+            bind.target
+        ));
     }
     Ok(())
 }
@@ -256,21 +258,17 @@ fn check_scratch(options: &[LauncherOption], prefix: &[String], faults: &mut Vec
         faults.push("the vector has no `--size`".to_owned());
         return;
     };
-    let sized = match (
-        prefix.get(size + 1),
-        prefix.get(size + 2),
-        prefix.get(size + 3),
-    ) {
-        (Some(bytes), Some(tmpfs), Some(destination)) => sized_scratch(bytes, tmpfs, destination),
-        _ => false,
-    };
+    let sized = prefix.get(size + 1..size + 4).is_some_and(sized_scratch);
     if !sized {
         faults.push("`--size <bytes>` must immediately size `--tmpfs /job/work`".to_owned());
     }
 }
 
-/// Whether the size argument immediately sizes the `/job/work` scratch mount.
-fn sized_scratch(bytes: &str, option: &str, destination: &str) -> bool {
+/// Whether a size argument immediately sizes the `/job/work` scratch mount.
+fn sized_scratch(sequence: &[String]) -> bool {
+    let [bytes, option, destination] = sequence else {
+        return false;
+    };
     option == "--tmpfs" && bytes.parse::<u64>().is_ok() && destination == "/job/work"
 }
 
