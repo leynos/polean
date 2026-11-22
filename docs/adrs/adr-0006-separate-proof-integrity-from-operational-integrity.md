@@ -190,3 +190,14 @@ revision 4 of the
 [1.2.3 ExecPlan](../execplans/1-2-3-demonstrate-type-and-axiom-auditing.md).
 The measured results are recorded in that plan's `Outcomes & retrospective`
 section as implementation completes.
+
+## Addendum
+
+Note (2026-11-22): roadmap 1.2.4 recorded the execution-boundary decision in
+[ADR 0007](adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md).
+The isolation, hangs, floods, and enforced budgets this record assigned to
+4.3.1 now have a selected mechanism — a systemd user scope around bubblewrap —
+and probe evidence from one host. The separation this record draws is
+unchanged: the probe concerns the environment in which proof integrity is
+checked, and it says nothing about whether the worker's report is truthful or
+whether the Lean environment is the one the evidence names.

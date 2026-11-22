@@ -36,6 +36,9 @@ already exist.
   evidence does not establish.
 - [Admission design decision][adr-0005]: AST mapping plus a canonical-token
   recognizer with a Verus-verified kernel.
+- [Execution-boundary decision][adr-0007]: a systemd user scope around
+  bubblewrap, the probe that showed it enforceable, the alternatives, and the
+  residual trust (proposed, 2026-11-22).
 - [Integrity boundary decision][adr-0006]: separating proof integrity from
   operational integrity, and what each milestone may claim.
 - [Audit ExecPlan](execplans/1-2-3-demonstrate-type-and-axiom-auditing.md): the
@@ -88,6 +91,7 @@ already exist.
 [adr-0003]: adrs/adr-0003-pin-the-e0-toolchain-tuple.md
 [adr-0005]: adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md
 [adr-0006]: adrs/adr-0006-separate-proof-integrity-from-operational-integrity.md
+[adr-0007]: adrs/adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md
 [admission-plan]: execplans/1-2-2-complete-module-admission-feasibility-record.md
 
 ## Machine-readable design

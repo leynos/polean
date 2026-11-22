@@ -1149,9 +1149,21 @@ section and in each ADR.
   `tests/features/execution_boundary.feature`. Five consecutive
   `make boundary-probe` runs pass all 20 probes (42–47 s each), the 90 boundary
   unit tests pass, and the platform check reports `Ready` on the probe host.
-- [ ] EP-M3 gates: `make toolchain-smoke`, `make lint`, `make test`, and the
-  remaining gates at the fixpoint.
-- [ ] EP-M4, and the user's acceptance of ADR 0007.
+- [x] 2026-11-22: EP-M3 gates green: `make toolchain-smoke` (22 tests),
+  `make lint`, `make check-fmt`, `cargo check` and `cargo clippy` with warnings
+  denied, and five consecutive `make boundary-probe` runs of 20 probes each.
+  Pushed as `e51cb3b`.
+- [x] 2026-11-22: EP-M4 documentation: ADR 0007, technical design §§2, 11, 13
+  and references R19–R24, the ADR 0003 and 0006 addenda, the developers' guide
+  section and commands row, the repository layout, the contents page, the
+  roadmap note, and the `AGENTS.md` gate list. The roadmap checkbox stays open
+  until the sponsor accepts ADR 0007.
+- [ ] `SHA256SUMS` was stale before this branch: five rows (the audit manifest,
+  three validation modules, and the regenerated validation summary) did not
+  match their files even at `ad217c8`. They are regenerated here, so
+  `sha256sum -c SHA256SUMS` passes.
+- [ ] Sponsor acceptance of ADR 0007, which closes the roadmap item and this
+  plan.
 
 ## Surprises & discoveries
 

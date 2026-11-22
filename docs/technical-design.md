@@ -72,7 +72,7 @@ files differently: the verifier regenerates its own modules from admitted data.
 | Rego bytes to Polean IR     | Closed profile check, source spans, deterministic mapping, round-trip checks, and independent runtime comparisons. | Regorus parser and Rust mapping remain trusted. No formal source-preservation theorem.                                                                  |
 | IR to checked model theorem | Pinned semantics, exact expected proposition, literal policy data, kernel replay, and axiom audit.                 | Lean kernel, approved logical foundations, the §2.1 input model until 4.3.2, trusted proof-package identity, and integrity of the checking environment. |
 | Model to OPA/Regorus        | Replay original source against independent requests and compare typed results.                                     | Testing is not a production-runtime refinement proof.                                                                                                   |
-| Evidence to reported result | Fresh reconstruction, binding checks, semantic result validation, and non-zero failure outcomes.                   | Rust orchestrator, serialization, filesystem/process isolation, and hashing assumptions.                                                                |
+| Evidence to reported result | Fresh reconstruction, binding checks, semantic result validation, and non-zero failure outcomes.                   | Rust orchestrator, serialization, hashing, and the Linux kernel, systemd, and bubblewrap that enforce the execution boundary.                           |
 | Application to request      | Explicit typed ingress contract.                                                                                   | Attribute authenticity, application enforcement, and later changes of state are outside the theorem.                                                    |
 
 Trust changes with the claim. A correct Lean theorem can survive a faulty
@@ -712,6 +712,34 @@ directory. Spawn argument arrays, never shell-concatenate policy paths. Missing
 enforced isolation is an execution failure for the first public profile, not a
 silently degraded security mode.
 
+Roadmap 1.2.4 selected the mechanism and showed it enforceable on its probe
+host: each child runs in a transient systemd user scope, which supplies cgroup
+v2 memory, swap, and task limits and a whole-tree kill, and inside bubblewrap,
+which supplies user, network, mount, PID, IPC, and UTS namespaces and an
+allowlisted, read-only filesystem view. The scope is created with
+`systemd-run --user --scope` and the properties `MemoryMax=`, `MemorySwapMax=0`,
+`TasksMax=`, `OOMPolicy=kill`, `KillSignal=SIGKILL`, and `RuntimeMaxSec=`;
+bubblewrap binds `/usr`, the program, and the input snapshot read-only, mounts
+`/proc` and `/dev` fresh with both remounted read-only, gives the job a private
+`--size`-bounded tmpfs scratch area, and remounts the root read-only before
+executing. Teardown kills the process group, records any survivor, writes
+`cgroup.kill`, reaps, and confirms the cgroup empty. Standard output is capped
+at 1 MiB and standard error at a probe-chosen 64 KiB, each stream captured by
+the same bounded kernel.
+
+The mechanism has enforcement prerequisites, not a supported platform: Linux
+with cgroup v2; a systemd user manager reachable through `XDG_RUNTIME_DIR` that
+delegates the `memory` and `pids` controllers; `systemd-oomd` inactive or
+confirmed not to have caused a reported kill; bubblewrap 0.10.0 or later; and a
+host policy that permits bubblewrap to create its namespaces. Ubuntu 24.04 and
+later fail closed under their default AppArmor restriction, and a host without
+a systemd user session or delegated controllers fails closed with a named
+reason.
+[ADR 0007](adrs/adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md)
+records the decision, its evidence, the alternatives, and the residual trust;
+roadmap 4.3.1 promotes the mechanism into the product, and 4.3.3 measures
+budgets on an agreed machine.
+
 Provision the trusted Lean package and dependencies before jobs. A submitted
 Lake file must never control a build. The tuple is pinned in
 [ADR 0003](adrs/adr-0003-pin-the-e0-toolchain-tuple.md): the Rust toolchain
@@ -774,7 +802,7 @@ weaken a prerequisite when a spike fails.
 | Admission coverage      | maintainer             | Met by 1.2.2 and the [feasibility record](admission-feasibility-record.md): a closed decode, a profile walk, and a verified canonical-token recognizer; the E0 command admits through 2.1.2, which fails closed on anything unmapped | Hostile-source coverage of the same fail-closed admission                                       | 1.2.2, 2.1.2, 4.2.3 |
 | Axiom audit             | maintainer             | 1.2.3 demonstrates the audit interface under the §2.1 input model; 2.2.4 accepts the E0 theorem only with the foundational axioms, rejecting `sorryAx` and native-computation axioms                                                 | The same audit applied by `verify` to freshly regenerated jobs                                  | 1.2.3, 2.2.4, 4.1.3 |
 | Environment integrity   | maintainer             | Not needed; generated modules stay inside the §2.1 input model, and reports name it                                                                                                                                                  | Module provenance, a pinned replay base, and trusted-package identity enforced                  | 4.3.2               |
-| Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs                                                                                                                                                                  | Enforced offline sandbox with memory and output limits, process-group kill, and private storage | 1.2.4, 4.3.1        |
+| Execution environment   | maintainer             | Supervised local runs with a deadline, on trusted repository inputs; 1.2.4 selected the scope-and-bubblewrap mechanism and showed it enforceable on its probe host                                                                   | Enforced offline sandbox with memory and output limits, process-group kill, and private storage | 1.2.4, 4.3.1        |
 | Resource budgets        | maintainer             | Not needed; measurement is E2 evidence                                                                                                                                                                                               | Measured limits on an agreed machine                                                            | 4.3.3               |
 | Assurance statement     | sponsor                | ADR 0002 accepted                                                                                                                                                                                                                    | Release wording no stronger than ADR 0002                                                       | 1.1.1               |
 | Dependency distribution | sponsor                | Not needed                                                                                                                                                                                                                           | Decision covering dependency licences; Polean's own ISC licence is already settled (ADR 0001)   | 5.2.2               |
@@ -870,3 +898,23 @@ the inspected API, not a substitute for release pins.
 - **R18.**
   [SafeVerify](https://github.com/GasStationManager/SafeVerify): replay
   followed by checks on the replayed environment, with JSON output.
+- **R19.**
+  [Bubblewrap](https://github.com/containers/bubblewrap): the unprivileged
+  sandbox and its namespace and filesystem options.
+- **R20.**
+  [`systemd.resource-control(5)`](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html):
+  cgroup v2 properties, `OOMPolicy=kill`, and transient scopes.
+- **R21.**
+  [Control Group v2](https://docs.kernel.org/admin-guide/cgroup-v2.html):
+  `memory.max`, `memory.swap.max`, `pids.max`, `memory.oom.group`,
+  `cgroup.kill`, and `cgroup.events`.
+- **R22.**
+  [`namespaces(7)`](https://man7.org/linux/man-pages/man7/namespaces.html) and
+  [`network_namespaces(7)`](https://man7.org/linux/man-pages/man7/network_namespaces.html):
+  namespace isolation, including the abstract Unix socket namespace.
+- **R23.**
+  [Go issue 38010](https://github.com/golang/go/issues/38010): `RLIMIT_AS` and
+  the Go runtime's reserved address space.
+- **R24.**
+  [ADR 0007](adrs/adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md):
+  the recorded execution-boundary decision, alternatives, and residual trust.

@@ -198,6 +198,14 @@ no `PATH`. Because ADR 0006 separates operational from proof integrity, the
 `bwrap` limitation recorded in open item 2 constrains roadmap 1.2.4 and 4.3.2
 but not the 1.2.3 experiment.
 
+Note (addendum, 2026-11-22): open item 2 is settled in direction by
+[ADR 0007](adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md).
+Bubblewrap 0.10.0 or later is now a deliberate enforcement prerequisite of the
+execution boundary, not an incidental requirement of `lake check`: 1.2.4
+selected it, showed it enforceable on the probe host, and recorded what a host
+without it must do (fail closed). Open item 2's remaining use, an independent
+`lake check` or `lake comparator` run for 4.3.2, inherits that prerequisite.
+
 ### Licences, as inputs to 5.2.2
 
 5.2.2 owns the dependency-distribution decision. This is the input:
