@@ -123,6 +123,24 @@ pub fn read_dir_names(path: &Path) -> io::Result<Vec<String>> {
 /// Returns the underlying error.
 pub fn create(path: &Path) -> io::Result<cap_std::fs::File> { root()?.create(beneath_root(path)?) }
 
+/// The open descriptor numbers of the process `pid`.
+///
+/// The listing is of that process's descriptor directory, so the descriptors
+/// this call opens in the *caller* are not part of the result.
+///
+/// # Errors
+///
+/// Returns the underlying error, `NotFound` included when the process has gone.
+pub fn open_fds(pid: u32) -> io::Result<Vec<i32>> {
+    let path = PathBuf::from("/proc").join(pid.to_string()).join("fd");
+    let mut fds: Vec<i32> = read_dir_names(&path)?
+        .iter()
+        .filter_map(|name| name.parse().ok())
+        .collect();
+    fds.sort_unstable();
+    Ok(fds)
+}
+
 /// Remove the file `path`.
 ///
 /// # Errors

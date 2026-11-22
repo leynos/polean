@@ -36,6 +36,7 @@ pub(crate) mod launch;
 pub(crate) mod outcome;
 pub(crate) mod platform;
 pub(crate) mod probe;
+pub(crate) mod process;
 pub(crate) mod scope;
 pub(crate) mod supervisor;
 

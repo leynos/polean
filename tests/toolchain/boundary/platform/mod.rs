@@ -22,14 +22,14 @@
 //! supplied by the caller, so the "starts no job" properties run under
 //! `make test` on any host.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::path::{Path, PathBuf};
 
 use cap_std::fs::PermissionsExt;
 
-use super::outcome::{Availability, ControlKind, MissingControl, Verdict};
+use super::{
+    outcome::{Availability, ControlKind, MissingControl, Verdict},
+    process,
+};
 use crate::{ambient, support::path_exists};
 
 mod canary;
@@ -170,6 +170,15 @@ impl PlatformReport {
         match self.verdict() {
             Verdict::Ready => Vec::new(),
             Verdict::Unavailable(missing) => missing,
+            // A malformed list accounts for no control, so every control is
+            // reported as unaccounted for.
+            Verdict::Malformed(fault) => ControlKind::ALL
+                .iter()
+                .map(|kind| MissingControl {
+                    kind: *kind,
+                    reason: fault.clone(),
+                })
+                .collect(),
         }
     }
 }
@@ -242,20 +251,20 @@ pub fn executable(path: &Path) -> Result<bool, String> {
 
 /// Control 1, part two: bubblewrap reports at least [`MINIMUM_BWRAP`].
 fn check_bwrap_version(bwrap: &Path) -> Availability {
-    let output = match Command::new(bwrap).arg("--version").env_clear().output() {
+    let output = match process::run(bwrap, &["--version"], &[], process::CONTROL_BOUND) {
         Ok(output) => output,
         Err(error) => {
             return Availability::Missing(format!("cannot run {}: {error}", bwrap.display()));
         }
     };
-    if !output.status.success() {
+    if !output.success() {
         return Availability::Missing(format!(
             "{} --version exited {:?}",
             bwrap.display(),
             output.status.code()
         ));
     }
-    let text = String::from_utf8_lossy(&output.stdout);
+    let text = output.stdout_text();
     match parse_bwrap_version(&text) {
         Some(version) if version >= MINIMUM_BWRAP => Availability::Available,
         Some(version) => Availability::Missing(format!(

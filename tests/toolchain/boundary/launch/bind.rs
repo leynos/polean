@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use super::{ReadOnlyBind, isolating_options};
+use super::ReadOnlyBind;
 
 /// Validate a bare transient unit name.
 ///
@@ -105,24 +105,112 @@ pub fn validate_binds(binds: &[ReadOnlyBind]) -> Result<(), String> {
     Ok(())
 }
 
+/// A launcher option and the values it consumed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LauncherOption {
+    /// The option token itself.
+    name: String,
+    /// The values the option takes.
+    values: Vec<String>,
+}
+
+/// How many values an option takes in the launcher prefix.
+///
+/// Anything unrecognised takes none. Parsing the prefix with arities keeps an
+/// option's *value* from being read as an option, and the command arguments
+/// after `--` are never searched at all.
+fn value_arity(option: &str) -> usize {
+    match option {
+        "--ro-bind" | "--symlink" | "--setenv" => 2,
+        "--size" | "--proc" | "--dev" | "--tmpfs" | "--chdir" | "--remount-ro" | "--cap-drop" => 1,
+        _ => 0,
+    }
+}
+
+/// The launcher options before the command separator.
+fn launcher_prefix(argv: &[String]) -> &[String] {
+    argv.iter()
+        .position(|argument| argument.as_str() == "--")
+        .map_or(argv, |separator| argv.get(..separator).unwrap_or(&[]))
+}
+
+/// The launcher's options and their values.
+fn parse_launcher(argv: &[String]) -> Vec<LauncherOption> {
+    let prefix = launcher_prefix(argv);
+    let mut options = Vec::new();
+    let mut index = 0;
+    while index < prefix.len() {
+        let Some(name) = prefix.get(index) else {
+            break;
+        };
+        let arity = value_arity(name);
+        let values = prefix
+            .get(index + 1..index + 1 + arity)
+            .map_or_else(Vec::new, <[String]>::to_vec);
+        options.push(LauncherOption {
+            name: name.clone(),
+            values,
+        });
+        index += 1 + arity;
+    }
+    options
+}
+
+/// Whether the launcher carries `name` with exactly `values`.
+fn has_option(options: &[LauncherOption], name: &str, values: &[&str]) -> bool {
+    options
+        .iter()
+        .any(|option| option.name == name && option.values == values)
+}
+
+/// Whether the launcher carries `name` at all.
+fn has_any(options: &[LauncherOption], name: &str) -> bool {
+    options.iter().any(|option| option.name == name)
+}
+
 /// Every property the selected vector must keep, as fault descriptions.
 ///
 /// An empty result means the vector is acceptable. `home` is the user's home
 /// directory, used to refuse a bind of it or of any ancestor.
 #[must_use]
 pub fn isolation_faults(argv: &[String], home: &Path) -> Vec<String> {
+    let options = parse_launcher(argv);
+    let prefix = launcher_prefix(argv);
     let mut faults = Vec::new();
-    for option in isolating_options() {
-        if !argv.iter().any(|argument| argument.as_str() == option) {
+    for option in super::ISOLATING_NAMES {
+        if !has_any(&options, option) {
             faults.push(format!("the vector lacks the isolating option {option}"));
         }
     }
+    check_cap_drop(&options, &mut faults);
+    check_remounts(&options, &mut faults);
     check_separator(argv, &mut faults);
-    check_size(argv, &mut faults);
-    check_binds(argv, home, &mut faults);
-    check_no_writable_bind(argv, &mut faults);
-    check_no_terminal(argv, &mut faults);
+    check_size(prefix, &mut faults);
+    check_binds(&options, home, &mut faults);
+    check_no_writable_bind(&options, &mut faults);
+    check_no_terminal(&options, &mut faults);
     faults
+}
+
+/// `--cap-drop ALL` must be present: all capabilities dropped.
+fn check_cap_drop(options: &[LauncherOption], faults: &mut Vec<String>) {
+    if !has_option(options, "--cap-drop", &["ALL"]) {
+        faults.push("the vector must drop every capability with `--cap-drop ALL`".to_owned());
+    }
+}
+
+/// The root and `/dev` must both be remounted read-only.
+fn check_remounts(options: &[LauncherOption], faults: &mut Vec<String>) {
+    if !has_option(options, "--remount-ro", &["/"]) {
+        faults.push("the vector must remount the root read-only".to_owned());
+    }
+    if !has_option(options, "--remount-ro", &["/dev"]) {
+        faults.push(
+            "the vector must remount /dev read-only, because `--dev` creates a writable tmpfs \
+             that includes /dev/shm"
+                .to_owned(),
+        );
+    }
 }
 
 /// The command separator must be preceded by `--remount-ro /`.
@@ -145,15 +233,15 @@ fn check_separator(argv: &[String], faults: &mut Vec<String>) {
 }
 
 /// `--size` must immediately precede `--tmpfs`.
-fn check_size(argv: &[String], faults: &mut Vec<String>) {
-    let Some(size) = argv
+fn check_size(prefix: &[String], faults: &mut Vec<String>) {
+    let Some(size) = prefix
         .iter()
         .position(|argument| argument.as_str() == "--size")
     else {
         faults.push("the vector has no `--size`".to_owned());
         return;
     };
-    match (argv.get(size + 1), argv.get(size + 2)) {
+    match (prefix.get(size + 1), prefix.get(size + 2)) {
         (Some(bytes), Some(tmpfs))
             if tmpfs.as_str() == "--tmpfs" && bytes.parse::<u64>().is_ok() => {}
         _ => faults.push("`--size <bytes>` must immediately precede `--tmpfs`".to_owned()),
@@ -161,9 +249,9 @@ fn check_size(argv: &[String], faults: &mut Vec<String>) {
 }
 
 /// No bind may be a host path the boundary must hide.
-fn check_binds(argv: &[String], home: &Path, faults: &mut Vec<String>) {
+fn check_binds(options: &[LauncherOption], home: &Path, faults: &mut Vec<String>) {
     let forbidden = ["/", "/run", "/tmp", "/home"];
-    for source in bind_sources(argv) {
+    for source in bind_sources(options) {
         if forbidden.contains(&source.as_str()) {
             faults.push(format!("the vector binds the forbidden host path {source}"));
             continue;
@@ -178,9 +266,9 @@ fn check_binds(argv: &[String], home: &Path, faults: &mut Vec<String>) {
 }
 
 /// No writable bind may appear.
-fn check_no_writable_bind(argv: &[String], faults: &mut Vec<String>) {
+fn check_no_writable_bind(options: &[LauncherOption], faults: &mut Vec<String>) {
     for option in ["--bind", "--dev-bind", "--bind-try", "--dev-bind-try"] {
-        if argv.iter().any(|argument| argument.as_str() == option) {
+        if has_any(options, option) {
             faults.push(format!(
                 "the vector contains a writable bind option {option}"
             ));
@@ -189,32 +277,17 @@ fn check_no_writable_bind(argv: &[String], faults: &mut Vec<String>) {
 }
 
 /// Standard input must not be a terminal.
-fn check_no_terminal(argv: &[String], faults: &mut Vec<String>) {
-    if !argv
-        .iter()
-        .any(|argument| argument.as_str() == "--new-session")
-    {
+fn check_no_terminal(options: &[LauncherOption], faults: &mut Vec<String>) {
+    if !has_any(options, "--new-session") {
         faults.push("the vector does not start a new terminal session".to_owned());
     }
 }
 
-/// Every `--ro-bind` source in the vector.
-#[must_use]
-pub fn bind_sources(argv: &[String]) -> Vec<String> {
-    let mut sources = Vec::new();
-    let mut index = 0;
-    while index < argv.len() {
-        if argv
-            .get(index)
-            .is_some_and(|value| value.as_str() == "--ro-bind")
-        {
-            if let Some(source) = argv.get(index + 1) {
-                sources.push(source.clone());
-            }
-            index += 3;
-        } else {
-            index += 1;
-        }
-    }
-    sources
+/// Every `--ro-bind` source in the launcher options.
+fn bind_sources(options: &[LauncherOption]) -> Vec<String> {
+    options
+        .iter()
+        .filter(|option| option.name == "--ro-bind")
+        .filter_map(|option| option.values.first().cloned())
+        .collect()
 }

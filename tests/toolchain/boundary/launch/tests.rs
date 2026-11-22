@@ -165,8 +165,15 @@ fn move_size(argv: &mut Vec<String>) {
         .iter()
         .position(|argument| argument.as_str() == "--size")
     {
+        // Keep `--size` in the launcher prefix, but move it past `--tmpfs` so
+        // it no longer immediately precedes the option it sizes.
         let pair: Vec<String> = argv.drain(position..position + 2).collect();
-        argv.extend(pair);
+        if let Some(tmpfs) = argv
+            .iter()
+            .position(|argument| argument.as_str() == "--tmpfs")
+        {
+            argv.splice(tmpfs + 2..tmpfs + 2, pair);
+        }
     }
 }
 
@@ -190,6 +197,17 @@ fn drop_new_session(argv: &mut Vec<String>) {
     argv.retain(|argument| argument.as_str() != "--new-session");
 }
 
+/// Remove only the `/dev` remount, leaving the root remount in place.
+fn drop_device_remount(argv: &mut Vec<String>) {
+    if let Some(position) = argv
+        .iter()
+        .position(|argument| argument.as_str() == "--dev")
+    {
+        // `--dev /dev` is followed by `--remount-ro /dev`.
+        argv.drain(position + 2..position + 4);
+    }
+}
+
 /// Insert an option triple immediately before the command separator.
 fn insert_before_separator(argv: &mut Vec<String>, values: &[&str]) {
     if let Some(position) = argv.iter().position(|argument| argument.as_str() == "--") {
@@ -207,6 +225,7 @@ fn insert_before_separator(argv: &mut Vec<String>, values: &[&str]) {
 #[case::ancestor(bind_home_ancestor, "ancestor of it")]
 #[case::writable(add_writable_bind, "writable bind option")]
 #[case::terminal(drop_new_session, "terminal session")]
+#[case::device_remount(drop_device_remount, "/dev read-only")]
 fn a_broken_vector_is_reported(
     #[case] mutate: fn(&mut Vec<String>),
     #[case] expected: &str,

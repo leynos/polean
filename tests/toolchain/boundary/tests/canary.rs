@@ -6,7 +6,7 @@
 //! one whose isolation merely failed.
 
 use super::super::{
-    canary::{parse, parse_descriptors, start_line},
+    canary::{parse, start_line},
     scope::LimitReadback,
 };
 use crate::scratch::check_eq;
@@ -15,11 +15,10 @@ use crate::scratch::check_eq;
 fn output() -> String {
     [
         start_line("run-1"),
-        "polean-canary nonewprivs 1".to_owned(),
-        "polean-canary capeff 0000000000000000".to_owned(),
-        "polean-canary iface lo".to_owned(),
-        "polean-canary outbound Network is unreachable (os error 101)".to_owned(),
-        "polean-canary fds 0,1,2".to_owned(),
+        "polean-hostile polean-canary nonewprivs 1".to_owned(),
+        "polean-hostile polean-canary capeff 0000000000000000".to_owned(),
+        "polean-hostile polean-canary iface lo".to_owned(),
+        "polean-hostile polean-canary outbound Network is unreachable (os error 101)".to_owned(),
         "polean-hostile done".to_owned(),
     ]
     .join("\n")
@@ -56,8 +55,8 @@ fn a_report_is_parsed() -> Result<(), String> {
     );
     check_eq!(
         report.descriptors,
-        Some(vec![0, 1, 2]),
-        "the descriptor list is parsed"
+        None,
+        "descriptors are the supervisor's observation, not the child's"
     );
     check_eq!(
         report.memory_max.as_deref(),
@@ -86,26 +85,5 @@ fn an_empty_output_is_unstarted() -> Result<(), String> {
     let report = parse("", "run-1", &LimitReadback::default());
     check_eq!(report.started, false, "nothing ran");
     check_eq!(report.no_new_privs, None, "no field is assumed");
-    Ok(())
-}
-
-/// Descriptor listings drop entries that are not numbers.
-#[test]
-fn descriptors_parse_and_drop_nonsense() -> Result<(), String> {
-    check_eq!(
-        parse_descriptors("0,1,2"),
-        vec![0, 1, 2],
-        "a clean listing is parsed"
-    );
-    check_eq!(
-        parse_descriptors("0, ,x,2"),
-        vec![0, 2],
-        "a malformed entry is dropped rather than accepted"
-    );
-    check_eq!(
-        parse_descriptors(""),
-        Vec::<i32>::new(),
-        "an empty listing is empty"
-    );
     Ok(())
 }

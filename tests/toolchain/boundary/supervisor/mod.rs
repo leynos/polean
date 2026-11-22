@@ -5,7 +5,8 @@
 //!
 //! 1. spawns the launch vector with a cleared environment, a new process group, standard input from
 //!    `/dev/null`, and both streams piped;
-//! 2. waits, within a bound, until the scope exists with the job inside it;
+//! 2. waits, within a bound, until the scope exists with the job inside it, and records the job's
+//!    open descriptors while it is alive;
 //! 3. drains each stream on its own thread through its own [`Capture`], so a flood is bounded while
 //!    it happens rather than after;
 //! 4. polls the child against one deadline and stops it when a stream trips;
@@ -16,31 +17,52 @@
 //! garbage-collected, and a grandchild that left the process group would
 //! otherwise hold a pipe and block the readers forever.
 //!
+//! # Diagnostics are fail-closed
+//!
+//! A scope that was never observed, a cleanup step that failed, or a reader
+//! that never delivered its bytes means containment cannot be confirmed. Each is
+//! recorded as a diagnostic and the outcome is a containment failure, whatever
+//! else happened. A job never passes on the strength of an observation the
+//! supervisor could not make.
+//!
+//! # Bounded reader completion
+//!
+//! Readers deliver their bytes over a channel, which the supervisor waits on
+//! with a bound. The ordinary path joins the reader thread. If authoritative
+//! cleanup could not close the pipes — a descendant that both left the process
+//! group and escaped the cgroup kill — the bounded wait reports a diagnostic
+//! instead of hanging forever; that is a last resort after the kill attempts,
+//! not a substitute for joining.
+//!
 //! The supervisor spawns and reaps on one thread because `--die-with-parent`
 //! fires when the spawning thread exits.
 
 use std::{
-    io::Read,
     os::unix::process::{CommandExt, ExitStatusExt},
     path::Path,
     process::{Child, Command, ExitStatus, Stdio},
-    sync::mpsc::{Receiver, channel},
-    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use super::{
-    capture::Capture,
     launch::{LaunchSpec, bubblewrap_scope_argv, unconfined_scope_argv},
     outcome::{Bound, Bounds, ExitForm, Observation, Outcome, classify},
     platform::Programs,
     scope::Scope,
 };
-use crate::scratch::check_eq;
 
+mod reader;
 mod teardown;
+mod wait;
 
-use teardown::{Inputs, tear_down};
+use self::{
+    reader::{finish_readers, readers},
+    teardown::{Inputs, tear_down},
+    wait::{snapshot_fds, wait},
+};
+
+/// How long a reader may take to deliver its bytes after teardown.
+pub const DRAIN_BOUND: Duration = Duration::from_secs(5);
 
 /// Which launch chain a job uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,6 +110,10 @@ pub struct Run {
     pub events: Option<String>,
     /// systemd's `Result=` for the scope, when it recorded one.
     pub result: Option<String>,
+    /// The job's open descriptors while it was alive, when they were observed.
+    pub fds: Option<Vec<i32>>,
+    /// Observations that make the run fail closed, in the order they occurred.
+    pub diagnostics: Vec<String>,
 }
 
 /// Runs jobs through the selected boundary.
@@ -98,55 +124,81 @@ pub struct Supervisor<'a> {
     pub runtime_dir: &'a Path,
 }
 
+/// One started job's state.
+struct Started<'a> {
+    /// The direct child.
+    child: Child,
+    /// The direct child's process-group id.
+    pgid: u32,
+    /// The job's scope.
+    scope: Scope<'a>,
+    /// The job's cgroup, when the scope was observed.
+    cgroup: Option<std::path::PathBuf>,
+    /// Observations that already make the run fail closed.
+    diagnostics: Vec<String>,
+}
+
+/// The job's single deadline, and when it started.
+#[derive(Clone, Copy)]
+struct Clock {
+    /// The deadline from spawn.
+    deadline: Duration,
+    /// When the job was spawned.
+    started: Instant,
+}
+
+impl Clock {
+    /// Whether the deadline has expired.
+    fn expired(self) -> bool { self.started.elapsed() >= self.deadline }
+}
+
 impl Supervisor<'_> {
     /// Run one job to completion, teardown included.
     ///
     /// # Errors
     ///
     /// Returns a diagnostic when the job's specification is invalid, the launch
-    /// vector cannot be spawned, the scope cannot be observed, or teardown
-    /// cannot be completed. A job that merely fails its bounds or is killed is a
-    /// [`Run`], not an error.
+    /// vector cannot be spawned, or a stream reader cannot be started. A job
+    /// that fails its bounds, escapes containment, or cannot be fully observed
+    /// is a [`Run`] with diagnostics, not an error.
     pub fn run(&self, job: &Job) -> Result<Run, String> {
         job.spec.validate()?;
-        let started = Instant::now();
-        let argv = match job.boundary {
-            Boundary::Bubblewrap => bubblewrap_scope_argv(&job.spec, self.programs),
-            Boundary::Unconfined => unconfined_scope_argv(&job.spec),
+        let clock = Clock {
+            deadline: job.deadline,
+            started: Instant::now(),
         };
-        let mut child = spawn(self.programs, self.runtime_dir, &argv)?;
-        let pgid = child.id();
-        let scope = Scope {
-            programs: self.programs,
-            runtime_dir: self.runtime_dir,
-            unit: job.spec.unit.clone(),
-        };
-        let cgroup = scope.wait_until_joined(pgid).ok();
+        let Started {
+            mut child,
+            pgid,
+            scope,
+            cgroup,
+            mut diagnostics,
+        } = self.start(job)?;
         let readers = readers(&mut child, job)?;
-        let (status, mut bounds, running) =
-            wait(&mut child, &readers.trips, job.deadline, started)?;
-        let (report, reaped) = tear_down(Inputs {
+        let mut snapshot = || snapshot_fds(job, pgid, cgroup.as_deref());
+        let waiting = wait(&mut child, &readers.trips, clock, &mut snapshot)?;
+        let (report, status, errors) = tear_down(Inputs {
             child: &mut child,
             pgid,
             cgroup: cgroup.as_deref(),
             kill: self.programs.kill.as_path(),
-            running,
-            status,
-        })?;
-        let stdout = join(readers.stdout, "standard output")?;
-        let stderr = join(readers.stderr, "standard error")?;
-        let result = scope.wait_for_result()?;
-        if !matches!(result.as_deref(), None | Some("success")) {
-            scope.reset_failed();
-        }
+            running: waiting.running,
+            status: waiting.status,
+        });
+        diagnostics.extend(errors);
+        let (stdout, stderr, mut bounds) =
+            finish_readers(readers, waiting.bounds, &mut diagnostics);
+        let result = read_result(&scope, &mut diagnostics);
         if result.as_deref() == Some("oom-kill") {
             bounds.insert(Bound::Memory);
         }
-        let exit = exit_form(reaped);
+        let exit = exit_form(status);
+        // An observation the supervisor could not make is never a pass.
+        let cgroup_empty = report.cgroup_empty && diagnostics.is_empty();
         let outcome = classify(&Observation {
             bounds,
             exit,
-            cgroup_empty: report.cgroup_empty,
+            cgroup_empty,
             survivors: !report.survivors.is_empty(),
             unavailable: Vec::new(),
         });
@@ -157,41 +209,67 @@ impl Supervisor<'_> {
             exit,
             bounds,
             survivors: report.survivors,
-            cgroup_empty: report.cgroup_empty,
+            cgroup_empty,
             residual: report.residual,
             events: report.events,
             result,
+            fds: waiting.fds,
+            diagnostics,
+        })
+    }
+
+    /// Spawn the job and wait for its scope, recording a failed observation.
+    fn start<'a>(&'a self, job: &Job) -> Result<Started<'a>, String> {
+        let argv = match job.boundary {
+            Boundary::Bubblewrap => bubblewrap_scope_argv(&job.spec, self.programs),
+            Boundary::Unconfined => unconfined_scope_argv(&job.spec),
+        };
+        let child = spawn(self.programs, self.runtime_dir, &argv)?;
+        let pgid = child.id();
+        let scope = Scope {
+            programs: self.programs,
+            runtime_dir: self.runtime_dir,
+            unit: job.spec.unit.clone(),
+        };
+        let (cgroup, mut diagnostics) = match scope.wait_until_joined(pgid) {
+            Ok(cgroup) => (Some(cgroup), Vec::new()),
+            Err(reason) => (None, vec![reason]),
+        };
+        if cgroup.is_none() {
+            // The cgroup path is unknown, so the unit is the only handle that
+            // can still reach every process of the job.
+            note(scope.kill_unit(), &mut diagnostics);
+        }
+        Ok(Started {
+            child,
+            pgid,
+            scope,
+            cgroup,
+            diagnostics,
         })
     }
 }
 
-/// Poll the child, its stream trips, and the deadline until one stops it.
-///
-/// Returns the status when the child exited on its own, the bounds that fired,
-/// and whether the child was still running when the loop stopped.
-fn wait(
-    child: &mut Child,
-    trips: &Receiver<Bound>,
-    deadline: Duration,
-    started: Instant,
-) -> Result<(Option<ExitStatus>, Bounds, bool), String> {
-    let mut bounds = Bounds::none();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok((Some(status), bounds, false)),
-            Ok(None) => (),
-            Err(error) => return Err(format!("cannot wait for the job: {error}")),
-        }
-        if let Ok(bound) = trips.try_recv() {
-            bounds.insert(bound);
-            return Ok((None, bounds, true));
-        }
-        if started.elapsed() >= deadline {
-            bounds.insert(Bound::Deadline);
-            return Ok((None, bounds, true));
-        }
-        thread::sleep(super::scope::POLL);
+/// Record a cleanup error without abandoning the remaining steps.
+fn note(result: Result<(), String>, diagnostics: &mut Vec<String>) {
+    if let Err(reason) = result {
+        diagnostics.push(reason);
     }
+}
+
+/// Read systemd's final result, recording a query failure.
+fn read_result(scope: &Scope<'_>, diagnostics: &mut Vec<String>) -> Option<String> {
+    let result = match scope.wait_for_result() {
+        Ok(result) => result,
+        Err(reason) => {
+            diagnostics.push(reason);
+            None
+        }
+    };
+    if !matches!(result.as_deref(), None | Some("success")) {
+        scope.reset_failed();
+    }
+    result
 }
 
 /// Spawn the launch vector as the supervisor's direct child.
@@ -212,92 +290,12 @@ fn spawn(programs: &Programs, runtime_dir: &Path, argv: &[String]) -> Result<Chi
         .map_err(|error| format!("cannot start the job: {error}"))
 }
 
-/// The readers and the trip channel for one job.
-struct Readers {
-    /// The standard-output reader.
-    stdout: JoinHandle<Vec<u8>>,
-    /// The standard-error reader.
-    stderr: JoinHandle<Vec<u8>>,
-    /// The first-trip signal from either reader.
-    trips: Receiver<Bound>,
-}
-
-/// Start one bounded reader per stream.
-fn readers(child: &mut Child, job: &Job) -> Result<Readers, String> {
-    let (sender, receiver) = channel();
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "standard output is not piped".to_owned())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "standard error is not piped".to_owned())?;
-    let stdout_reader = drain(stdout, job.stdout_cap, Bound::Stdout, sender.clone());
-    let stderr_reader = drain(stderr, job.stderr_cap, Bound::Stderr, sender);
-    Ok(Readers {
-        stdout: stdout_reader,
-        stderr: stderr_reader,
-        trips: receiver,
-    })
-}
-
-/// Read one stream into a capture until end of file.
-///
-/// The trip is signalled once. After it, the reader keeps draining into the
-/// capture, which keeps nothing more, so the child never blocks on a full pipe
-/// before the supervisor's kill lands.
-fn drain(
-    mut stream: impl Read + Send + 'static,
-    cap: usize,
-    bound: Bound,
-    trips: std::sync::mpsc::Sender<Bound>,
-) -> JoinHandle<Vec<u8>> {
-    thread::spawn(move || {
-        let mut capture = Capture::new(cap);
-        let mut signalled = false;
-        let mut buffer = [0u8; 16 * 1024];
-        loop {
-            let read = match stream.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(read) => read,
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(_) => break,
-            };
-            let chunk = buffer.get(..read).unwrap_or(&[]);
-            capture.feed(chunk);
-            if !record_trip(&capture, &trips, bound, &mut signalled) {
-                break;
-            }
-        }
-        capture.kept().to_vec()
-    })
-}
-
-/// Signal the first trip, reporting whether reading should continue.
-fn record_trip(
-    capture: &Capture,
-    trips: &std::sync::mpsc::Sender<Bound>,
-    bound: Bound,
-    signalled: &mut bool,
-) -> bool {
-    if !capture.tripped() || *signalled {
-        return true;
-    }
-    *signalled = true;
-    trips.send(bound).is_ok()
-}
-
-/// Join one reader, naming the stream when its thread panicked.
-fn join(reader: JoinHandle<Vec<u8>>, name: &str) -> Result<Vec<u8>, String> {
-    reader
-        .join()
-        .map_err(|_panic| format!("the {name} reader panicked"))
-}
-
 /// How a direct child ended.
 #[must_use]
-pub fn exit_form(status: ExitStatus) -> ExitForm {
+pub fn exit_form(observed: Option<ExitStatus>) -> ExitForm {
+    let Some(status) = observed else {
+        return ExitForm::Unreported;
+    };
     match (status.code(), status.signal()) {
         (Some(code), _) => ExitForm::Exited(code),
         (None, Some(signal)) => ExitForm::Signalled(signal),
@@ -314,11 +312,14 @@ pub fn exit_form(status: ExitStatus) -> ExitForm {
 ///
 /// Returns a diagnostic naming the actual outcome when it differs.
 pub fn require_outcome(run: &Run, expected: &Outcome) -> Result<(), String> {
-    check_eq!(
-        &run.outcome,
-        expected,
-        "the run reported an unexpected outcome; stdout {:?}, stderr {:?}, exit {:?}, result \
-         {:?}, survivors {:?}, cgroup empty {}, residual {:?}, events {:?}",
+    if &run.outcome == expected {
+        return Ok(());
+    }
+    Err(format!(
+        "the run reported {:?}, expected {expected:?}; stdout {:?}, stderr {:?}, exit {:?}, \
+         result {:?}, survivors {:?}, cgroup empty {}, residual {:?}, events {:?}, fds {:?}, \
+         diagnostics {:?}",
+        run.outcome,
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr),
         run.exit,
@@ -326,7 +327,8 @@ pub fn require_outcome(run: &Run, expected: &Outcome) -> Result<(), String> {
         run.survivors,
         run.cgroup_empty,
         run.residual,
-        run.events
-    );
-    Ok(())
+        run.events,
+        run.fds,
+        run.diagnostics
+    ))
 }

@@ -117,10 +117,10 @@ fn host_listeners_are_reachable_without_the_boundary() -> Result<(), String> {
     accepted(tcp_watch, "TCP")?;
     accepted(abstract_watch, "abstract")?;
     accepted(socket_watch, "socket-file")?;
-    let descriptors = attempt(&stdout, "descriptors")?;
-    check!(
-        descriptors.contains("0,1,2") || descriptors == "0,1,2",
-        "the child must at least inherit its standard streams, got {descriptors:?}"
+    check_eq!(
+        run.fds,
+        Some(vec![0, 1, 2]),
+        "the supervisor must observe exactly the standard streams"
     );
     require_outcome(&run, &Outcome::Completed)
 }

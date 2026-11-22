@@ -10,7 +10,7 @@
 //! from the cgroup while the scope is active, because that is the only evidence
 //! that systemd applied the requested limits.
 
-use super::{platform::CanaryReport, scope::LimitReadback};
+use super::{hostile::REPORT_PREFIX, platform::CanaryReport, scope::LimitReadback};
 
 /// The line a canary prints first, before any observation.
 #[must_use]
@@ -34,7 +34,10 @@ pub fn parse(stdout: &str, nonce: &str, limits: &LimitReadback) -> CanaryReport 
             report.started = true;
             continue;
         }
-        let Some(rest) = line.strip_prefix("polean-canary ") else {
+        let Some(rest) = line
+            .strip_prefix(REPORT_PREFIX)
+            .and_then(|rest| rest.strip_prefix(" polean-canary "))
+        else {
             continue;
         };
         let Some((key, value)) = rest.split_once(' ') else {
@@ -45,22 +48,8 @@ pub fn parse(stdout: &str, nonce: &str, limits: &LimitReadback) -> CanaryReport 
             "capeff" => report.cap_eff = Some(value.to_owned()),
             "iface" => report.interfaces.push(value.to_owned()),
             "outbound" => report.outbound_error = Some(value.to_owned()),
-            "fds" => report.descriptors = Some(parse_descriptors(value)),
             _ => (),
         }
     }
     report
-}
-
-/// Parse a comma-separated descriptor listing.
-///
-/// An entry that is not a number is dropped: the listing is a diagnostic, and a
-/// malformed one shows up as a descriptor set that does not match, which is a
-/// missing control rather than a pass.
-#[must_use]
-pub fn parse_descriptors(value: &str) -> Vec<i32> {
-    value
-        .split(',')
-        .filter_map(|entry| entry.trim().parse().ok())
-        .collect()
 }

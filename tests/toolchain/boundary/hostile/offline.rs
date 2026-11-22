@@ -7,7 +7,10 @@
 //! tests all three.
 //!
 //! Every target is supplied by the probe as an argument. The child never guesses
-//! a path, so an accidental run cannot connect to a real host service.
+//! a path, so an accidental run cannot connect to a real host service. The
+//! descriptor observation is the supervisor's: it lists the job's own descriptor
+//! directory from outside, which the child cannot do without including its own
+//! listing handles.
 
 use std::{
     io,
@@ -20,7 +23,7 @@ use std::{
     time::Duration,
 };
 
-use super::{Targets, attempt, canary};
+use super::{Targets, attempt};
 
 /// How long one connection attempt may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -44,13 +47,6 @@ pub fn run(targets: &Targets) -> Result<(), String> {
     }
     if let Some(path) = &targets.socket {
         report_result("socket-file", unix(path));
-    }
-    match canary::descriptors() {
-        Ok(fds) => {
-            let listing: Vec<String> = fds.iter().map(ToString::to_string).collect();
-            attempt("descriptors", &listing.join(","));
-        }
-        Err(reason) => attempt("descriptors", &format!("error: {reason}")),
     }
     Ok(())
 }

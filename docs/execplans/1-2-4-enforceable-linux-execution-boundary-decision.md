@@ -1127,6 +1127,21 @@ section and in each ADR.
   The outcome observation gained `survivors` and a cgroup diagnosis. Five
   consecutive `boundary::probe::` runs pass (5 probes each; 4-6 s warm), the 88
   boundary unit tests pass, and `make lint` is green.
+- [x] 2026-11-21: EP-M2 milestone review completed: CodeRabbit CLI 0.9.6,
+  branch scope `ad217c8..81baa02`, 10 findings (7 major, 3 minor). Every
+  finding was verified against the source and repaired: the canary parser now
+  matches the emitted `polean-hostile polean-canary` prefix; descriptor
+  evidence moved from the child (whose own listing handles polluted the set) to
+  the supervisor's listing of the job's `/proc/<pid>/fd`; the launch checks
+  parse the launcher prefix with option arities and require the `/dev` remount;
+  the verdict rejects duplicate, short, or reordered control lists; control
+  subprocesses run under a bound with kill and reap; teardown attempts every
+  independent cleanup step and reports the first error; readers deliver their
+  final trip state and their bytes over bounded channels; and the scope join
+  error is retained as a fail-closed diagnostic.
+- [ ] EP-M2 gate re-run after the repairs, including the `make test` retry (the
+  only red gate on `81baa02` was the pre-existing admission compile-fail test
+  timing out at 600 s while the shared compile-admission queue was saturated).
 - [ ] EP-M3.
 - [ ] EP-M4, and the user's acceptance of ADR 0007.
 
@@ -1179,11 +1194,19 @@ section and in each ADR.
   three consecutive runs failed the offline probe with a fail-closed
   `ContainmentFailure`.
 - 2026-11-21: reading `/proc/self/fd` reports the listing's own descriptor, and
-  a capability refuses to read any link whose target is absolute, so the
-  descriptor probe uses the intersection of two listings: each excludes the
-  other's transient descriptor. A Unix socket file cannot live under the
-  scratch directory because its path exceeds `SUN_LEN`; the socket-file probe
-  uses a unique `/tmp` name and removes it.
+  two successive listings open their handles at the same numbers, so their
+  intersection still contains them (the review caught this). Descriptor
+  evidence now comes from the supervisor listing the _job's_ `/proc/<pid>/fd`,
+  where the supervisor's own handles do not appear. A Unix socket file cannot
+  live under the scratch directory because its path exceeds `SUN_LEN`; the
+  socket-file probe uses a unique `/tmp` name and removes it.
+- 2026-11-21: `hostile::report` prefixes every line, so the canary's lines reach
+  the parser as `polean-hostile polean-canary ...`; the first parser version
+  matched the unprefixed form and silently discarded every observation. The
+  synthetic parser test used the unprefixed form, which is why it passed.
+- 2026-11-21: `systemd-run --scope`'s client can stall, and `Command::output`
+  waits indefinitely, so every control subprocess now runs through a bounded
+  helper that kills and reaps at the bound.
 
 ## Decision log
 
@@ -1261,6 +1284,44 @@ section and in each ADR.
   process-group cancellation the boundary promises did not reach every process.
   This is the AC4 distinction between "the group kill was sufficient" and "the
   cgroup was the authority".
+- **D15, 2026-11-21 (review repair):** descriptor evidence is the supervisor's
+  observation of the job's `/proc/<pid>/fd`, not the child's listing of its
+  own. A process cannot list its own descriptor directory without adding the
+  listing's handles; listing another process's directory adds nothing to it.
+  Under `Unconfined` the direct child is the job; under `Bubblewrap` the job is
+  found inside the cgroup by its `argv[0]`.
+- **D16, 2026-11-21 (review repair):** every control subprocess runs through a
+  bounded helper, and a job whose cgroup path was never observed is cleaned up
+  with `systemctl --user kill` on the exact unit. Teardown attempts each
+  independent step even when an earlier one fails, and any cleanup or
+  observation failure makes the outcome a containment failure.
+- **D17, 2026-11-21 (review repair):** the launch checks parse the launcher
+  prefix with option arities instead of searching tokens, so a value or a child
+  argument cannot stand in for a missing isolating option, and the
+  `--remount-ro /dev` requirement is checked separately from the root remount.
+- **D18, 2026-11-21 (review repair):** the platform verdict requires exactly the
+  five controls once each, in order. A short, long, reordered, or duplicated
+  list is `Malformed` and no job starts; the previous code returned `Ready` for
+  a duplicated list.
+- **D19, 2026-11-21 (review repair):** each stream reader reports its final trip
+  state as well as its bytes, and the supervisor merges both states before
+  classification, so a trip queued just before a natural exit is not lost.
+- **D20, 2026-11-22 (tolerance breach, recorded for ratification):** the code
+  limit is breached before EP-M3. Measured against `git merge-base main HEAD`
+  (`ad217c8`), excluding this plan and the reviewed snapshot: 43 files and
+  6,684 net lines against limits of 42 files and 5,800 lines; the snapshot is
+  one file of 60 lines. The trace was low in every component, not only the one
+  the contingency covered: the kernels (capture, outcome, platform, launch) are
+  about 1,230 lines against 700; the supervisor, scope, teardown, bounded
+  subprocess helper, and canary are about 1,400 against 900; the hostile
+  families are about 700 against 450; the unit tests are about 1,050 against
+  450; the probes are about 520 against 1,000; and the ten review repairs added
+  about 300. EP-M3's probes, tool runs, and behavioural scenarios are expected
+  to need a further 1,000–1,500. Options: ratify a revised code limit of about
+  8,500 net lines and 55 files, or direct a reduction. The work continues under
+  the user's explicit completion directive, and the overrun is reported for
+  post-hoc ratification, as 1.2.2 and 1.2.3 were. No control has been weakened
+  to save lines.
 
 ## Outcomes & retrospective
 

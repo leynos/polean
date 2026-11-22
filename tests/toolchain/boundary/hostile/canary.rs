@@ -3,8 +3,9 @@
 //! The canary exists because presence is not enforcement. A `bwrap` set-up
 //! failure looks like an ordinary child failure, and systemd accepts limit
 //! properties it cannot apply, so the platform check needs an observation from
-//! inside the boundary. The canary prints one `polean-canary` line per fact, and
-//! `boundary/canary.rs` parses them. Nothing here decides whether the state is
+//! inside the boundary. The canary prints one `polean-canary` line per fact, which
+//! `report` prefixes like every other report line, and `boundary/canary.rs`
+//! parses the prefixed form. Nothing here decides whether the state is
 //! acceptable; that is the platform check's job.
 
 use std::{
@@ -39,9 +40,6 @@ pub fn run() -> Result<(), String> {
         Ok(()) => report("polean-canary outbound connected"),
         Err(reason) => report(&format!("polean-canary outbound {reason}")),
     }
-    let fds = descriptors()?;
-    let listing: Vec<String> = fds.iter().map(ToString::to_string).collect();
-    report(&format!("polean-canary fds {}", listing.join(",")));
     Ok(())
 }
 
@@ -96,31 +94,4 @@ pub fn outbound() -> Result<(), String> {
         Ok(_stream) => Ok(()),
         Err(error) => Err(error.to_string()),
     }
-}
-
-/// The descriptors the child inherited, as numbers.
-///
-/// Listing `/proc/self/fd` opens a descriptor for the directory, which appears
-/// in that listing and is closed when the listing ends. Two listings therefore
-/// differ in exactly those transient descriptors, so their intersection is the
-/// set that was open before either began. The link targets are never read:
-/// a capability refuses an absolute link target, and `/proc` entries are all
-/// absolute.
-///
-/// # Errors
-///
-/// Returns a diagnostic when `/proc/self/fd` cannot be listed.
-pub fn descriptors() -> Result<Vec<i32>, String> {
-    let first = listing()?;
-    let second = listing()?;
-    let mut fds: Vec<i32> = first.into_iter().filter(|fd| second.contains(fd)).collect();
-    fds.sort_unstable();
-    Ok(fds)
-}
-
-/// One numeric listing of `/proc/self/fd`.
-fn listing() -> Result<Vec<i32>, String> {
-    let names = ambient::read_dir_names(Path::new("/proc/self/fd"))
-        .map_err(|error| format!("cannot list /proc/self/fd: {error}"))?;
-    Ok(names.iter().filter_map(|name| name.parse().ok()).collect())
 }

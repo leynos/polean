@@ -9,9 +9,9 @@
 //! The parsing halves are pure so that hosts with different layouts can be
 //! exercised without a systemd user manager.
 
-use std::{path::Path, process::Command};
+use std::path::Path;
 
-use super::super::outcome::Availability;
+use super::super::{outcome::Availability, process};
 use crate::ambient;
 
 /// Control 2: the user manager answers through a cleared environment.
@@ -21,12 +21,12 @@ use crate::ambient;
 /// because a manager that is not settled cannot be relied on to apply limits.
 #[must_use]
 pub fn check_user_manager(systemctl: &Path, runtime_dir: &Path) -> Availability {
-    let output = match Command::new(systemctl)
-        .args(["--user", "is-system-running"])
-        .env_clear()
-        .env("XDG_RUNTIME_DIR", runtime_dir)
-        .output()
-    {
+    let output = match process::run(
+        systemctl,
+        &["--user", "is-system-running"],
+        &[("XDG_RUNTIME_DIR", runtime_dir)],
+        process::CONTROL_BOUND,
+    ) {
         Ok(output) => output,
         Err(error) => {
             return Availability::Missing(format!(
@@ -35,8 +35,7 @@ pub fn check_user_manager(systemctl: &Path, runtime_dir: &Path) -> Availability 
             ));
         }
     };
-    let state = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    manager_state(&state)
+    manager_state(&output.stdout_text())
 }
 
 /// Decide control 2 from the state `systemctl --user is-system-running` prints.

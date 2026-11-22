@@ -124,7 +124,22 @@ pub fn covers(binds: &[ReadOnlyBind], path: &str) -> bool {
     })
 }
 
-/// The isolating options every selected launch vector must carry.
+/// The isolating option names every selected launch vector must carry.
+pub const ISOLATING_NAMES: [&str; 11] = [
+    "--unshare-user",
+    "--unshare-net",
+    "--unshare-pid",
+    "--unshare-ipc",
+    "--unshare-uts",
+    "--unshare-cgroup",
+    "--disable-userns",
+    "--die-with-parent",
+    "--new-session",
+    "--cap-drop",
+    "--clearenv",
+];
+
+/// The isolating option fragment, including the value `--cap-drop` consumes.
 #[must_use]
 pub fn isolating_options() -> Vec<&'static str> {
     vec![

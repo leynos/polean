@@ -22,8 +22,6 @@
 //! The inputs are a finite product, so the tests enumerate them; that is
 //! complete for a finite domain and Verus would add ceremony without rigour.
 
-use std::collections::BTreeSet;
-
 /// One bound a job can exhaust.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bound {
@@ -282,41 +280,59 @@ pub enum Verdict {
     Ready,
     /// At least one control is missing, so no job may start.
     Unavailable(Vec<MissingControl>),
+    /// The check's own control list was malformed, so nothing may start.
+    Malformed(String),
 }
 
 /// Decide the verdict from one availability per control.
 ///
-/// A missing control is never degraded to a warning: any [`Availability::Missing`]
-/// makes the verdict `Unavailable`, and every missing control is named. Duplicate
-/// or out-of-order inputs are a configuration fault, so the function fails closed
-/// by naming the controls it could not account for.
+/// The list must name every control exactly once, in [`ControlKind::ALL`] order.
+/// A missing control is never degraded to a warning: any
+/// [`Availability::Missing`] makes the verdict `Unavailable`, and every missing
+/// control is named. A list that is short, long, reordered, or duplicated is
+/// [`Verdict::Malformed`]: the check cannot say what it observed, so no job may
+/// start.
 #[must_use]
 pub fn verdict(controls: &[(ControlKind, Availability)]) -> Verdict {
-    let mut missing = Vec::new();
-    let mut seen = BTreeSet::new();
-    for (kind, availability) in controls {
-        if let Availability::Missing(reason) = availability {
-            missing.push(MissingControl {
+    if let Some(fault) = control_list_fault(controls) {
+        return Verdict::Malformed(fault);
+    }
+    let missing: Vec<MissingControl> = controls
+        .iter()
+        .filter_map(|(kind, availability)| match availability {
+            Availability::Available => None,
+            Availability::Missing(reason) => Some(MissingControl {
                 kind: *kind,
                 reason: reason.clone(),
-            });
-        }
-        seen.insert(*kind);
-    }
-    let mut absent = Vec::new();
-    for kind in ControlKind::ALL {
-        if !seen.contains(&kind) {
-            absent.push(MissingControl {
-                kind,
-                reason: "the platform check did not report this control".to_owned(),
-            });
-        }
-    }
-    missing.extend(absent);
+            }),
+        })
+        .collect();
     if missing.is_empty() {
         Verdict::Ready
     } else {
-        missing.sort_by_key(|control| control.kind);
         Verdict::Unavailable(missing)
     }
+}
+
+/// Why a control list is not exactly the five controls in order, if it is not.
+fn control_list_fault(controls: &[(ControlKind, Availability)]) -> Option<String> {
+    if controls.len() != ControlKind::ALL.len() {
+        return Some(format!(
+            "the platform check reported {} controls, expected {}",
+            controls.len(),
+            ControlKind::ALL.len()
+        ));
+    }
+    for (position, (kind, _availability)) in controls.iter().enumerate() {
+        let expected = ControlKind::ALL.get(position);
+        if expected != Some(kind) {
+            return Some(format!(
+                "control {position} is {} where {} was expected; the list is reordered or \
+                 duplicated",
+                kind.as_str(),
+                expected.map_or("no control", |wanted| wanted.as_str())
+            ));
+        }
+    }
+    None
 }

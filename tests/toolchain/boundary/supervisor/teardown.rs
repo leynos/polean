@@ -8,9 +8,15 @@
 //! 4. reap the direct child;
 //! 5. confirm the cgroup empty, within a bound.
 //!
+//! Cleanup is best effort *as a whole*: a failure in one step is recorded and
+//! the remaining independent steps still run, because abandoning the cgroup kill
+//! or the reap because a signaller failed would leave a job alive. The first
+//! error is returned after every attempt, and the caller reports it as a
+//! containment diagnostic rather than a clean run.
+//!
 //! A process that outlived the process-group kill is a finding, not a reason to
-//! retry: the cgroup kill then removes it, and the caller reports a containment
-//! failure. A cgroup that never empties is also reported, not retried.
+//! retry: the cgroup kill then removes it. A cgroup that never empties is also
+//! reported, not retried.
 
 use std::{
     path::Path,
@@ -19,6 +25,7 @@ use std::{
 
 use super::super::scope::{
     EMPTY_BOUND,
+    Emptiness,
     SETTLE_BOUND,
     kill_cgroup,
     kill_process_group,
@@ -57,39 +64,29 @@ pub struct Inputs<'a> {
 
 /// Tear one job down and report what was observed.
 ///
-/// # Errors
-///
-/// Returns a diagnostic when the signaller cannot be run, the child cannot be
-/// reaped, or a cgroup file cannot be read.
+/// Returns the report, the direct child's status when it could be reaped, and
+/// every cleanup error in the order they occurred. It never returns early: each
+/// independent cleanup step is attempted even when an earlier one failed.
 #[expect(
     clippy::needless_pass_by_value,
     reason = "the struct carries the mutable child handle teardown reaps"
 )]
-pub fn tear_down(inputs: Inputs<'_>) -> Result<(Report, ExitStatus), String> {
+pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>) {
+    let mut errors = Vec::new();
     if inputs.running {
-        kill_process_group(inputs.kill, inputs.pgid)?;
+        super::note(kill_process_group(inputs.kill, inputs.pgid), &mut errors);
     }
-    let survivors = match inputs.cgroup {
-        Some(cgroup) => survivors_after_settle(cgroup, SETTLE_BOUND)?,
-        None => Vec::new(),
-    };
+    let survivors = inputs
+        .cgroup
+        .map_or_else(Vec::new, |cgroup| survivors(cgroup, &mut errors));
     if let Some(cgroup) = inputs.cgroup {
-        kill_cgroup(cgroup)?;
+        super::note(kill_cgroup(cgroup), &mut errors);
     }
-    let status = match inputs.status {
-        Some(status) => status,
-        None => inputs
-            .child
-            .wait()
-            .map_err(|error| format!("cannot reap the job: {error}"))?,
-    };
-    let emptiness = match inputs.cgroup {
-        Some(cgroup) => wait_until_empty(cgroup, EMPTY_BOUND)?,
-        // A scope that never became active cannot be confirmed empty, so it is
-        // reported as not empty rather than assumed clean.
-        None => super::super::scope::Emptiness::default(),
-    };
-    Ok((
+    let status = reap(inputs.status, inputs.child, &mut errors);
+    let emptiness = inputs
+        .cgroup
+        .map_or_else(Emptiness::default, |cgroup| emptiness(cgroup, &mut errors));
+    (
         Report {
             survivors,
             cgroup_empty: emptiness.empty,
@@ -97,5 +94,46 @@ pub fn tear_down(inputs: Inputs<'_>) -> Result<(Report, ExitStatus), String> {
             events: emptiness.events,
         },
         status,
-    ))
+        errors,
+    )
+}
+
+/// Observe who outlived the process-group kill.
+fn survivors(cgroup: &Path, errors: &mut Vec<String>) -> Vec<u32> {
+    match survivors_after_settle(cgroup, SETTLE_BOUND) {
+        Ok(survivors) => survivors,
+        Err(reason) => {
+            errors.push(reason);
+            Vec::new()
+        }
+    }
+}
+
+/// Reap the direct child, recording a failure to do so.
+fn reap(
+    observed: Option<ExitStatus>,
+    child: &mut Child,
+    errors: &mut Vec<String>,
+) -> Option<ExitStatus> {
+    if observed.is_some() {
+        return observed;
+    }
+    match child.wait() {
+        Ok(reaped) => Some(reaped),
+        Err(error) => {
+            errors.push(format!("cannot reap the job: {error}"));
+            None
+        }
+    }
+}
+
+/// Confirm the cgroup empty, recording a read failure as not empty.
+fn emptiness(cgroup: &Path, errors: &mut Vec<String>) -> Emptiness {
+    match wait_until_empty(cgroup, EMPTY_BOUND) {
+        Ok(emptiness) => emptiness,
+        Err(reason) => {
+            errors.push(reason);
+            Emptiness::default()
+        }
+    }
 }

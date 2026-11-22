@@ -229,55 +229,93 @@ fn the_verdict_is_ready_exactly_when_every_control_holds() -> Result<(), String>
     Ok(())
 }
 
-/// A control the check never reported is missing, not assumed available.
+/// A list that is not exactly the five controls in order is malformed.
 #[test]
-fn the_verdict_fails_closed_when_a_control_is_unreported() -> Result<(), String> {
-    let missing = match verdict(&[]) {
-        Verdict::Unavailable(missing) => missing,
-        Verdict::Ready => return Err("an empty control list must not be ready".to_owned()),
-    };
+fn a_malformed_control_list_is_refused() -> Result<(), String> {
+    let canonical: Vec<(ControlKind, Availability)> = ControlKind::ALL
+        .iter()
+        .map(|kind| (*kind, Availability::Available))
+        .collect();
     check_eq!(
-        missing.len(),
-        ControlKind::ALL.len(),
-        "every control is named"
+        verdict(&canonical),
+        Verdict::Ready,
+        "the canonical list is ready"
+    );
+    let mut duplicated = canonical.clone();
+    duplicated.push((ControlKind::Programs, Availability::Available));
+    check!(
+        matches!(verdict(&duplicated), Verdict::Malformed(_)),
+        "a duplicated control must be malformed"
+    );
+    let mut reordered = canonical.clone();
+    reordered.swap(0, 1);
+    check!(
+        matches!(verdict(&reordered), Verdict::Malformed(_)),
+        "a reordered control must be malformed"
     );
     check!(
-        missing
-            .iter()
-            .all(|control| control.reason.contains("did not report")),
-        "each absence must be explained, got {missing:?}"
+        matches!(
+            verdict(canonical.get(..4).unwrap_or(&canonical)),
+            Verdict::Malformed(_)
+        ),
+        "a short list must be malformed"
+    );
+    check!(
+        matches!(verdict(&[]), Verdict::Malformed(_)),
+        "an empty list must be malformed"
     );
     Ok(())
 }
 
-/// Missing controls are listed in control order whatever the input order.
+/// Missing controls are listed in control order.
 #[test]
 fn the_verdict_orders_missing_controls() -> Result<(), String> {
-    let controls = vec![
-        (
-            ControlKind::CanaryLimits,
-            Availability::Missing("limits".to_owned()),
-        ),
-        (ControlKind::Programs, Availability::Available),
-        (
-            ControlKind::Delegation,
-            Availability::Missing("delegation".to_owned()),
-        ),
-    ];
+    let controls: Vec<(ControlKind, Availability)> = ControlKind::ALL
+        .iter()
+        .map(|kind| {
+            let availability = match kind {
+                ControlKind::Delegation | ControlKind::CanaryLimits => {
+                    Availability::Missing(format!("missing {}", kind.as_str()))
+                }
+                _ => Availability::Available,
+            };
+            (*kind, availability)
+        })
+        .collect();
     let missing = match verdict(&controls) {
         Verdict::Unavailable(missing) => missing,
-        Verdict::Ready => return Err("missing controls must not be ready".to_owned()),
+        other => {
+            return Err(format!(
+                "missing controls must be unavailable, got {other:?}"
+            ));
+        }
     };
     let kinds: Vec<ControlKind> = missing.iter().map(|control| control.kind).collect();
     check_eq!(
         kinds,
-        vec![
-            ControlKind::UserManager,
-            ControlKind::Delegation,
-            ControlKind::CanaryIsolation,
-            ControlKind::CanaryLimits,
-        ],
-        "missing controls are ordered by kind, and an unreported one is named"
+        vec![ControlKind::Delegation, ControlKind::CanaryLimits],
+        "missing controls are ordered by kind"
+    );
+    Ok(())
+}
+
+/// A malformed report accounts for no control, so every control is missing.
+#[test]
+fn a_malformed_report_names_every_control() -> Result<(), String> {
+    let report = super::super::platform::PlatformReport {
+        controls: Vec::new(),
+    };
+    let missing = report.missing();
+    check_eq!(
+        missing.len(),
+        ControlKind::ALL.len(),
+        "every control is unaccounted for"
+    );
+    check!(
+        missing
+            .iter()
+            .all(|control| control.reason.contains("expected")),
+        "the malformed reason must be carried, got {missing:?}"
     );
     Ok(())
 }
