@@ -187,6 +187,26 @@ fn bind_host_tmp_slash(argv: &mut Vec<String>) {
     insert_before_separator(argv, &["--ro-bind", "/tmp/", "/job/host-tmp"]);
 }
 
+/// Bind a parent-directory alias of the host's `/home`.
+fn bind_parent_alias(argv: &mut Vec<String>) {
+    insert_before_separator(argv, &["--ro-bind", "/tmp/../home", "/job/host-home"]);
+}
+
+/// Point the size argument at a different tmpfs.
+fn misdirect_size(argv: &mut Vec<String>) {
+    // Insert another tmpfs between `--size` and `--tmpfs /job/work`, so the
+    // size governs the wrong mount and `/job/work` is unbounded.
+    if let Some(size) = argv
+        .iter()
+        .position(|argument| argument.as_str() == "--size")
+    {
+        drop(argv.splice(
+            size + 2..size + 2,
+            ["--tmpfs".to_owned(), "/other".to_owned()],
+        ));
+    }
+}
+
 /// Add a second scratch mount that replaces the sized one.
 fn add_second_scratch(argv: &mut Vec<String>) {
     if let Some(chdir) = argv
@@ -235,10 +255,12 @@ fn insert_before_separator(argv: &mut Vec<String>, values: &[&str]) {
 #[rstest]
 #[case::network(drop_network_namespace, "unshare-net")]
 #[case::root_remount(drop_root_remount, "last option before")]
-#[case::size(move_size, "immediately precede")]
+#[case::size(move_size, "immediately size `--tmpfs /job/work`")]
 #[case::home(bind_host_home, "forbidden host path /home")]
 #[case::tmp_slash(bind_host_tmp_slash, "forbidden host path /tmp/")]
 #[case::second_scratch(add_second_scratch, "mount /job/work exactly once")]
+#[case::parent_alias(bind_parent_alias, "parent-directory alias")]
+#[case::misdirected_size(misdirect_size, "size `--tmpfs /job/work`")]
 #[case::ancestor(bind_home_ancestor, "ancestor of it")]
 #[case::writable(add_writable_bind, "writable bind option")]
 #[case::terminal(drop_new_session, "terminal session")]

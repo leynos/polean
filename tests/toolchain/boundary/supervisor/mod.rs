@@ -166,6 +166,9 @@ struct Clock {
 impl Clock {
     /// Whether the deadline has expired.
     fn expired(self) -> bool { self.started.elapsed() >= self.deadline }
+
+    /// The budget left before the deadline, zero once it has passed.
+    fn remaining(self) -> Duration { self.deadline.saturating_sub(self.started.elapsed()) }
 }
 
 impl Supervisor<'_> {
@@ -194,7 +197,7 @@ impl Supervisor<'_> {
             cgroup,
             join_error,
             mut diagnostics,
-        } = self.start(job)?;
+        } = self.start(job, clock)?;
         let mut notes = Vec::new();
         if let Some(reason) = join_error {
             if job.require_scope {
@@ -268,7 +271,7 @@ impl Supervisor<'_> {
     }
 
     /// Spawn the job and wait for its scope, recording a failed observation.
-    fn start<'a>(&'a self, job: &Job) -> Result<Started<'a>, String> {
+    fn start<'a>(&'a self, job: &Job, clock: Clock) -> Result<Started<'a>, String> {
         let argv = match job.boundary {
             Boundary::Bubblewrap => bubblewrap_scope_argv(&job.spec, self.programs),
             Boundary::Unconfined => unconfined_scope_argv(&job.spec),
@@ -280,7 +283,11 @@ impl Supervisor<'_> {
             runtime_dir: self.runtime_dir,
             unit: job.spec.unit.clone(),
         };
-        let (cgroup, join_error) = match scope.wait_until_joined(pgid) {
+        // Scope discovery shares the job's single deadline: a job whose budget
+        // expires while systemd is being queried is torn down rather than given
+        // a fresh bound.
+        let discovery = clock.remaining().min(crate::boundary::scope::JOIN_BOUND);
+        let (cgroup, join_error) = match scope.wait_until_joined_within(pgid, discovery) {
             Ok(cgroup) => (Some(cgroup), None),
             Err(reason) => (None, Some(reason)),
         };

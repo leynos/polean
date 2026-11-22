@@ -72,7 +72,8 @@ fn platform_reports_ready(state: &BoundaryState) -> Result<(), String> {
 fn platform_verdict() -> Result<Verdict, String> {
     let probe = super::Probe::new("boundary-bdd-canary")?;
     let limits = RequestedLimits::default();
-    let (_run, report) = probe.canary(&limits)?;
+    let (run, report) = probe.canary(&limits)?;
+    super::super::supervisor::require_outcome(&run, &super::super::outcome::Outcome::Completed)?;
     Ok(check(&Check {
         programs: probe.programs(),
         runtime_dir: probe.runtime_dir(),

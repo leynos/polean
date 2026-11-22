@@ -26,6 +26,7 @@ use cap_std::fs::MetadataExt;
 mod bdd;
 mod bubblewrap;
 mod listeners;
+mod pins;
 mod tools;
 mod unconfined;
 

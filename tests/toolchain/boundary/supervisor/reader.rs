@@ -44,6 +44,8 @@ struct Drained {
     bytes: Vec<u8>,
     /// Whether the stream ever exceeded its cap.
     tripped: bool,
+    /// The read error, when the stream failed after a valid prefix.
+    error: Option<String>,
 }
 
 /// The readers and the trip channel for one job.
@@ -111,13 +113,17 @@ fn drain(
     thread::spawn(move || {
         let mut capture = Capture::new(cap);
         let mut signalled = false;
+        let mut error = None;
         let mut buffer = [0u8; 16 * 1024];
         loop {
             let read = match stream.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(read) => read,
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(_) => break,
+                Err(failure) if failure.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(failure) => {
+                    error = Some(failure.to_string());
+                    break;
+                }
             };
             let chunk = buffer.get(..read).unwrap_or(&[]);
             capture.feed(chunk);
@@ -128,6 +134,7 @@ fn drain(
         drop(signals.done.send(Drained {
             bytes: capture.kept().to_vec(),
             tripped: capture.tripped(),
+            error,
         }));
     })
 }
@@ -155,6 +162,9 @@ fn collect(
 ) -> Drained {
     match reader.recv_timeout(DRAIN_BOUND) {
         Ok(drained) => {
+            if let Some(error) = &drained.error {
+                diagnostics.push(format!("the {name} failed after a valid prefix: {error}"));
+            }
             drop(handle.join());
             drained
         }
@@ -165,6 +175,7 @@ fn collect(
             Drained {
                 bytes: Vec::new(),
                 tripped: false,
+                error: None,
             }
         }
         Err(RecvTimeoutError::Disconnected) => {
@@ -174,6 +185,7 @@ fn collect(
             Drained {
                 bytes: Vec::new(),
                 tripped: false,
+                error: None,
             }
         }
     }
@@ -213,7 +225,11 @@ pub(super) fn drain_readers(readers: &Readers, diagnostics: &mut Vec<String>) {
         (&readers.stderr, "standard error"),
     ] {
         match reader.recv_timeout(DRAIN_BOUND) {
-            Ok(_drained) => (),
+            Ok(drained) => {
+                if let Some(error) = drained.error {
+                    diagnostics.push(format!("the {name} failed after a valid prefix: {error}"));
+                }
+            }
             Err(error) => diagnostics.push(format!("the {name} reader reported {error}")),
         }
     }

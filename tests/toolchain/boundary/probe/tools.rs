@@ -10,11 +10,7 @@
 //! provisioned fails with the remediation the smoke suite gives, because a
 //! skipped observation would read as a pass.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-    time::Duration,
-};
+use std::{path::Path, process::Command, time::Duration};
 
 use serde_json::Value as Json;
 
@@ -28,20 +24,13 @@ use super::{
     Probe,
     ToolJob,
     listeners,
+    pins::{pinned_lean, pinned_opa},
 };
 use crate::{
     ambient,
     json::parse_json,
     scratch::{check, check_eq},
-    support::{
-        CROSS_TENANT_ADMIN_REQUEST,
-        baseline_source_path,
-        lean_root,
-        opa_path,
-        path_exists,
-        pins_path,
-        repository_path,
-    },
+    support::{CROSS_TENANT_ADMIN_REQUEST, baseline_source_path, repository_path},
 };
 
 /// The OPA entry point the baseline policy exports.
@@ -66,60 +55,6 @@ allow if {
 	response.status_code == 200
 }
 "#;
-
-/// Read a tool's installed digest from the committed pin file.
-///
-/// # Errors
-///
-/// Returns a diagnostic when the pin file or the entry is missing.
-fn pinned_sha(tool: &str) -> Result<String, String> {
-    let text = ambient::read_to_string(&pins_path())
-        .map_err(|error| format!("cannot read the pin file: {error}; run `make tools`"))?;
-    let document = parse_json(&text, "toolchain-pins.json")?;
-    document
-        .get(tool)
-        .and_then(|entry| entry.get("sha256"))
-        .and_then(Json::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| format!("toolchain-pins.json `{tool}.sha256` is missing"))
-}
-
-/// Require a provisioned path, with the remediation `make tools` gives.
-///
-/// # Errors
-///
-/// Returns a diagnostic naming the path and the target that provisions it.
-fn require_present(path: &Path) -> Result<(), String> {
-    if path_exists(path)? {
-        return Ok(());
-    }
-    Err(format!(
-        "{} is missing; run `make tools` to provision the pinned tools",
-        path.display()
-    ))
-}
-
-/// The provisioned OPA binary.
-///
-/// # Errors
-///
-/// Returns a diagnostic when the pin or the binary is missing.
-fn pinned_opa() -> Result<PathBuf, String> {
-    let path = opa_path(&pinned_sha("opa")?);
-    require_present(&path)?;
-    Ok(path)
-}
-
-/// The provisioned Lean root.
-///
-/// # Errors
-///
-/// Returns a diagnostic when the pin or the root is missing.
-fn pinned_lean() -> Result<PathBuf, String> {
-    let root = lean_root(&pinned_sha("lean")?);
-    require_present(&root)?;
-    Ok(root)
-}
 
 /// Copy a repository file into the input snapshot and return its in-boundary
 /// path.
@@ -155,16 +90,32 @@ fn decided(stdout: &str, entry: &str) -> Result<bool, String> {
     if document.get("errors").is_some() {
         return Err(format!("OPA reported errors for {entry}: {stdout}"));
     }
-    document
+    let results = document
         .get("result")
         .and_then(Json::as_array)
-        .and_then(|results| results.first())
+        .ok_or_else(|| format!("OPA printed no result array for {entry}: {stdout}"))?;
+    if results.len() != 1 {
+        return Err(format!(
+            "OPA must print exactly one result, printed {} for {entry}: {stdout}",
+            results.len()
+        ));
+    }
+    let expressions = results
+        .first()
         .and_then(|result| result.get("expressions"))
         .and_then(Json::as_array)
-        .and_then(|expressions| expressions.first())
+        .ok_or_else(|| format!("OPA printed no expressions for {entry}: {stdout}"))?;
+    if expressions.len() != 1 {
+        return Err(format!(
+            "OPA must print exactly one expression, printed {} for {entry}: {stdout}",
+            expressions.len()
+        ));
+    }
+    expressions
+        .first()
         .and_then(|expression| expression.get("value"))
         .and_then(Json::as_bool)
-        .ok_or_else(|| format!("OPA printed no Boolean result for {entry}: {stdout}"))
+        .ok_or_else(|| format!("OPA printed no Boolean value for {entry}: {stdout}"))
 }
 
 /// Run OPA on the host, outside any boundary.

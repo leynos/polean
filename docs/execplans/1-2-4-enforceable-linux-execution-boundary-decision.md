@@ -1139,9 +1139,10 @@ section and in each ADR.
   independent cleanup step and reports the first error; readers deliver their
   final trip state and their bytes over bounded channels; and the scope join
   error is retained as a fail-closed diagnostic.
-- [ ] EP-M2 gate re-run after the repairs, including the `make test` retry (the
-  only red gate on `81baa02` was the pre-existing admission compile-fail test
-  timing out at 600 s while the shared compile-admission queue was saturated).
+- [x] 2026-11-22: EP-M2 gate re-run after the repairs. The only red gate on
+  `81baa02` was the pre-existing admission compile-fail test timing out at 600
+  s while the shared compile-admission queue was saturated; an authorised retry
+  passed all 306 tests at `01f9211`. Later full runs are recorded below.
 - [x] 2026-11-22: EP-M3 implemented: `probe/bubblewrap.rs` (six
       selected-boundary
   cells), `probe/tools.rs` (OPA inside and outside, `http.send` silence, Lean
@@ -1170,6 +1171,29 @@ section and in each ADR.
   before their overrides. A cgroup removed while `cgroup.kill`, `cgroup.procs`,
   or another cgroup file is open reports `ENODEV`; that is now treated as
   "gone", which removed the intermittent containment failure in fast jobs.
+- [x] 2026-11-22: a third review round found thirteen minor issues, and all
+  were repaired: parent-directory aliases are rejected as bind targets; the
+  scratch tmpfs must be sized by the same `--size` argument; the ADR records
+  that the short-tool cells show the tools work inside the boundary rather than
+  observing each scope; the listeners own their thread set, fail an expired
+  watch, remove their socket, and perform a final accept before reporting
+  silence; the BDD given step requires a completed canary; OPA must print
+  exactly one result and one expression; scope discovery is bounded by the
+  remaining deadline; a process drain reports its trip so the wait kills the
+  job; a reader read error becomes a diagnostic; teardown kills the process
+  group even when no cgroup was recorded; and `probe/pins.rs` was split out to
+  keep the modules within 400 lines. Gates on the repaired tree:
+  `make check-fmt`, `make typecheck`, `make lint` (including Whitaker),
+  `make markdownlint`, `make design-check`, 94 boundary unit tests, and five
+  consecutive `make boundary-probe` runs of 20 probes each (24–28 s). The full
+  nextest suite passed 307 tests, and the documentation tests passed.
+  `make test` as a whole reported one red result: the pre-existing admission
+  compile-fail test
+  (`the_protected_matches_stop_the_build_when_a_variant_is_unhandled`) hit
+  nextest's 600 s termination while the shared compile-admission queue held
+  about 180 waiting requests. The same test passed on this tree when run
+  directly (895 s, almost all of it queue wait), and the admission sources are
+  identical to `01f9211`, where the full suite passed after the same retry.
 - [x] `SHA256SUMS` was stale before this branch: five rows (the audit manifest,
   three validation modules, and the regenerated validation summary) did not
   match their files even at `ad217c8`. They are regenerated here, so

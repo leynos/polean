@@ -15,7 +15,7 @@ use std::{
     io::Read,
     path::Path,
     process::{Child, Command, ExitStatus, Stdio},
-    sync::mpsc::{Receiver, RecvTimeoutError, channel},
+    sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel},
     thread,
     time::{Duration, Instant},
 };
@@ -84,8 +84,9 @@ pub fn run(
     let mut child = command
         .spawn()
         .map_err(|error| format!("cannot run {}: {error}", program.display()))?;
-    let (stdout, stderr) = readers(&mut child)?;
-    let status = match wait(&mut child, bound) {
+    let (trip_sender, trips) = channel();
+    let (stdout, stderr) = readers(&mut child, trip_sender)?;
+    let status = match wait(&mut child, bound, &trips) {
         Ok(status) => status,
         Err(reason) => {
             stop(&mut child);
@@ -106,13 +107,15 @@ struct Drained {
     bytes: Vec<u8>,
     /// Whether the stream exceeded the control cap.
     tripped: bool,
+    /// The read error, when the stream failed after a valid prefix.
+    error: Option<String>,
 }
 
 /// One stream's delivery channel.
 type Reader = Receiver<Drained>;
 
 /// Start one bounded reader per stream.
-fn readers(child: &mut Child) -> Result<(Reader, Reader), String> {
+fn readers(child: &mut Child, trips: Sender<()>) -> Result<(Reader, Reader), String> {
     let stdout = child
         .stdout
         .take()
@@ -121,42 +124,65 @@ fn readers(child: &mut Child) -> Result<(Reader, Reader), String> {
         .stderr
         .take()
         .ok_or_else(|| "standard error is not piped".to_owned())?;
-    Ok((drain(stdout), drain(stderr)))
+    Ok((drain(stdout, trips.clone()), drain(stderr, trips)))
 }
 
 /// Read one stream into a capture and send the kept bytes when it ends.
-fn drain(mut stream: impl Read + Send + 'static) -> Reader {
+fn drain(mut stream: impl Read + Send + 'static, trips: Sender<()>) -> Reader {
     let (sender, receiver) = channel();
     thread::spawn(move || {
         let mut capture = Capture::new(STREAM_CAP);
+        let mut signalled = false;
+        let mut error = None;
         let mut buffer = [0u8; 8 * 1024];
         loop {
-            match stream.read(&mut buffer) {
+            let read = match stream.read(&mut buffer) {
                 Ok(0) => break,
-                Ok(read) => {
-                    let chunk = buffer.get(..read).unwrap_or(&[]);
-                    capture.feed(chunk);
+                Ok(read) => read,
+                Err(failure) if failure.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(failure) => {
+                    error = Some(failure.to_string());
+                    break;
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => (),
-                Err(_) => break,
+            };
+            let chunk = buffer.get(..read).unwrap_or(&[]);
+            capture.feed(chunk);
+            if trips_send(&capture, &trips, &mut signalled) {
+                break;
             }
         }
         drop(sender.send(Drained {
             bytes: capture.kept().to_vec(),
             tripped: capture.tripped(),
+            error,
         }));
     });
     receiver
 }
 
+/// Signal the first cap trip, reporting whether the supervisor has gone.
+fn trips_send(capture: &Capture, trips: &Sender<()>, signalled: &mut bool) -> bool {
+    if !capture.tripped() || *signalled {
+        return false;
+    }
+    *signalled = true;
+    trips.send(()).is_err()
+}
+
 /// Poll the child against the bound, killing it when the bound expires.
-fn wait(child: &mut Child, bound: Duration) -> Result<ExitStatus, String> {
+fn wait(child: &mut Child, bound: Duration, trips: &Receiver<()>) -> Result<ExitStatus, String> {
     let started = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
             Ok(None) => (),
             Err(error) => return Err(format!("cannot wait for the program: {error}")),
+        }
+        if trips.try_recv().is_ok() {
+            stop(child);
+            return Err(format!(
+                "a control stream exceeded the {STREAM_CAP} byte cap; the program was stopped"
+            ));
         }
         if started.elapsed() >= bound {
             stop(child);
@@ -177,6 +203,10 @@ fn collect(reader: &Reader, name: &str) -> Result<Vec<u8>, String> {
     match reader.recv_timeout(CONTROL_BOUND) {
         Ok(drained) if drained.tripped => Err(format!(
             "the {name} exceeded the {STREAM_CAP} byte control cap; its output was truncated"
+        )),
+        Ok(drained) if drained.error.is_some() => Err(format!(
+            "the {name} failed after a valid prefix: {}",
+            drained.error.unwrap_or_default()
         )),
         Ok(drained) => Ok(drained.bytes),
         Err(RecvTimeoutError::Timeout) => Err(format!("the {name} reader did not finish")),

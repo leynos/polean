@@ -9,11 +9,15 @@
 //! The listeners only ever report whether a connection arrived, or whether the
 //! listener itself failed to observe. They stay active from before the job
 //! starts until the job has finished, so a slow launch cannot turn "the job
-//! reached a closed listener" into a vacuous pass. Under the selected boundary
-//! nothing may connect; under the negative control all three must. The socket
-//! file's path must stay short enough for `SUN_LEN`, which the scratch
-//! directory's absolute path can exceed, so it lives under `/tmp` with a
-//! per-run name and is removed when the watchers finish.
+//! reached a closed listener" into a vacuous pass. A watcher that reaches its
+//! own bound is an observation failure, never silence: incomplete observation
+//! is not evidence of isolation.
+//!
+//! Setup failure and an early return from a probe both release the listeners
+//! through the same guard, so no watcher outlives the probe that started it.
+//! The socket file's path must stay short enough for `SUN_LEN`, which the
+//! scratch directory's absolute path can exceed, so it lives under `/tmp` with
+//! a per-run name.
 
 use std::{
     io,
@@ -35,10 +39,9 @@ use crate::ambient;
 
 /// The longest a listener waits before reporting that it observed nothing.
 ///
-/// This is an overall bound on the probe, not the job's lifetime: the watchers
-/// stop when the probe has finished with them. It is longer than every job
-/// deadline the offline probes use, so an expired watcher never stands in for
-/// isolation.
+/// Reaching this bound is an observation failure: the probe cannot say whether
+/// a connection would have arrived later, so silence at the bound is never
+/// evidence.
 const WATCH_BOUND: Duration = Duration::from_secs(30);
 
 /// How often a listener polls for a connection or a stop request.
@@ -67,29 +70,41 @@ impl Endpoints {
     }
 }
 
-/// One listener's observation.
+/// One listener's observation: whether a connection arrived, or why it failed.
 type Observed = Result<bool, String>;
 
 /// The listeners' watcher threads.
 pub struct Watchers {
-    /// The loopback TCP watcher.
-    tcp: JoinHandle<Observed>,
-    /// The abstract socket watcher.
-    abstract_socket: JoinHandle<Observed>,
-    /// The socket-file watcher.
-    socket_file: JoinHandle<Observed>,
+    /// The watcher threads and their endpoint names.
+    started: Vec<(JoinHandle<Observed>, &'static str)>,
     /// The socket file's path, removed when the watchers finish.
-    socket_path: PathBuf,
+    socket: Option<PathBuf>,
     /// Set once the probe has finished with the listeners.
     stop: Arc<AtomicBool>,
 }
 
 /// Start all three listeners with a per-run abstract name and socket path.
 ///
+/// Watcher threads start as each endpoint binds, and every endpoint already
+/// started is stopped and joined if a later one fails, so a partial setup
+/// leaves nothing running.
+///
 /// # Errors
 ///
 /// Returns a diagnostic when an endpoint cannot be bound.
 pub fn listen(nonce: &str) -> Result<(Endpoints, Watchers), String> {
+    let mut guard = Watchers {
+        started: Vec::new(),
+        socket: None,
+        stop: Arc::new(AtomicBool::new(false)),
+    };
+    let (endpoints, socket) = bind_all(nonce, &mut guard)?;
+    guard.socket = Some(socket);
+    Ok((endpoints, guard))
+}
+
+/// Bind every endpoint, starting each watcher as soon as it is ready.
+fn bind_all(nonce: &str, guard: &mut Watchers) -> Result<(Endpoints, PathBuf), String> {
     let tcp = TcpListener::bind("127.0.0.1:0")
         .map_err(|error| format!("cannot listen on loopback: {error}"))?;
     let tcp_address = tcp
@@ -97,8 +112,7 @@ pub fn listen(nonce: &str) -> Result<(Endpoints, Watchers), String> {
         .map_err(|error| format!("cannot read the loopback port: {error}"))?;
     tcp.set_nonblocking(true)
         .map_err(|error| format!("cannot make the TCP listener non-blocking: {error}"))?;
-    let stop = Arc::new(AtomicBool::new(false));
-    let tcp_watch = watch(stop.clone(), move || tcp.accept().map(drop));
+    guard.push("TCP", move || tcp.accept().map(drop));
     let abstract_name = format!("polean-probe-{nonce}");
     let abstract_address = SocketAddr::from_abstract_name(abstract_name.as_bytes())
         .map_err(|error| format!("cannot name the abstract socket: {error}"))?;
@@ -107,65 +121,93 @@ pub fn listen(nonce: &str) -> Result<(Endpoints, Watchers), String> {
     abstract_listener
         .set_nonblocking(true)
         .map_err(|error| format!("cannot make the abstract listener non-blocking: {error}"))?;
-    let abstract_watch = watch(stop.clone(), move || abstract_listener.accept().map(drop));
+    guard.push("abstract", move || abstract_listener.accept().map(drop));
     let socket_path = PathBuf::from(format!("/tmp/polean-probe-{nonce}.sock"));
     let socket_listener = UnixListener::bind(&socket_path)
         .map_err(|error| format!("cannot bind {}: {error}", socket_path.display()))?;
     socket_listener
         .set_nonblocking(true)
         .map_err(|error| format!("cannot make the socket listener non-blocking: {error}"))?;
-    let socket_watch = watch(stop.clone(), move || socket_listener.accept().map(drop));
+    guard.socket = Some(socket_path.clone());
+    guard.push("socket-file", move || socket_listener.accept().map(drop));
     Ok((
         Endpoints {
             tcp: tcp_address.to_string(),
             abstract_name,
             socket: socket_path.clone(),
         },
-        Watchers {
-            tcp: tcp_watch,
-            abstract_socket: abstract_watch,
-            socket_file: socket_watch,
-            socket_path,
-            stop,
-        },
+        socket_path,
     ))
 }
 
 impl Watchers {
+    /// Start one watcher for a bound endpoint.
+    fn push(&mut self, name: &'static str, accept: impl Fn() -> io::Result<()> + Send + 'static) {
+        let stop = self.stop.clone();
+        self.started.push((watch(stop, accept), name));
+    }
+
     /// Require every listener to have recorded a connection.
     ///
     /// # Errors
     ///
     /// Returns a diagnostic naming the listener that stayed silent or failed.
-    pub fn require_connected(self) -> Result<(), String> { self.finish(true) }
+    pub fn require_connected(mut self) -> Result<(), String> { self.finish(true) }
 
     /// Require no listener to have recorded a connection.
     ///
     /// # Errors
     ///
     /// Returns a diagnostic naming the listener that recorded one or failed.
-    pub fn require_silent(self) -> Result<(), String> { self.finish(false) }
+    pub fn require_silent(mut self) -> Result<(), String> { self.finish(false) }
 
     /// Stop the watchers, join them, and check the expected connection state.
-    fn finish(self, expected: bool) -> Result<(), String> {
+    fn finish(&mut self, expected: bool) -> Result<(), String> {
         self.stop.store(true, Ordering::Relaxed);
-        let outcome = [
-            self.tcp.join(),
-            self.abstract_socket.join(),
-            self.socket_file.join(),
-        ];
-        drop(ambient::remove_file(&self.socket_path));
-        for (handle, name) in outcome.into_iter().zip(["TCP", "abstract", "socket-file"]) {
-            let Ok(observed) = handle else {
-                return Err(format!("the {name} listener thread panicked"));
-            };
-            let connected = observed?;
-            if connected != expected {
-                return Err(mismatch(expected, name));
+        let outcome = std::mem::take(&mut self.started);
+        let mut result = Ok(());
+        for (handle, name) in outcome {
+            if result.is_err() {
+                drop(handle.join());
+                continue;
             }
+            result = check(handle, name, expected);
         }
-        Ok(())
+        result.as_ref()?;
+        self.remove_socket()
     }
+
+    /// Remove the socket file, reporting a failure to do so.
+    fn remove_socket(&mut self) -> Result<(), String> {
+        self.socket.take().map_or(Ok(()), |path| {
+            ambient::remove_file(&path)
+                .map_err(|error| format!("cannot remove {}: {error}", path.display()))
+        })
+    }
+
+    /// Stop and join every watcher and remove the socket file, ignoring errors.
+    fn shutdown(&mut self) {
+        for (handle, _name) in self.started.drain(..) {
+            drop(handle.join());
+        }
+        drop(self.remove_socket());
+    }
+}
+
+impl Drop for Watchers {
+    fn drop(&mut self) { self.shutdown(); }
+}
+
+/// Check one watcher's observation.
+fn check(handle: JoinHandle<Observed>, name: &str, expected: bool) -> Result<(), String> {
+    let Ok(observed) = handle.join() else {
+        return Err(format!("the {name} listener thread panicked"));
+    };
+    let connected = observed?;
+    if connected != expected {
+        return Err(mismatch(expected, name));
+    }
+    Ok(())
 }
 
 /// The diagnostic for a listener whose connection state is not the expected one.
@@ -178,21 +220,32 @@ fn mismatch(expected: bool, name: &str) -> String {
 }
 
 /// Watch until a connection arrives, the probe stops the watcher, or it fails.
+///
+/// A stop request still performs one final non-blocking `accept`, so a
+/// connection that reached the backlog between polls is reported rather than
+/// mistaken for silence.
 fn watch(
     stop: Arc<AtomicBool>,
     accept: impl Fn() -> io::Result<()> + Send + 'static,
 ) -> JoinHandle<Observed> {
     thread::spawn(move || {
         let started = Instant::now();
-        while !stop.load(Ordering::Relaxed) && started.elapsed() < WATCH_BOUND {
+        loop {
             match accept() {
                 Ok(()) => return Ok(true),
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    thread::sleep(POLL);
-                }
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => (),
                 Err(error) => return Err(format!("the listener failed: {error}")),
             }
+            if stop.load(Ordering::Relaxed) {
+                // The final accept above found nothing; silence is observed.
+                return Ok(false);
+            }
+            if started.elapsed() >= WATCH_BOUND {
+                return Err(format!(
+                    "the listener reached its {WATCH_BOUND:?} bound before the probe stopped it"
+                ));
+            }
+            thread::sleep(POLL);
         }
-        Ok(false)
     })
 }

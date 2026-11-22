@@ -75,12 +75,22 @@ impl Scope<'_> {
     ///
     /// Returns a diagnostic when `systemctl` cannot be run.
     pub fn show(&self, property: &str) -> Result<Option<String>, String> {
+        self.show_within(property, process::CONTROL_BOUND)
+    }
+
+    /// One property of the unit, bounded by `bound`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a diagnostic when `systemctl` cannot be run or does not answer
+    /// within `bound`.
+    pub fn show_within(&self, property: &str, bound: Duration) -> Result<Option<String>, String> {
         let unit = self.systemd_unit();
         let output = process::run(
             self.programs.systemctl.as_path(),
             &["--user", "show", "-P", property, &unit],
             &[("XDG_RUNTIME_DIR", self.runtime_dir)],
-            process::CONTROL_BOUND,
+            bound,
         )
         .map_err(|error| format!("cannot query {unit}: {error}"))?;
         if !output.success() {
@@ -90,13 +100,14 @@ impl Scope<'_> {
         Ok(if value.is_empty() { None } else { Some(value) })
     }
 
-    /// The scope's cgroup, as an absolute path under `/sys/fs/cgroup`.
+    /// The scope's cgroup, bounded by `bound`.
     ///
     /// # Errors
     ///
-    /// Returns a diagnostic when `systemctl` cannot be run.
-    pub fn control_group(&self) -> Result<Option<PathBuf>, String> {
-        let Some(relative) = self.show("ControlGroup")? else {
+    /// Returns a diagnostic when `systemctl` cannot be run or does not answer
+    /// within `bound`.
+    pub fn control_group_within(&self, bound: Duration) -> Result<Option<PathBuf>, String> {
+        let Some(relative) = self.show_within("ControlGroup", bound)? else {
             return Ok(None);
         };
         if relative.is_empty() {
@@ -109,27 +120,23 @@ impl Scope<'_> {
         Ok(Some(path))
     }
 
-    /// Wait until the scope exists and `pid` is inside it.
-    ///
-    /// Both conditions are required: systemd may create the cgroup before
-    /// `systemd-run` moves into it, and a job that never joined would not be
-    /// bounded by the limits the probe claims to have applied.
+    /// Wait for the scope, bounded by `bound`.
     ///
     /// # Errors
     ///
-    /// Returns a diagnostic when the scope does not appear within
-    /// [`JOIN_BOUND`], or when `/proc` cannot be read.
-    pub fn wait_until_joined(&self, pid: u32) -> Result<PathBuf, String> {
+    /// Returns a diagnostic when the scope does not appear within `bound`, or
+    /// when `/proc` cannot be read.
+    pub fn wait_until_joined_within(&self, pid: u32, bound: Duration) -> Result<PathBuf, String> {
         let started = Instant::now();
         loop {
-            if let Some(cgroup) = self.active_with(pid)? {
+            if let Some(cgroup) = self.active_with(pid, bound)? {
                 return Ok(cgroup);
             }
-            if started.elapsed() >= JOIN_BOUND {
+            if started.elapsed() >= bound {
                 return Err(format!(
                     "the scope {} did not become active with the job inside it within {:?}",
                     self.systemd_unit(),
-                    JOIN_BOUND
+                    bound
                 ));
             }
             thread::sleep(POLL);
@@ -137,8 +144,8 @@ impl Scope<'_> {
     }
 
     /// The scope's cgroup, but only once `pid` is inside it.
-    fn active_with(&self, pid: u32) -> Result<Option<PathBuf>, String> {
-        let Some(cgroup) = self.control_group()? else {
+    fn active_with(&self, pid: u32, bound: Duration) -> Result<Option<PathBuf>, String> {
+        let Some(cgroup) = self.control_group_within(bound)? else {
             return Ok(None);
         };
         if joined(pid, &self.systemd_unit())? {

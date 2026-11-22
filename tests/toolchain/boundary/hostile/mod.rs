@@ -222,7 +222,7 @@ pub struct Targets {
     pub abstract_name: Option<String>,
     /// A Unix socket file the probe created to try to reach.
     pub socket: Option<PathBuf>,
-    /// A host directory path to try to write into.
+    /// A host file path to try to create, under a directory the probe owns.
     pub host: Option<PathBuf>,
     /// The memory behaviour's mode: `allocate` or `fill`.
     pub memory: Option<String>,

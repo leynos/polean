@@ -1,8 +1,8 @@
 //! The storage behaviour: try to write where the boundary says it cannot.
 //!
 //! The attempts cover the root, the device tmpfs, the read-only input snapshot,
-//! the private scratch area, and a host directory the probe owns and passes as
-//! an argument. Only the scratch write and, under the negative control, the host
+//! the private scratch area, and a host file path under a directory the probe
+//! owns, passed as an argument. Only the scratch write and, under the negative control, the host
 //! write may succeed. A scratch fill past `--size` follows, because a tmpfs that
 //! accepts more than its bound is not private storage with a bound.
 //!

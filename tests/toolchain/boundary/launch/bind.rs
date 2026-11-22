@@ -256,11 +256,22 @@ fn check_scratch(options: &[LauncherOption], prefix: &[String], faults: &mut Vec
         faults.push("the vector has no `--size`".to_owned());
         return;
     };
-    match (prefix.get(size + 1), prefix.get(size + 2)) {
-        (Some(bytes), Some(tmpfs))
-            if tmpfs.as_str() == "--tmpfs" && bytes.parse::<u64>().is_ok() => {}
-        _ => faults.push("`--size <bytes>` must immediately precede `--tmpfs`".to_owned()),
+    let sized = match (
+        prefix.get(size + 1),
+        prefix.get(size + 2),
+        prefix.get(size + 3),
+    ) {
+        (Some(bytes), Some(tmpfs), Some(destination)) => sized_scratch(bytes, tmpfs, destination),
+        _ => false,
+    };
+    if !sized {
+        faults.push("`--size <bytes>` must immediately size `--tmpfs /job/work`".to_owned());
     }
+}
+
+/// Whether the size argument immediately sizes the `/job/work` scratch mount.
+fn sized_scratch(bytes: &str, option: &str, destination: &str) -> bool {
+    option == "--tmpfs" && bytes.parse::<u64>().is_ok() && destination == "/job/work"
 }
 
 /// No bind may be a host path the boundary must hide.
@@ -269,6 +280,15 @@ fn check_binds(options: &[LauncherOption], home: &Path, faults: &mut Vec<String>
     for source in bind_sources(options) {
         // Compare as paths, so `/tmp/` and `/tmp` are the same directory.
         let source_path = Path::new(&source);
+        if source_path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+        {
+            faults.push(format!(
+                "the vector binds {source}, which names a parent-directory alias"
+            ));
+            continue;
+        }
         if forbidden
             .iter()
             .any(|reserved| source_path == Path::new(reserved))
