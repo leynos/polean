@@ -58,7 +58,7 @@ mod wait;
 pub(crate) use self::wait::retain_seen;
 use self::{
     reader::{Readers, drain_readers, finish_readers, readers},
-    run::{Target, note, read_limits, read_result, reset_failed_unit},
+    run::{Awaiting, note, read_limits, read_result, reset_failed_unit},
     teardown::{Inputs, tear_down},
     wait::{Waiting, snapshot_fds, wait},
 };
@@ -237,16 +237,14 @@ impl Supervisor<'_> {
         scope_observation(job, join_error, &mut diagnostics, &mut notes);
         let limits = read_limits(cgroup.as_deref(), job.read_limits, &mut diagnostics);
         let readers = readers(&mut child, job)?;
-        let mut snapshot = || snapshot_fds(job, pgid, cgroup.as_deref());
-        let waiting = {
-            let mut target = Target {
-                child: &mut child,
-                pgid,
-                cgroup: cgroup.as_deref(),
-                clock,
-            };
-            self.wait_for_job(&mut target, &readers, &mut snapshot)?
-        };
+        let waiting = self.observe(Awaiting {
+            job,
+            child: &mut child,
+            pgid,
+            cgroup: cgroup.as_deref(),
+            clock,
+            readers: &readers,
+        })?;
         let (report, status, errors) = tear_down(Inputs {
             child: &mut child,
             pgid,

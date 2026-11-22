@@ -14,10 +14,12 @@ use super::{
     },
     Clock,
     Inputs,
+    Job,
     Readers,
     Supervisor,
     Waiting,
     drain_readers,
+    snapshot_fds,
     tear_down,
     wait,
 };
@@ -87,8 +89,44 @@ pub(super) struct Target<'a> {
     pub(super) clock: Clock,
 }
 
+/// The parts of a running job the wait needs.
+pub(super) struct Awaiting<'a> {
+    /// The job being observed.
+    pub(super) job: &'a Job,
+    /// The spawned child.
+    pub(super) child: &'a mut Child,
+    /// The child's process group.
+    pub(super) pgid: u32,
+    /// The scope's cgroup, once discovered.
+    pub(super) cgroup: Option<&'a Path>,
+    /// The job's single deadline.
+    pub(super) clock: Clock,
+    /// The stream readers.
+    pub(super) readers: &'a Readers,
+}
+
 impl Supervisor<'_> {
     /// Wait for the job, tearing it down if the wait itself fails.
+    /// Wait for the job, sampling its descriptors and honouring its deadline.
+    pub(super) fn observe(&self, awaiting: Awaiting<'_>) -> Result<Waiting, String> {
+        let Awaiting {
+            job,
+            child,
+            pgid,
+            cgroup,
+            clock,
+            readers,
+        } = awaiting;
+        let mut snapshot = || snapshot_fds(job, pgid, cgroup);
+        let mut target = Target {
+            child,
+            pgid,
+            cgroup,
+            clock,
+        };
+        self.wait_for_job(&mut target, readers, &mut snapshot)
+    }
+
     pub(super) fn wait_for_job(
         &self,
         target: &mut Target<'_>,
