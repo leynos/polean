@@ -5,9 +5,10 @@ This ExecPlan (execution plan) is a living document. Keep `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 2). The community-of-experts review has been applied.
-Awaiting the user's decisions on Q1 and Q2 and approval of the plan.
-Implementation must not begin until the user approves this plan.
+Status: DRAFT (revision 3). The community-of-experts review has been applied,
+and the user decided Q1 and Q2 on 2026-11-22 (D17, D18). Awaiting the user's
+approval of the plan. Implementation must not begin until the user approves
+this plan.
 
 Roadmap item: [2.1.1](../roadmap.md). Branch:
 `2-1-1-bounded-source-ingestion-and-closed-policy-ir-types`.
@@ -124,8 +125,8 @@ theorem concerns the byte encoding of IR values only.
   remains test-only, and 2.1.2 retires it.
 - Authorized dependency changes are exactly these, all at the versions already
   in `Cargo.lock`: move `serde` (`=1.0.229`, feature `derive`) and `serde_json`
-  (`=1.0.154`) to `[dependencies]`; and, if the user accepts Q1, move `vstd`
-  (`=0.0.0-2026-09-06-0133`) to `[dependencies]`. Each stays in
+  (`=1.0.154`) to `[dependencies]`; and, as the user decided in Q1 (D17), move
+  `vstd` (`=0.0.0-2026-09-06-0133`) to `[dependencies]`. Each stays in
   `[dev-dependencies]` only if still needed there. Regorus stays a
   dev-dependency until 2.1.2.
 - Verus proofs must not use any construct the forbidden-construct scan
@@ -138,8 +139,10 @@ theorem concerns the byte encoding of IR values only.
   `#[expect(..., reason = "...")]` is permitted); every module starts with
   `//!`; modules stay under 400 lines and functions under 70 lines; public
   items carry Rustdoc with an example where useful.
-- `make verus` stays on demand, outside `make all`, unless the user accepts
-  Q2.
+- `make verus` stays outside `make all`. CI already runs it through
+  `.github/workflows/proofs.yml` (added on `main` by #55). This plan adds no
+  new CI job (D18); it only adds the new proof's inputs to that workflow's path
+  filters, so the existing job sees them.
 - Use British English with Oxford spelling. Refresh `SHA256SUMS` only for
   covered files this plan changes (`docs/technical-design.md`, and
   `docs/context.md`), after reviewing each change.
@@ -151,17 +154,17 @@ theorem concerns the byte encoding of IR values only.
 
 Exclude this ExecPlan from every count, including when it is updated in the
 same change. Exclude reviewed `insta` snapshots (`**/*.snap`), proptest
-regression files (`**/*.proptest-regressions`), and the generated proof-input
-digest file (`verus/verified-inputs.sha256`).
+regression files (`**/*.proptest-regressions`).
 
 Measure net lines (additions minus deletions) per category against the merge
-base with `main` at `ad217c8`:
+base with `main`. Before EP-M1 the branch is rebased onto current `main` (D19),
+so compute the base rather than hard-coding it:
 
 ```bash
-git diff --numstat ad217c8...HEAD -- . \
+BASE=$(git merge-base origin/main HEAD)
+git diff --numstat "$BASE"...HEAD -- . \
   ':(exclude)docs/execplans/**' ':(exclude)**/*.snap' \
-  ':(exclude)**/*.proptest-regressions' \
-  ':(exclude)verus/verified-inputs.sha256'
+  ':(exclude)**/*.proptest-regressions'
 ```
 
 Classify whole files by path:
@@ -230,20 +233,22 @@ The estimate behind these limits is in `Context and orientation`.
   through repository visitors that never raise serde errors.
 - Risk: the proof quietly stops covering the shipped encoder. The kernel moves
   into production `src/`, which later items will edit, while `make verus` is
-  not a commit gate. Severity: high. Likelihood: medium. Mitigation: a digest
-  manifest of every proof input is written only by a successful `make verus`.
-  `make test-scripts`, which CI runs when those paths change, fails if any
-  input differs from the manifest. Q2 asks whether a CI job should also run
-  `make verus`.
+  not a local commit gate. Severity: high. Likelihood: low, now that CI runs
+  the proofs. Mitigation: EP-M3 adds `src/ir/model/**` and the new
+  `verus/policy_canonical*` files to the path filters of
+  `.github/workflows/proofs.yml`, so any change to a proof input runs
+  `make verus` and its controls in CI. A test checks that every proof tree's
+  source directories appear in those filters, so a later proof cannot be
+  forgotten the same way.
 - Risk: canonical bytes diverge from what the Python harness and Lean will
   use. Severity: medium. Likelihood: low. Mitigation: a test encodes every
   committed IR fixture and compares it with an independent serde_json compact
   rendering. An `insta` snapshot records the canonical bytes for review.
 - Risk: making `vstd` a production dependency adds pre-release crates to the
-  shipped dependency graph. Severity: medium. Likelihood: certain if Q1 is
-  accepted. Mitigation: ADR 0007 records the decision and amends ADR 0005's
-  "dev-only" consequence. `verus!` erases ghost code under plain `rustc`, and
-  every test run already builds the crates.
+  shipped dependency graph. Severity: medium. Likelihood: certain, since the
+  user accepted Q1 (D17). Mitigation: ADR 0008 records the decision and amends
+  ADR 0005's "dev-only" consequence. `verus!` erases ghost code under plain
+  `rustc`, and every test run already builds the crates.
 - Risk: a reader misbehaves. It may return `Ok(0)` before the true end,
   return `Interrupted` forever, report more bytes than it was given, or fail
   after a partial read. Severity: medium. Likelihood: low. Mitigation: a
@@ -271,11 +276,15 @@ The estimate behind these limits is in `Context and orientation`.
   methods and alternatives, red team and pre-mortem, and proportionality and
   process. Verdict: revise. Revision 2 adopts the conditions; see
   `Revision notes`.
-- [ ] User decisions on Q1 and Q2, and user approval of the plan.
+- [x] (2026-11-22) The user decided Q1 (`vstd` becomes a production
+  dependency) and Q2 (no new CI job in this item); recorded as D17 and D18.
+  `main` had moved to `5447c62` meanwhile, adding a CI proof job (#55); D15 is
+  withdrawn as redundant, and the ADR number moves to 0008 (D16).
+- [ ] User approval of the plan.
 - [ ] `EP-M1`: profile constants and bounded source ingestion.
 - [ ] `EP-M2`: closed IR types, canonical encoder, and strict decoders.
 - [ ] `EP-M3`: proof tooling, then the Verus proof of the canonical encoding.
-- [ ] `EP-M4`: documentation, ADR 0007, and delivery closure.
+- [ ] `EP-M4`: documentation, ADR 0008, and delivery closure.
 
 ## Surprises & discoveries
 
@@ -355,7 +364,7 @@ The estimate behind these limits is in `Context and orientation`.
   recognizer refuses it. No admitted source can contain NUL, and rejecting it
   does not alter the bytes kept. A BOM and a bare carriage return already fail
   closed in Regorus and in the recognizer respectively, and rejecting them here
-  would duplicate admission rules without their reason codes. ADR 0007 records,
+  would duplicate admission rules without their reason codes. ADR 0008 records,
   as an entry requirement for 2.1.2, that the feasibility corpus's BOM, NUL,
   and bare carriage return rows must stay rejected. Date/Author: 2026-11-14,
   planning agent, revised after review.
@@ -432,7 +441,8 @@ The estimate behind these limits is in `Context and orientation`.
   injectivity can fail. `Atom::name() -> &'static str` and other conveniences
   sit outside `verus!`, and a test ties them to the kernel's bytes. A test also
   ties the kernel's profile bytes to `profile::PROFILE_ID`. Date/Author:
-  2026-11-14, planning agent, revised after review; depends on Q1.
+  2026-11-14, planning agent, revised after review; confirmed by the user's Q1
+  decision on 2026-11-22 (D17).
 - D12. Decision: the users' guide documents the library in prose and points to
   Rustdoc, whose examples run as doctests in `make test`. It adds no fenced
   example. Rationale: every fenced example in `docs/users-guide.md` needs a
@@ -443,7 +453,7 @@ The estimate behind these limits is in `Context and orientation`.
 - D13. Decision: this plan fixes no exit-code mapping. 2.1.4 maps
   `SourceError` and `DecodeError` to outcomes. Rationale: no CLI exists yet,
   and the review noted that an unreadable user-supplied policy may reasonably be
-  `invalid_input` rather than `tool_error`. ADR 0007 lists the failure classes
+  `invalid_input` rather than `tool_error`. ADR 0008 lists the failure classes
   and leaves the mapping, and any stall deadline for blocking readers
   (technical design §11), to 2.1.4. Date/Author: 2026-11-14, planning agent,
   revised after review.
@@ -451,40 +461,72 @@ The estimate behind these limits is in `Context and orientation`.
   over the bytes. Rationale: roadmap 4.1 binds source bytes and IR bytes
   separately. A distinct type stops a caller from passing one where the other
   is meant. Date/Author: 2026-11-14, planning agent, adopted from review.
-- D15. Decision: protect the proof against drift with a digest manifest. On
-  success, `make verus` writes `verus/verified-inputs.sha256`, holding the
-  SHA-256 of every file in every proof tree. A Python test under
-  `make test-scripts` fails if any listed file differs from its digest, or if a
-  proof tree holds a file not listed. `.github/workflows/toolchain.yml` runs
-  that target when any proof input changes. Rationale: the kernel now ships,
-  and 2.1.2 and later items will edit `src/`. Without a tripwire, an edit would
-  leave a stale proof that still reads as current. The manifest catches honest
-  mistakes; it is not a security control, since anyone can rewrite it. Q2 asks
-  about the stronger option. Date/Author: 2026-11-14, planning agent, adopted
-  from review.
+- D15. Withdrawn on 2026-11-22. Revision 2 proposed a digest manifest of
+  every proof input, written by a successful `make verus` and checked by
+  `make test-scripts`, so an edit made after verification would fail a gate.
+  Its purpose was to stand in for a CI proof job. Since revision 2, `main`
+  gained exactly that job: `.github/workflows/proofs.yml` (#55, `e541b31`) runs
+  `make verus` and every negative control on pull requests and pushes that
+  touch a proof input, and weekly. A CI re-run of the proof is strictly
+  stronger than a digest anyone can rewrite, so the manifest would add code and
+  a generated file without adding assurance. Its replacement is the path filter
+  registration and filter-coverage test in EP-M3. If the user wants the local
+  tripwire as well, it can be restored from revision 2 unchanged. Date/Author:
+  2026-11-22, planning agent.
+- D16. Decision: this plan's ADR takes the next number free on `main` and on
+  open pull requests when EP-M4 writes it, expected to be 0008. Rationale: ADR
+  0007 is already claimed by the proposed execution-boundary ADR on the 1.2.4
+  branch (draft PR #53), which has not merged. If PR #53 is abandoned before
+  EP-M4, use the lowest free number and update this plan's references.
+  Date/Author: 2026-11-22, planning agent.
+- D17. Decision: `vstd` becomes a production dependency, and the canonical
+  encoder is verified where it ships, in the `verus!` kernel of D11. Rationale:
+  the user accepted Q1 on 2026-11-22. Alternative B, a specification-only
+  proof, is retained only as the fallback named by the Feasibility tolerance.
+  Date/Author: 2026-11-22, the user.
+- D18. Decision: this item adds no new CI job for the proofs. Rationale: the
+  user accepted the Q2 recommendation on 2026-11-22. The CI job the question
+  contemplated now exists independently (#55), so the outcome is that EP-M3
+  registers the new proof with `proofs.yml` rather than creating anything. ADR
+  0005 still says `make verus` stays "outside `make all` and CI"
+  (`docs/adrs/adr-0005-admit-by-ast-mapping-and-canonical-token-recognition.md:135-136`),
+  which #55 made stale; ADR 0008's amendment of ADR 0005 corrects that line
+  alongside the `vstd` consequence. Date/Author: 2026-11-22, the user, with the
+  factual update by the planning agent.
+- D19. Decision: rebase the branch onto current `main` before EP-M1. Rationale:
+  the plan was drafted on `ad217c8`; `main` has since gained `2d06560`
+  (Cranelift is no longer the development default), `e541b31` (the CI proof
+  job), and `5447c62` (`std::env::set_current_dir` disallowed in
+  `clippy.toml`). The branch holds only this plan, so the rebase is mechanical.
+  Budgets are measured from the new merge base. Date/Author: 2026-11-22,
+  planning agent.
 
-### Open questions for the user
+### Questions put to the user
 
-- Q1. May `vstd` become a production dependency, so that the canonical encoder
-  is verified where it ships? Recommended: yes. The cost is these pre-release
-  crates in the normal dependency graph: `vstd`, `verus_builtin`,
-  `verus_builtin_macros`, `verus_state_machines_macros`, `verus_syn`, and
-  `verus_prettyplease`. Their build-time proc-macro dependencies `syn` 3,
-  `synstructure`, and `convert_case` come too. All are already locked and built
-  by every test run, and `verus!` erases ghost code from the shipped binary.
-  ADR 0005's record says the recognizer kernel, written the same way, is meant
-  to be promoted in 2.1.2, so the dependency arrives then regardless; taking it
-  now lets ADR 0007 decide it once. Alternative B keeps production code free of
-  `vstd`: prove injectivity of a specification in `verus/` only, and link the
-  plain-Rust encoder to it by the serde_json oracle and the snapshot. Under B,
-  refinement is tested rather than proved, the encoder's logic exists twice,
-  and the drift manifest covers only the specification. Choose B if 2.1.2 might
-  not promote the recognizer kernel into `src/`.
-- Q2. Should a path-filtered CI job run `make install-verus` and `make verus`
-  when a proof input changes? That would amend ADR 0005's consequence that
-  `make verus` stays outside CI. Recommended: not in this item. D15's manifest
-  catches an unverified edit at commit time without CI cost. If you want the
-  proof re-run in CI, say so, and the job and the ADR amendment join EP-M3.
+Both questions are decided. They are kept here as the record of what was asked.
+
+- Q1 (decided 2026-11-22: yes; D17). May `vstd` become a production
+  dependency, so that the canonical encoder is verified where it ships?
+  Recommended: yes. The cost is these pre-release crates in the normal
+  dependency graph: `vstd`, `verus_builtin`, `verus_builtin_macros`,
+  `verus_state_machines_macros`, `verus_syn`, and `verus_prettyplease`. Their
+  build-time proc-macro dependencies `syn` 3, `synstructure`, and
+  `convert_case` come too. All are already locked and built by every test run,
+  and `verus!` erases ghost code from the shipped binary. ADR 0005's record
+  says the recognizer kernel, written the same way, is meant to be promoted in
+  2.1.2, so the dependency arrives then regardless; taking it now lets ADR 0008
+  decide it once. Alternative B keeps production code free of `vstd`: prove
+  injectivity of a specification in `verus/` only, and link the plain-Rust
+  encoder to it by the serde_json oracle and the snapshot. Under B, refinement
+  is tested rather than proved, and the encoder's logic exists twice. Choose B
+  if 2.1.2 might not promote the recognizer kernel into `src/`.
+- Q2 (decided 2026-11-22: recommendation accepted; D18). Should a
+  path-filtered CI job run `make install-verus` and `make verus` when a proof
+  input changes? That would amend ADR 0005's consequence that `make verus`
+  stays outside CI. Recommended: not in this item; D15's manifest would catch
+  an unverified edit at commit time without CI cost. (Since asked: `main` added
+  such a job independently in #55, so D15 is withdrawn and EP-M3 only registers
+  the new proof with it.)
 
 ## Outcomes & retrospective
 
@@ -564,7 +606,12 @@ first runs `verus-proof` over `VERUS_PROOF_FILES` (`Makefile:122`). It then runs
 stages each `ProofTree` into scratch and requires the unmodified tree to
 verify. It then applies each negative control and requires Verus to reject it
 with named output. `scripts/tests/test_verus_make_targets.py:200` hard-codes
-the proof file list. None of this runs in CI.
+the proof file list. Since `e541b31` (#55), `.github/workflows/proofs.yml` runs
+`make verus` in CI on pull requests and pushes that touch its path filters
+(`verus/**`, the two test-side kernels, `tools/verus/**`,
+`tools/rust-prover-tools/**`, `scripts/check_verus_controls.py`,
+`rust-toolchain.toml`, `Makefile`, and the workflow itself), and weekly. It
+installs Verus and Z3 through the shared `install-prover-tools` action.
 
 ### Gates
 
@@ -642,7 +689,7 @@ Planned files and estimated net lines of code, by milestone:
     (25).
 - EP-M3 (about 1,800 lines):
   - tooling commit: the forbidden-construct scan, the agreement test, the
-    digest manifest and its check, and their tests (`scripts/`, about 450);
+    proof path-filter coverage test, and their tests (`scripts/`, about 380);
   - `Makefile` (+10);
   - proof: `verus/policy_canonical_spec.rs` (180),
     `verus/policy_canonical_lemmas/` (`mod.rs`, `bodies.rs`, `injective.rs`;
@@ -674,14 +721,14 @@ Configuration:
 - `Cargo.toml`: about +8 −4.
 - `Cargo.lock`: expected 0, because a lockfile does not record dependency
   kind.
-- `toolchain.yml`: +6 path filters.
+- `toolchain.yml`: +2 path filters; `proofs.yml`: +2 path filters.
 - `SHA256SUMS`: in-place digest changes.
 
 The 100-line limit allows for lockfile churn if Cargo reorders entries.
 
 Documentation:
 
-- ADR 0007: 200.
+- ADR 0008: 200.
 - `docs/technical-design.md`: +100.
 - `docs/developers-guide.md`: +200.
 - `docs/users-guide.md`: +50.
@@ -726,7 +773,7 @@ Load these skills:
   `proptest`, and `nextest`.
 - `rust-verification` and `verus`.
 - `addressing-whitaker-findings`.
-- `arch-decision-records`, for ADR 0007.
+- `arch-decision-records`, for ADR 0008.
 - `en-gb-oxendict`.
 - `execplans`, to keep this plan current.
 
@@ -754,8 +801,9 @@ Upstream artefacts inspected at `ad217c8`:
   - ADR 0002: the assurance boundary.
   - ADR 0003: exact pins.
   - ADR 0005: 2.1.1 owns the production source and IR types; the spike IR is
-    not promoted; Verus stays dev-only and on demand. ADR 0007 amends that
-    last consequence if Q1 is accepted.
+    not promoted; Verus stays dev-only and on demand. ADR 0008 amends that
+    last consequence (D17), and corrects its stale "outside CI" wording
+    (D18).
 - Contracts: `contracts/profile.json`, `contracts/policy.schema.json`, and
   `contracts/cli.txt`.
 - Roadmap item RM-2.1.1 and its success criteria.
@@ -794,7 +842,9 @@ Gaps at the base revision:
 - GAP-NO-CAP: nothing enforces or tests the source cap.
 - GAP-NO-CANON: nothing produces or checks canonical IR bytes.
 - GAP-VERUS-SCAN: Verus controls do not reject forbidden proof constructs, and
-  nothing detects a proof input edited after verification.
+  nothing checks that a new proof's inputs are covered by the CI proof job's
+  path filters, so a production kernel could change without CI re-running its
+  proof.
 
 Trace links:
 
@@ -806,7 +856,7 @@ TDD-7 -> REQ-CANON-FORM, REQ-CANON-UNIQUE -> EP-M2, EP-M3 -> fixtures snapshot, 
 TDD-7, RM-4.1 -> REQ-CANON-STRICT -> EP-M2 -> INV-STRICT-READER property
 TDD-7, TOR-N1 -> REQ-DECODE-STRICT -> EP-M2 -> src/ir/decode/tests.rs, INV-DECODE-REJECTS
 profile.json, policy.schema.json -> REQ-CONTRACT-AGREE -> EP-M1, EP-M2 -> tests/ingestion/contracts.rs
-GAP-VERUS-SCAN -> EP-M3 -> scripts/tests scan and manifest cases
+GAP-VERUS-SCAN -> EP-M3 -> scripts/tests scan, agreement, and proofs.yml filter-coverage cases
 RM-2.1.1 -> EP-M4 -> roadmap entry marked done
 ```
 
@@ -1289,9 +1339,9 @@ implementation and green after.
 
 ### `EP-M2` closed IR types, canonical encoder, and strict decoders
 
-Step 1, the feasibility probe. If Q1 is accepted, move `vstd` to
-`[dependencies]`; move `serde` (with `derive`) and `serde_json` there too. Add
-a skeleton `src/ir/model/mod.rs` inside `verus!` holding:
+Step 1, the feasibility probe. Move `vstd` to `[dependencies]` (D17), and move
+`serde` (with `derive`) and `serde_json` there too. Add a skeleton
+`src/ir/model/mod.rs` inside `verus!` holding:
 
 - `Atom`, `Rule`, and `Policy`, with private fields and `View` implementations;
 - constructors with `ensures` on the type invariant;
@@ -1374,19 +1424,24 @@ is rejected. The existing identifiers `axiom_code_spec` and
 `axiom_findings_empty_iff`, and a doc comment mentioning "assume", are not
 flagged. Every existing tree passes.
 
-Second, the D15 digest manifest. On success, `make verus` writes
-`verus/verified-inputs.sha256`. A test fails if any proof input differs from
-the manifest, or if a tree holds a file the manifest does not list.
-
-Third, a test that `VERUS_PROOF_FILES` and the script's trees name the same
+Second, a test that `VERUS_PROOF_FILES` and the script's trees name the same
 entry points.
+
+Third, a test that every source directory of every proof tree, and every entry
+point, is covered by both the `pull_request` and `push` path filters of
+`.github/workflows/proofs.yml`. This replaces revision 2's digest manifest
+(D15): it makes sure the existing CI proof job runs whenever a proof input
+changes, including for proofs added after this one.
 
 Also add `verus/policy_canonical.rs` to `VERUS_PROOF_FILES`, add its
 `ProofTree` (sources `src/ir/model/` and the `verus/policy_canonical*` files),
-and update `scripts/tests/test_verus_make_targets.py`. Add `src/ir/model/**` and
-`verus/verified-inputs.sha256` to both path filters in
-`.github/workflows/toolchain.yml`. The forbidden-construct scan and the
-manifest check are pure Python and run under `make test-scripts`, which CI runs.
+and update `scripts/tests/test_verus_make_targets.py`. Add `src/ir/model/**` to
+both path filters in `.github/workflows/proofs.yml`, so CI runs the proof when
+the kernel changes; `verus/**` already covers the new specification, lemma,
+witness, and entry-point files. Add `src/ir/model/**` to both path filters in
+`.github/workflows/toolchain.yml` too, because the control anchor tests under
+`make test-scripts` read the kernel's source. The forbidden-construct scan and
+the filter-coverage test are pure Python and run under `make test-scripts`.
 
 Proof. Add three files beside the kernel:
 
@@ -1399,8 +1454,8 @@ The kernel `#[path]`-includes them, gating the `mod` declarations on
 loop invariants to the kernel, then add the four controls.
 
 Red: before the lemmas exist, `make verus` must fail on the new entry point
-with unproved postconditions; record the output. Green: prove. Then run
-`make verus` again to refresh the manifest, and commit the manifest.
+with unproved postconditions; record the output. Green: prove. After the push,
+confirm that the `Proofs` workflow ran on the pull request and passed.
 
 Acceptance:
 
@@ -1414,20 +1469,22 @@ Acceptance:
 Record in `Artefacts and notes` whether controls (c) and (d) also rejected any
 obligation outside `injective.rs`.
 
-### `EP-M4` documentation, ADR 0007, and delivery closure
+### `EP-M4` documentation, ADR 0008, and delivery closure
 
-Write ADR 0007, `docs/adrs/adr-0007-verify-the-canonical-ir-encoding.md`. It
-records:
+Write ADR 0008, `docs/adrs/adr-0008-verify-the-canonical-ir-encoding.md`, using
+the number D16 selects. It records:
 
 - the decision to verify the canonical encoder in production code;
 - the production dependencies, and why each is acceptable;
 - the two decoders and their acceptance rules (D3, D5–D9);
 - the NUL decision and the 2.1.2 entry requirement (D4);
 - the failure classes left for 2.1.4 to map (D13);
-- the drift manifest (D15).
+- the registration of the new proof with the CI proof job (D18).
 
-Add an "Amended by ADR 0007" banner and an `## Amendments` section to ADR 0005,
-as the documentation style guide prescribes.
+Add an "Amended by ADR 0008" banner and an `## Amendments` section to ADR 0005,
+as the documentation style guide prescribes. The amendment replaces two
+consequences: that the Verus tooling stays dev-only (D17), and that
+`make verus` stays outside CI, which `proofs.yml` already contradicts (D18).
 
 Update `docs/technical-design.md`:
 
@@ -1445,7 +1502,7 @@ production modules, and describe:
 - the re-use strategy for `bounded::read_bounded` (2.1.3 must use it, not
   write another reader);
 - test placement and the googletest pattern;
-- the Verus registration checklist and the drift manifest.
+- the Verus registration checklist, including the `proofs.yml` path filters.
 
 Update `docs/users-guide.md` "Available today" with a prose description of the
 library (D12). Update `docs/repository-layout.md`: the `src/` rows, the
@@ -1508,8 +1565,8 @@ Acceptance: the milestone gates pass, together with `make design-check` and
 ### `EP-M3`
 
 - Outcome: L-CANON-REFINES, L-CANON-INJECTIVE, and L-CANON-SHAPE are proved
-  over the shipped kernel. Forbidden constructs and unverified edits are caught
-  mechanically.
+  over the shipped kernel. Forbidden constructs are rejected mechanically, and
+  the CI proof job runs whenever a proof input changes.
 - Requirements: REQ-CANON-FORM and REQ-CANON-UNIQUE; GAP-VERUS-SCAN.
 - Acceptance: `make verus` reports 0 errors and all controls rejected;
   `make test-scripts` and the gates pass.
@@ -1517,7 +1574,7 @@ Acceptance: the milestone gates pass, together with `make design-check` and
   - No construct the scan forbids.
   - Executable kernel statements unchanged from EP-M2, apart from ghost code.
   - Existing proofs' verified counts unchanged.
-  - `make verus` still on demand, unless Q2 says otherwise.
+  - No new CI job; `proofs.yml` path filters cover the new proof inputs (D18).
   - Code within its 2,600-line budget.
 - Recovery: the encoder's behaviour is unchanged, so reverting the proof
   leaves EP-M2 valid; the tooling commit stands on its own. If the verification
@@ -1532,7 +1589,7 @@ Acceptance: the milestone gates pass, together with `make design-check` and
 - Acceptance: the documentation gates and the checksum manifest pass.
 - Conformance check:
   - No document claims admission, proof of a policy, or runtime agreement.
-  - ADR 0007 records every dependency decision and amends ADR 0005.
+  - ADR 0008 records every dependency decision and amends ADR 0005.
 - Recovery: documentation only; revert or amend.
 - Remaining gaps: admission (2.1.2), requests (2.1.3), and the CLI (2.1.4).
 - Compatibility decision: none.
@@ -1600,8 +1657,7 @@ The work is accepted when all of the following hold:
 
 Every step can be re-run. Tests read committed fixtures and write nothing
 outside Cargo's target directory and `insta`'s pending snapshots. The Verus
-controls run on scratch copies and never touch the working tree. `make verus`
-rewrites the manifest only after every proof and control succeeds. If a gate
+controls run on scratch copies and never touch the working tree. If a gate
 fails part-way, fix the cause and re-run that gate, then the remaining gates in
 order. Each milestone is committed, so reverting a milestone's commits restores
 the previous plateau.
@@ -1710,8 +1766,8 @@ provided no item is added beyond this list; record any such change in
 requires it.
 
 Dependencies after this plan: `serde =1.0.229` (`derive`) and
-`serde_json =1.0.154`, plus `vstd =0.0.0-2026-09-06-0133` if Q1 is accepted.
-All three move from `[dev-dependencies]` without version changes.
+`serde_json =1.0.154`, plus `vstd =0.0.0-2026-09-06-0133` (D17). All three move
+from `[dev-dependencies]` without version changes.
 
 ## Revision notes
 
@@ -1747,3 +1803,16 @@ All three move from `[dev-dependencies]` without version changes.
     `make typecheck` and `make markdownlint` to every milestone. Raised and
     split the budgets using measured history. Added definitions, signposts,
     and the missing `docs/references.md` note.
+- Revision 3 (2026-11-22): recorded the user's decisions and reconciled the
+  plan with `main`, which had moved to `5447c62`.
+  - Q1 accepted: `vstd` becomes a production dependency (D17); conditional
+    wording removed throughout.
+  - Q2 recommendation accepted: no new CI job in this item (D18). `main` had
+    meanwhile gained `.github/workflows/proofs.yml` (#55), so D15's digest
+    manifest is withdrawn as redundant and replaced by registering the new
+    proof's inputs in that workflow's path filters, with a coverage test.
+  - ADR number moved from 0007 to 0008, because draft PR #53 claims 0007
+    (D16). ADR 0008's amendment of ADR 0005 also corrects its stale "outside
+    CI" consequence.
+  - Added D19: rebase onto current `main` before EP-M1, and measure budgets
+    from the new merge base.
