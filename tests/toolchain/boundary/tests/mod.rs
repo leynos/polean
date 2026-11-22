@@ -16,3 +16,4 @@ mod outcome;
 mod platform;
 mod probe;
 mod support;
+mod wait;

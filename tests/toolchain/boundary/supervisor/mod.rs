@@ -55,7 +55,7 @@ mod reader;
 mod run;
 mod teardown;
 mod wait;
-
+pub(crate) use self::wait::retain_seen;
 use self::{
     reader::{Readers, drain_readers, finish_readers, readers},
     run::{Target, note, read_limits, read_result},

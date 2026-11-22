@@ -251,11 +251,14 @@ does not hide socket files; the allowlisted filesystem view does.
   agree with their outside runs, not that the supervisor observed each tool's
   cgroup.
 - **Inherited descriptors.** The supervisor lists the job's own descriptor
-  directory from outside and the hostile probe requires exactly its standard
-  streams. Rust opens its own descriptors close-on-exec, and neither
+  directory from outside on every poll and keeps only the descriptors present
+  in every sample, so a handle the job opens for its own work cannot be
+  mistaken for an inherited one; the hostile probe requires exactly its
+  standard streams. Rust opens its own descriptors close-on-exec, and neither
   `systemd-run` nor `bubblewrap` closes foreign ones; a leaked descriptor would
   be reported by that observation, or by the canary on a host where the
-  observation is unavailable.
+  observation is unavailable. The observation cannot see a descriptor opened
+  and closed between two polls, which is also true of the job's own work.
 - **Kernel resources outside cgroup accounting.** Inotify instances, session
   keyrings, seccomp filters, and `AF_VSOCK` are not bounded here; roadmap 4.3.1
   decides them.

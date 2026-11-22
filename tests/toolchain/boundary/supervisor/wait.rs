@@ -1,9 +1,16 @@
 //! The wait loop: one deadline, the stream trips, and the job's descriptors.
 //!
 //! The loop polls the child, the trip channel, and the deadline in one place, so
-//! the deadline is the only clock. It also snapshots the job's descriptor table
-//! as soon as the job process is running, because that observation is only
-//! available while the job is alive.
+//! the deadline is the only clock. It also samples the job's descriptor table
+//! while the job is alive, keeping the descriptors present in every sample.
+//!
+//! Sampling rather than taking one snapshot is what makes the descriptor
+//! evidence mean "inherited". A descriptor inherited through `exec` stays open
+//! for the job's whole life, so it appears in every sample; a descriptor the
+//! job opens for its own work — a `/proc` read, a connection attempt — can be
+//! caught by a single snapshot taken at the wrong moment, and the intersection
+//! drops it. A job that opened a descriptor and never closed it would still be
+//! reported.
 //!
 //! # Deadline attribution
 //!
@@ -57,14 +64,30 @@ pub(super) fn wait(
         fds: None,
     };
     loop {
-        if evidence.fds.is_none() {
-            evidence.fds = snapshot();
+        if let Some(observed) = snapshot() {
+            evidence.fds = Some(retain_seen(evidence.fds.take(), &observed));
         }
         if let Some(stopped) = stop_reason(child, trips, clock, &mut evidence)? {
             return Ok(stopped);
         }
         thread::sleep(POLL);
     }
+}
+
+/// Keep the descriptors present in both the accumulated evidence and a sample.
+///
+/// The first sample is the whole answer; later samples can only narrow it, so a
+/// descriptor the job opened after it started cannot survive on its own.
+pub(crate) fn retain_seen(seen: Option<Vec<i32>>, observed: &[i32]) -> Vec<i32> {
+    seen.map_or_else(
+        || observed.to_vec(),
+        |accumulated| {
+            accumulated
+                .into_iter()
+                .filter(|descriptor| observed.contains(descriptor))
+                .collect()
+        },
+    )
 }
 
 /// The evidence the wait loop has accumulated.

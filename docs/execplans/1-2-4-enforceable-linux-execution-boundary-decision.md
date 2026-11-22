@@ -1276,6 +1276,11 @@ section and in each ADR.
   successful scope. The canary's 250 ms window covers the hostile chain; tool
   probes do not require the scope observation and rely on the unit's recorded
   success plus the canary (D21).
+- 2026-11-22: the descriptor check cannot be a single snapshot. After the
+  rebase onto `main`, one probe run reported the canary holding descriptors
+  `[0, 1, 2, 3]`, where descriptor 3 was the `/proc` read or the outbound
+  socket the canary had open at that instant, not an inherited handle. Sampling
+  until the job stops and keeping the intersection distinguishes the two (D22).
 
 ## Decision log
 
@@ -1385,6 +1390,17 @@ section and in each ADR.
   implicit exception, and the ADR records it as residual trust: the tool probes
   show the tools work inside the boundary and agree with their outside runs,
   not that the supervisor observed each tool's cgroup.
+- **D22, 2026-11-22 (rebase repair):** the supervisor samples the job's
+  descriptor table on every poll and keeps the descriptors present in every
+  sample, instead of taking one snapshot. A single snapshot taken while the
+  canary was reading `/proc/self/status` or opening its outbound socket caught
+  that transient descriptor and reported `CanaryIsolation` unavailable, which
+  failed one probe run after the rebase. An inherited descriptor persists for
+  the job's whole life, so it survives every sample; a self-opened one does
+  not. A job that opened a descriptor and never closed it would still be
+  reported, so the check keeps its power.
+  `tests/toolchain/boundary/tests/wait.rs` pins the intersection, and five
+  consecutive probe runs pass.
 - **D20, 2026-11-22 (tolerance breach, recorded for ratification):** the code
   limit is breached before EP-M3. Measured against `git merge-base main HEAD`
   (`ad217c8`), excluding this plan and the reviewed snapshot: 43 files and
@@ -1404,7 +1420,41 @@ section and in each ADR.
 
 ## Outcomes & retrospective
 
-Not started.
+Delivered: a test-only probe that decides the boundary question, the recorded
+decision as ADR 0007, and the evidence the decision rests on. On the probe host
+all five properties hold — offline execution, the memory limit, the output
+limit, cancellation, and private storage — each beside a negative control that
+shows the hostile behaviour succeeding without the boundary. Pinned OPA decides
+the same Booleans inside and outside and reaches no listener through
+`http.send`; pinned Lean checks its smoke module inside the 2 GiB and 60 s
+defaults. `make boundary-probe` runs twenty probes in about 30 s on the shared
+host.
+
+What the work establishes and what it does not is the main lesson. The Verus
+proof covers the capture kernel; the probes observe the kernel, systemd, and
+bubblewrap enforcing the rest. Neither establishes the other, and ADR 0007
+keeps the two claims apart, as technical design §2 now records the residual
+trust.
+
+Three things surprised the implementation and are worth carrying forward. A
+mechanism can be configured and still not applied, so every fail-closed check
+observes effect rather than presence (the canary and the limit read-back). An
+observation taken at one instant can be wrong about a property that holds over
+an interval: the descriptor check needed sampling and an intersection (D22),
+and a fast job needed a window before the supervisor could see its scope (D13).
+And a cgroup can disappear under an open file, so `ENODEV` means "gone" rather
+than an error (the second round of repairs).
+
+The size tolerances were breached and not met: the code is roughly 6,700 net
+lines in 43 files at EP-M2 against 5,800 in 42, and later milestones add more
+(D20). The trace understated the kernels, the supervisor, and the tests rather
+than one component the contingency covered. The overrun is recorded for the
+sponsor's ratification rather than absorbed by weakening a control.
+
+Open: the sponsor's acceptance of ADR 0007, which closes roadmap 1.2.4 and this
+plan; roadmap 4.3.1 promotes the supervisor, kernels, and launcher into product
+behaviour and owns the outcome mapping; roadmap 4.3.3 measures budgets on an
+agreed machine.
 
 ## Revision notes
 
