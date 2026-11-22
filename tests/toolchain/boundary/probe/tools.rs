@@ -21,7 +21,7 @@ use serde_json::Value as Json;
 use super::{
     super::{
         launch::ReadOnlyBind,
-        outcome::Outcome,
+        outcome::{ExitForm, Outcome},
         supervisor::{Boundary, Run, require_outcome},
     },
     Options,
@@ -324,10 +324,29 @@ fn opa_cannot_reach_a_host_listener() -> Result<(), String> {
     )?;
     watchers.require_silent()?;
     check!(
-        run.exit != super::super::outcome::ExitForm::Exited(0),
-        "http.send must fail inside the boundary, got {:?} and stdout {:?}",
+        run.bounds.is_empty(),
+        "the http.send failure must not be a bound: {:?}",
+        run.bounds
+    );
+    check!(
+        matches!(run.exit, ExitForm::Exited(code) if code != 0),
+        "OPA must exit with an error after the http.send failure, got {:?} and stdout {:?}",
         run.exit,
         String::from_utf8_lossy(&run.stdout)
+    );
+    check_eq!(
+        run.outcome,
+        Outcome::ChildFailed(run.exit),
+        "the outcome must be the child's own failure, not containment or a bound"
+    );
+    let detail = format!(
+        "{}{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    check!(
+        detail.contains("http.send"),
+        "the diagnostic must name the failed http.send, got {detail:?}"
     );
     Ok(())
 }

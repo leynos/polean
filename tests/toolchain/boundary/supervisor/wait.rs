@@ -4,6 +4,16 @@
 //! the deadline is the only clock. It also snapshots the job's descriptor table
 //! as soon as the job process is running, because that observation is only
 //! available while the job is alive.
+//!
+//! # Deadline attribution
+//!
+//! A poll that begins after the deadline and finds the child still running
+//! records `Bound::Deadline` and stops the job. A poll that finds the child has
+//! already exited reports the exit, even when the deadline has passed: the
+//! observation cannot tell whether the exit preceded expiry, and attributing a
+//! deadline to an exit that may have completed normally would misreport the
+//! job. The policy is therefore "the deadline kills a job still running at a
+//! poll", and an exit observed at a poll is an exit.
 
 use std::{
     path::Path,

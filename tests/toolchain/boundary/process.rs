@@ -99,8 +99,17 @@ pub fn run(
     })
 }
 
-/// One stream's delivered bytes.
-type Reader = Receiver<Vec<u8>>;
+/// One stream's delivered bytes and whether it exceeded the cap.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Drained {
+    /// The kept bytes.
+    bytes: Vec<u8>,
+    /// Whether the stream exceeded the control cap.
+    tripped: bool,
+}
+
+/// One stream's delivery channel.
+type Reader = Receiver<Drained>;
 
 /// Start one bounded reader per stream.
 fn readers(child: &mut Child) -> Result<(Reader, Reader), String> {
@@ -132,7 +141,10 @@ fn drain(mut stream: impl Read + Send + 'static) -> Reader {
                 Err(_) => break,
             }
         }
-        drop(sender.send(capture.kept().to_vec()));
+        drop(sender.send(Drained {
+            bytes: capture.kept().to_vec(),
+            tripped: capture.tripped(),
+        }));
     });
     receiver
 }
@@ -163,7 +175,10 @@ fn stop(child: &mut Child) {
 /// Collect one reader's bytes, bounded by the control bound.
 fn collect(reader: &Reader, name: &str) -> Result<Vec<u8>, String> {
     match reader.recv_timeout(CONTROL_BOUND) {
-        Ok(bytes) => Ok(bytes),
+        Ok(drained) if drained.tripped => Err(format!(
+            "the {name} exceeded the {STREAM_CAP} byte control cap; its output was truncated"
+        )),
+        Ok(drained) => Ok(drained.bytes),
         Err(RecvTimeoutError::Timeout) => Err(format!("the {name} reader did not finish")),
         Err(RecvTimeoutError::Disconnected) => Err(format!("the {name} reader ended without data")),
     }

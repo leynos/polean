@@ -182,6 +182,21 @@ fn bind_host_home(argv: &mut Vec<String>) {
     insert_before_separator(argv, &["--ro-bind", "/home", "/job/home"]);
 }
 
+/// Bind the host's `/tmp` with a trailing separator.
+fn bind_host_tmp_slash(argv: &mut Vec<String>) {
+    insert_before_separator(argv, &["--ro-bind", "/tmp/", "/job/host-tmp"]);
+}
+
+/// Add a second scratch mount that replaces the sized one.
+fn add_second_scratch(argv: &mut Vec<String>) {
+    if let Some(chdir) = argv
+        .iter()
+        .position(|argument| argument.as_str() == "--chdir")
+    {
+        argv.splice(chdir..chdir, ["--tmpfs".to_owned(), "/job/work".to_owned()]);
+    }
+}
+
 /// Bind an ancestor of the user's home, which is `/home/probe/work` here.
 fn bind_home_ancestor(argv: &mut Vec<String>) {
     insert_before_separator(argv, &["--ro-bind", "/home/probe", "/job/probe"]);
@@ -222,6 +237,8 @@ fn insert_before_separator(argv: &mut Vec<String>, values: &[&str]) {
 #[case::root_remount(drop_root_remount, "last option before")]
 #[case::size(move_size, "immediately precede")]
 #[case::home(bind_host_home, "forbidden host path /home")]
+#[case::tmp_slash(bind_host_tmp_slash, "forbidden host path /tmp/")]
+#[case::second_scratch(add_second_scratch, "mount /job/work exactly once")]
 #[case::ancestor(bind_home_ancestor, "ancestor of it")]
 #[case::writable(add_writable_bind, "writable bind option")]
 #[case::terminal(drop_new_session, "terminal session")]

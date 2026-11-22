@@ -58,7 +58,13 @@ struct BoundaryState {
 /// The platform check reports every control available on the probe host.
 #[given("the platform check reports every control available")]
 fn platform_reports_ready(state: &BoundaryState) -> Result<(), String> {
-    state.platform.set(platform_verdict()?);
+    let verdict = platform_verdict()?;
+    if verdict != Verdict::Ready {
+        return Err(format!(
+            "the platform check must report every control available, got {verdict:?}"
+        ));
+    }
+    state.platform.set(verdict);
     Ok(())
 }
 

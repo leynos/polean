@@ -12,7 +12,7 @@ use super::super::{
     probe::{Options, PROBE_BINARY, PROBE_INPUTS, Probe},
     supervisor::Boundary,
 };
-use crate::scratch::check;
+use crate::scratch::{check, check_eq};
 
 /// Every target kind is parsed into its field.
 #[test]
@@ -75,25 +75,64 @@ fn a_malformed_target_is_refused() -> Result<(), String> {
     Ok(())
 }
 
-/// The defaults keep the scratch area below the memory limit for both chains.
+/// The defaults are the product's limits, and the builders override exactly.
 #[test]
-fn the_options_are_sized_for_both_boundaries() -> Result<(), String> {
+fn the_options_defaults_and_overrides_are_both_observable() -> Result<(), String> {
     for boundary in [Boundary::Unconfined, Boundary::Bubblewrap] {
-        let options = Options::new(boundary)
+        let defaults = Options::new(boundary);
+        check_eq!(
+            defaults.memory_bytes,
+            64 * 1024 * 1024,
+            "the default memory limit is 64 MiB"
+        );
+        check_eq!(
+            defaults.scratch_bytes,
+            8 * 1024 * 1024,
+            "the default scratch area is 8 MiB"
+        );
+        check_eq!(
+            defaults.deadline,
+            Duration::from_secs(10),
+            "the default deadline is 10 s"
+        );
+        check_eq!(
+            defaults.stdout_cap,
+            1024 * 1024,
+            "the default stdout cap is 1 MiB"
+        );
+        check_eq!(
+            defaults.stderr_cap,
+            64 * 1024,
+            "the default stderr cap is 64 KiB"
+        );
+        let overridden = Options::new(boundary)
             .scratch(4 * 1024 * 1024)
-            .memory(64 * 1024 * 1024)
+            .memory(128 * 1024 * 1024)
             .deadline(Duration::from_secs(3))
             .stdout_cap(2048);
-        check!(
-            options.scratch_bytes <= options.memory_bytes,
-            "the scratch area must fit below the memory limit",
+        check_eq!(
+            overridden.scratch_bytes,
+            4 * 1024 * 1024,
+            "the scratch override is applied"
         );
-        check!(
-            options.deadline > Duration::ZERO,
-            "the deadline must be positive",
+        check_eq!(
+            overridden.memory_bytes,
+            128 * 1024 * 1024,
+            "the memory override is applied"
         );
-        check!(
-            options.boundary == boundary,
+        check_eq!(
+            overridden.deadline,
+            Duration::from_secs(3),
+            "the deadline override is applied"
+        );
+        check_eq!(
+            overridden.stdout_cap,
+            2048,
+            "the stdout cap override is applied"
+        );
+        check_eq!(
+            overridden.boundary,
+            boundary,
             "the boundary must be preserved"
         );
     }

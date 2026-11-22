@@ -15,6 +15,7 @@ use std::{
     process::Child,
     sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel},
     thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use super::{
@@ -22,9 +23,11 @@ use super::{
         capture::Capture,
         outcome::{Bound, Bounds},
     },
-    DRAIN_BOUND,
     Job,
 };
+
+/// How long a reader may take to deliver its bytes after teardown.
+pub(super) const DRAIN_BOUND: Duration = Duration::from_secs(5);
 
 /// The channels one reader reports through.
 struct Signals {
@@ -197,4 +200,21 @@ pub(super) fn finish_readers(
         bounds.insert(Bound::Stderr);
     }
     (out.bytes, err.bytes, bounds)
+}
+
+/// Drain both readers on the failure path, without blocking on a live thread.
+///
+/// The caller is already reporting a diagnostic. The delivered bytes are taken
+/// so a reader is not left blocked on a full channel, and a thread that has
+/// finished is joined; one still running is left to end when its pipe closes.
+pub(super) fn drain_readers(readers: &Readers, diagnostics: &mut Vec<String>) {
+    for (reader, name) in [
+        (&readers.stdout, "standard output"),
+        (&readers.stderr, "standard error"),
+    ] {
+        match reader.recv_timeout(DRAIN_BOUND) {
+            Ok(_drained) => (),
+            Err(error) => diagnostics.push(format!("the {name} reader reported {error}")),
+        }
+    }
 }

@@ -185,7 +185,7 @@ pub fn isolation_faults(argv: &[String], home: &Path) -> Vec<String> {
     check_cap_drop(&options, &mut faults);
     check_remounts(&options, &mut faults);
     check_separator(argv, &mut faults);
-    check_size(prefix, &mut faults);
+    check_scratch(&options, prefix, &mut faults);
     check_binds(&options, home, &mut faults);
     check_no_writable_bind(&options, &mut faults);
     check_no_terminal(&options, &mut faults);
@@ -232,8 +232,23 @@ fn check_separator(argv: &[String], faults: &mut Vec<String>) {
     }
 }
 
-/// `--size` must immediately precede `--tmpfs`.
-fn check_size(prefix: &[String], faults: &mut Vec<String>) {
+/// `--size` must immediately precede the one scratch `--tmpfs`.
+///
+/// Bubblewrap applies mounts in order and `--size` applies only to the next
+/// tmpfs, so a second `--tmpfs /job/work` would replace the sized scratch area
+/// with an unbounded one. Exactly one scratch mount is required, and it must be
+/// the one the size argument governs.
+fn check_scratch(options: &[LauncherOption], prefix: &[String], faults: &mut Vec<String>) {
+    let scratch_mounts = options
+        .iter()
+        .filter(|option| option.name == "--tmpfs" && option.values == ["/job/work"])
+        .count();
+    if scratch_mounts != 1 {
+        faults.push(format!(
+            "the vector must mount /job/work exactly once, found {scratch_mounts}"
+        ));
+        return;
+    }
     let Some(size) = prefix
         .iter()
         .position(|argument| argument.as_str() == "--size")
@@ -252,11 +267,15 @@ fn check_size(prefix: &[String], faults: &mut Vec<String>) {
 fn check_binds(options: &[LauncherOption], home: &Path, faults: &mut Vec<String>) {
     let forbidden = ["/", "/run", "/tmp", "/home"];
     for source in bind_sources(options) {
-        if forbidden.contains(&source.as_str()) {
+        // Compare as paths, so `/tmp/` and `/tmp` are the same directory.
+        let source_path = Path::new(&source);
+        if forbidden
+            .iter()
+            .any(|reserved| source_path == Path::new(reserved))
+        {
             faults.push(format!("the vector binds the forbidden host path {source}"));
             continue;
         }
-        let source_path = Path::new(&source);
         if home.starts_with(source_path) {
             faults.push(format!(
                 "the vector binds {source}, which is the user's home or an ancestor of it"

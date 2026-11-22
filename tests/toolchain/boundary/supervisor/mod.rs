@@ -52,17 +52,16 @@ use super::{
 };
 
 mod reader;
+mod run;
 mod teardown;
 mod wait;
 
 use self::{
-    reader::{finish_readers, readers},
+    reader::{Readers, drain_readers, finish_readers, readers},
+    run::{Target, note, read_limits, read_result},
     teardown::{Inputs, tear_down},
-    wait::{snapshot_fds, wait},
+    wait::{Waiting, snapshot_fds, wait},
 };
-
-/// How long a reader may take to deliver its bytes after teardown.
-pub const DRAIN_BOUND: Duration = Duration::from_secs(5);
 
 /// Which launch chain a job uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,6 +126,8 @@ pub struct Run {
     pub limits: Option<LimitReadback>,
     /// Observations that make the run fail closed, in the order they occurred.
     pub diagnostics: Vec<String>,
+    /// Observations recorded without making the run fail closed.
+    pub notes: Vec<String>,
 }
 
 /// Runs jobs through the selected boundary.
@@ -147,6 +148,8 @@ struct Started<'a> {
     scope: Scope<'a>,
     /// The job's cgroup, when the scope was observed.
     cgroup: Option<std::path::PathBuf>,
+    /// Why the scope was not observed, when it was not.
+    join_error: Option<String>,
     /// Observations that already make the run fail closed.
     diagnostics: Vec<String>,
 }
@@ -174,6 +177,10 @@ impl Supervisor<'_> {
     /// vector cannot be spawned, or a stream reader cannot be started. A job
     /// that fails its bounds, escapes containment, or cannot be fully observed
     /// is a [`Run`] with diagnostics, not an error.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the orchestration is one documented sequence; each step is a named helper"
+    )]
     pub fn run(&self, job: &Job) -> Result<Run, String> {
         job.spec.validate()?;
         let clock = Clock {
@@ -185,12 +192,32 @@ impl Supervisor<'_> {
             pgid,
             scope,
             cgroup,
+            join_error,
             mut diagnostics,
         } = self.start(job)?;
+        let mut notes = Vec::new();
+        if let Some(reason) = join_error {
+            if job.require_scope {
+                diagnostics.push(reason);
+            } else {
+                // A tool job that finished before its first poll records the
+                // unobserved scope without failing closed: its containment
+                // evidence is the unit's success and the canary (D21).
+                notes.push(format!("the scope was not observed: {reason}"));
+            }
+        }
         let limits = read_limits(cgroup.as_deref(), job.read_limits, &mut diagnostics);
         let readers = readers(&mut child, job)?;
         let mut snapshot = || snapshot_fds(job, pgid, cgroup.as_deref());
-        let waiting = wait(&mut child, &readers.trips, clock, &mut snapshot)?;
+        let waiting = {
+            let mut target = Target {
+                child: &mut child,
+                pgid,
+                cgroup: cgroup.as_deref(),
+                clock,
+            };
+            self.wait_for_job(&mut target, &readers, &mut snapshot)?
+        };
         let (report, status, errors) = tear_down(Inputs {
             child: &mut child,
             pgid,
@@ -236,6 +263,7 @@ impl Supervisor<'_> {
             fds: waiting.fds,
             limits,
             diagnostics,
+            notes,
         })
     }
 
@@ -252,15 +280,15 @@ impl Supervisor<'_> {
             runtime_dir: self.runtime_dir,
             unit: job.spec.unit.clone(),
         };
-        let (cgroup, mut diagnostics) = match scope.wait_until_joined(pgid) {
-            Ok(cgroup) => (Some(cgroup), Vec::new()),
-            Err(_reason) if !job.require_scope => (None, Vec::new()),
-            Err(reason) => (None, vec![reason]),
+        let (cgroup, join_error) = match scope.wait_until_joined(pgid) {
+            Ok(cgroup) => (Some(cgroup), None),
+            Err(reason) => (None, Some(reason)),
         };
-        if cgroup.is_none() && job.require_scope {
+        let mut diagnostics = Vec::new();
+        if cgroup.is_none() {
             // The cgroup path is unknown, so the unit is the only handle that
-            // can still reach every process of the job. A tool job never
-            // required the scope observation, so it has nothing to clean up.
+            // can still reach every process of the job, whatever its process
+            // group. `kill_unit` treats an already-unloaded unit as success.
             note(scope.kill_unit(), &mut diagnostics);
         }
         Ok(Started {
@@ -268,57 +296,10 @@ impl Supervisor<'_> {
             pgid,
             scope,
             cgroup,
+            join_error,
             diagnostics,
         })
     }
-}
-
-/// Read the scope's limit files when the job asks for them.
-///
-/// A read failure is a diagnostic, not an error: the job still has to be torn
-/// down, and a missing read-back makes the canary control fail rather than the
-/// run vanish.
-fn read_limits(
-    cgroup: Option<&Path>,
-    requested: bool,
-    diagnostics: &mut Vec<String>,
-) -> Option<LimitReadback> {
-    if !requested {
-        return None;
-    }
-    let Some(observed) = cgroup else {
-        diagnostics.push("the scope's limits were requested but no cgroup was observed".to_owned());
-        return None;
-    };
-    match Scope::read_limits(observed) {
-        Ok(limits) => Some(limits),
-        Err(reason) => {
-            diagnostics.push(reason);
-            None
-        }
-    }
-}
-
-/// Record a cleanup error without abandoning the remaining steps.
-fn note(result: Result<(), String>, diagnostics: &mut Vec<String>) {
-    if let Err(reason) = result {
-        diagnostics.push(reason);
-    }
-}
-
-/// Read systemd's final result, recording a query failure.
-fn read_result(scope: &Scope<'_>, diagnostics: &mut Vec<String>) -> Option<String> {
-    let result = match scope.wait_for_result() {
-        Ok(result) => result,
-        Err(reason) => {
-            diagnostics.push(reason);
-            None
-        }
-    };
-    if !matches!(result.as_deref(), None | Some("success")) {
-        scope.reset_failed();
-    }
-    result
 }
 
 /// Spawn the launch vector as the supervisor's direct child.
@@ -367,7 +348,7 @@ pub fn require_outcome(run: &Run, expected: &Outcome) -> Result<(), String> {
     Err(format!(
         "the run reported {:?}, expected {expected:?}; stdout {:?}, stderr {:?}, exit {:?}, \
          result {:?}, survivors {:?}, cgroup empty {}, residual {:?}, events {:?}, fds {:?}, \
-         diagnostics {:?}",
+         diagnostics {:?}, notes {:?}",
         run.outcome,
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr),
@@ -378,6 +359,7 @@ pub fn require_outcome(run: &Run, expected: &Outcome) -> Result<(), String> {
         run.residual,
         run.events,
         run.fds,
-        run.diagnostics
+        run.diagnostics,
+        run.notes
     ))
 }

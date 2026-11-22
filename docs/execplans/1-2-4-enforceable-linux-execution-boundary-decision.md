@@ -1158,7 +1158,19 @@ section and in each ADR.
   section and commands row, the repository layout, the contents page, the
   roadmap note, and the `AGENTS.md` gate list. The roadmap checkbox stays open
   until the sponsor accepts ADR 0007.
-- [ ] `SHA256SUMS` was stale before this branch: five rows (the audit manifest,
+- [x] 2026-11-22: a second review round found fourteen issues, and all were
+  repaired: path-normalised forbidden binds and a single sized scratch mount;
+  listeners held open until the job finishes and listener failures propagated;
+  the BDD given step requires a ready verdict; the process-group signaller runs
+  under a bound; the run tears down when waiting fails; a direct-child kill
+  bounds reaping; control-stream cap exhaustion fails; tool jobs record their
+  unobserved scope; OPA's `http.send` failure must be an ordinary non-zero exit
+  naming `http.send`; the outcome enumeration rejects a malformed verdict; the
+  deadline attribution policy is stated; and the option defaults are asserted
+  before their overrides. A cgroup removed while `cgroup.kill`, `cgroup.procs`,
+  or another cgroup file is open reports `ENODEV`; that is now treated as
+  "gone", which removed the intermittent containment failure in fast jobs.
+- [x] `SHA256SUMS` was stale before this branch: five rows (the audit manifest,
   three validation modules, and the regenerated validation summary) did not
   match their files even at `ad217c8`. They are regenerated here, so
   `sha256sum -c SHA256SUMS` passes.

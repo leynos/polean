@@ -224,13 +224,12 @@ impl Scope<'_> {
             &[("XDG_RUNTIME_DIR", self.runtime_dir)],
             process::CONTROL_BOUND,
         )?;
-        if output.success() {
+        let detail = output.stderr_text();
+        if output.success() || detail.contains("not loaded") {
+            // A unit that has gone has no processes left to kill.
             Ok(())
         } else {
-            Err(format!(
-                "systemctl kill {unit} reported: {}",
-                output.stderr_text()
-            ))
+            Err(format!("systemctl kill {unit} reported: {detail}"))
         }
     }
 }

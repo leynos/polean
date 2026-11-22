@@ -203,27 +203,33 @@ fn the_verdict_is_ready_exactly_when_every_control_holds() -> Result<(), String>
             })
             .collect();
         let decision = verdict(&controls);
-        check_eq!(
-            matches!(decision, Verdict::Ready),
-            mask == 0,
-            "only an all-available platform may be ready"
-        );
-        if let Verdict::Unavailable(missing) = decision {
-            let expected: Vec<ControlKind> = ControlKind::ALL
-                .iter()
-                .copied()
-                .enumerate()
-                .filter(|(index, _kind)| mask & (1u8 << *index) != 0)
-                .map(|(_index, kind)| kind)
-                .collect();
-            check_eq!(
-                missing
+        match decision {
+            Verdict::Ready => {
+                check_eq!(mask, 0, "only an all-available platform may be ready");
+            }
+            Verdict::Unavailable(missing) => {
+                check!(mask != 0, "a complete available list must be ready");
+                let expected: Vec<ControlKind> = ControlKind::ALL
                     .iter()
-                    .map(|control| control.kind)
-                    .collect::<Vec<_>>(),
-                expected,
-                "every missing control must be named, in order"
-            );
+                    .copied()
+                    .enumerate()
+                    .filter(|(index, _kind)| mask & (1u8 << *index) != 0)
+                    .map(|(_index, kind)| kind)
+                    .collect();
+                check_eq!(
+                    missing
+                        .iter()
+                        .map(|control| control.kind)
+                        .collect::<Vec<_>>(),
+                    expected,
+                    "every missing control must be named, in order"
+                );
+            }
+            Verdict::Malformed(fault) => {
+                return Err(format!(
+                    "a canonical control list must not be malformed: {fault}"
+                ));
+            }
         }
     }
     Ok(())

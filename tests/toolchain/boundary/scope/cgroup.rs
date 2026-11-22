@@ -11,13 +11,15 @@
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
-    process::Command,
     thread,
     time::{Duration, Instant},
 };
 
 use super::POLL;
 use crate::ambient;
+
+/// `ENODEV`: the cgroup was removed while its `cgroup.kill` file was open.
+const ENODEV: i32 = 19;
 
 /// Whether `pid`'s cgroup names `unit`.
 ///
@@ -73,7 +75,15 @@ pub fn read_cgroup(cgroup: &Path, name: &str) -> Result<Option<String>, String> 
     let path = cgroup.join(name);
     match ambient::read_to_string(&path) {
         Ok(text) => Ok(Some(text.trim().to_owned())),
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        // A cgroup that has gone is reported as absent, whether the directory
+        // was already removed (`ENOENT`) or it was removed while the file was
+        // open (`ENODEV`).
+        Err(error)
+            if matches!(error.kind(), ErrorKind::NotFound)
+                || error.raw_os_error() == Some(ENODEV) =>
+        {
+            Ok(None)
+        }
         Err(error) => Err(format!("cannot read {}: {error}", path.display())),
     }
 }
@@ -124,7 +134,15 @@ pub fn kill_cgroup(cgroup: &Path) -> Result<(), String> {
     let path = cgroup.join("cgroup.kill");
     match ambient::write(&path, b"1") {
         Ok(()) => Ok(()),
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        // A cgroup that has gone is already empty. `ENOENT` is the directory
+        // being removed before the open, and `ENODEV` is the kernel refusing a
+        // write to a cgroup that was removed while the file was open.
+        Err(error)
+            if matches!(error.kind(), ErrorKind::NotFound)
+                || error.raw_os_error() == Some(ENODEV) =>
+        {
+            Ok(())
+        }
         Err(error) => Err(format!("cannot write {}: {error}", path.display())),
     }
 }
@@ -140,12 +158,15 @@ pub fn kill_cgroup(cgroup: &Path) -> Result<(), String> {
 /// Returns a diagnostic when `/usr/bin/kill` cannot be run.
 pub fn kill_process_group(kill: &Path, pgid: u32) -> Result<(), String> {
     let target = format!("-{pgid}");
-    Command::new(kill)
-        .args(["-s", "KILL", "--", &target])
-        .env_clear()
-        .output()
-        .map(drop)
-        .map_err(|error| format!("cannot run {}: {error}", kill.display()))
+    // A stalled signaller must not hold teardown past the authoritative cgroup
+    // kill, so it runs under the control bound and a timeout is reported.
+    drop(super::process::run(
+        kill,
+        &["-s", "KILL", "--", &target],
+        &[],
+        super::process::CONTROL_BOUND,
+    )?);
+    Ok(())
 }
 
 /// What one emptiness wait observed.

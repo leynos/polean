@@ -82,7 +82,7 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
     if let Some(cgroup) = inputs.cgroup {
         super::note(kill_cgroup(cgroup), &mut errors);
     }
-    let status = reap(inputs.status, inputs.child, &mut errors);
+    let status = reap(inputs.status, inputs.running, inputs.child, &mut errors);
     let emptiness = inputs
         .cgroup
         .map_or_else(Emptiness::default, |cgroup| emptiness(cgroup, &mut errors));
@@ -112,11 +112,19 @@ fn survivors(cgroup: &Path, errors: &mut Vec<String>) -> Vec<u32> {
 /// Reap the direct child, recording a failure to do so.
 fn reap(
     observed: Option<ExitStatus>,
+    running: bool,
     child: &mut Child,
     errors: &mut Vec<String>,
 ) -> Option<ExitStatus> {
     if observed.is_some() {
         return observed;
+    }
+    // A fallback kill of the direct child guarantees the reap returns, even
+    // when the signaller failed and no cgroup kill was possible. It does not
+    // replace the group or cgroup kill; it only keeps an unbounded wait from
+    // hiding the diagnostics collected so far.
+    if running {
+        drop(child.kill());
     }
     match child.wait() {
         Ok(reaped) => Some(reaped),
