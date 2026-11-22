@@ -1194,6 +1194,24 @@ section and in each ADR.
   about 180 waiting requests. The same test passed on this tree when run
   directly (895 s, almost all of it queue wait), and the admission sources are
   identical to `01f9211`, where the full suite passed after the same retry.
+- [x] 2026-11-22: rebased onto `main` at `5447c62` (three commits: the Cranelift
+  default, Verus in CI, and the `set_current_dir` lint). Two conflicts were
+  resolved by keeping the target's text where both sides said the same thing:
+  the mutation walk's helper doc comments (main had applied the same
+  extraction) and the developers' guide's commands table, which gained the
+  `make boundary-probe` row. The rebased head passed `make check-fmt`,
+  `make typecheck`, `make lint`, `make verus`, `make toolchain-smoke` (22
+  tests), `make test-scripts` (152 tests), the design gates, and four
+  consecutive `make boundary-probe` runs; hosted CI at `9e4c926` was green in
+  all four workflows. The full nextest suite passed 315 tests, and the
+  contended admission test passed when run directly (1182 s, queue wait).
+- [x] 2026-11-22: CodeScene's local delta reported nine advisory findings on
+  the new test-only code. All were repaired: a shared bare-name predicate for
+  the unit and nonce validators, a per-bind validator, a scratch check over one
+  token sequence, named canary checks, a shared memory-probe runner, a single
+  `Bounds` iteration, a flatter `wait_until_gone`, and `Supervisor::run` below
+  seventy lines (its clippy expectation was removed). The rechecked delta is
+  clear apart from a pre-existing improvement note on `tests/admission`.
 - [x] `SHA256SUMS` was stale before this branch: five rows (the audit manifest,
   three validation modules, and the regenerated validation summary) did not
   match their files even at `ad217c8`. They are regenerated here, so
