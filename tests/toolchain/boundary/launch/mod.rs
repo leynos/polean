@@ -92,13 +92,11 @@ impl LaunchSpec {
         if self.scratch_bytes == 0 {
             return Err("the scratch area must be non-empty".to_owned());
         }
-        if self.scratch_bytes > self.memory_bytes {
-            return Err(format!(
-                "the scratch area ({} bytes) must not exceed the memory limit ({} bytes); tmpfs \
-                 pages are charged to the job's cgroup",
-                self.scratch_bytes, self.memory_bytes
-            ));
-        }
+        // A scratch area larger than `MemoryMax=` is allowed: tmpfs pages are
+        // charged to the job's cgroup, so the memory limit bounds it first and
+        // the scratch-fill probe demonstrates exactly that. A scratch area that
+        // fits below the limit is what the tools get, so a fill reaches the
+        // tmpfs bound instead.
         validate_unit(&self.unit)?;
         validate_env(&self.env)?;
         validate_binds(&self.binds)?;

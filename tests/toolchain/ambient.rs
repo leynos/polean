@@ -55,6 +55,18 @@ fn beneath_root(path: &Path) -> io::Result<PathBuf> {
 /// Returns the underlying error, with its kind intact.
 pub fn metadata(path: &Path) -> io::Result<Metadata> { root()?.metadata(beneath_root(path)?) }
 
+/// Read `path` as bytes.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn read(path: &Path) -> io::Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    let mut file = root()?.open(beneath_root(path)?)?;
+    std::io::Read::read_to_end(&mut file, &mut buffer)?;
+    Ok(buffer)
+}
+
 /// Read `path` as UTF-8 text.
 ///
 /// # Errors

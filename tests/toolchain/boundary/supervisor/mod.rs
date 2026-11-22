@@ -48,7 +48,7 @@ use super::{
     launch::{LaunchSpec, bubblewrap_scope_argv, unconfined_scope_argv},
     outcome::{Bound, Bounds, ExitForm, Observation, Outcome, classify},
     platform::Programs,
-    scope::Scope,
+    scope::{LimitReadback, Scope},
 };
 
 mod reader;
@@ -85,6 +85,17 @@ pub struct Job {
     pub stderr_cap: usize,
     /// The single deadline for the whole job.
     pub deadline: Duration,
+    /// Whether to read the scope's limit files while it is active.
+    pub read_limits: bool,
+    /// Whether the scope join is required evidence for this job.
+    ///
+    /// Hostile jobs require it: the probe's claim is that the job ran inside
+    /// the scope. A pinned tool can finish in milliseconds, before the first
+    /// successful poll, and systemd garbage-collects a successful scope at
+    /// once; the tool probes therefore rely on the unit's recorded success and
+    /// on the canary's proof of the same launch chain, and this flag records
+    /// that choice rather than hiding it.
+    pub require_scope: bool,
 }
 
 /// One finished job.
@@ -112,6 +123,8 @@ pub struct Run {
     pub result: Option<String>,
     /// The job's open descriptors while it was alive, when they were observed.
     pub fds: Option<Vec<i32>>,
+    /// The scope's limit files, when the job asked for them.
+    pub limits: Option<LimitReadback>,
     /// Observations that make the run fail closed, in the order they occurred.
     pub diagnostics: Vec<String>,
 }
@@ -174,6 +187,7 @@ impl Supervisor<'_> {
             cgroup,
             mut diagnostics,
         } = self.start(job)?;
+        let limits = read_limits(cgroup.as_deref(), job.read_limits, &mut diagnostics);
         let readers = readers(&mut child, job)?;
         let mut snapshot = || snapshot_fds(job, pgid, cgroup.as_deref());
         let waiting = wait(&mut child, &readers.trips, clock, &mut snapshot)?;
@@ -193,8 +207,14 @@ impl Supervisor<'_> {
             bounds.insert(Bound::Memory);
         }
         let exit = exit_form(status);
-        // An observation the supervisor could not make is never a pass.
-        let cgroup_empty = report.cgroup_empty && diagnostics.is_empty();
+        // An observation the supervisor could not make is never a pass, except
+        // for a tool job that never required the scope observation: its
+        // containment evidence is the unit's recorded success and the canary.
+        let cgroup_empty = if job.require_scope || cgroup.is_some() {
+            report.cgroup_empty && diagnostics.is_empty()
+        } else {
+            diagnostics.is_empty()
+        };
         let outcome = classify(&Observation {
             bounds,
             exit,
@@ -214,6 +234,7 @@ impl Supervisor<'_> {
             events: report.events,
             result,
             fds: waiting.fds,
+            limits,
             diagnostics,
         })
     }
@@ -233,11 +254,13 @@ impl Supervisor<'_> {
         };
         let (cgroup, mut diagnostics) = match scope.wait_until_joined(pgid) {
             Ok(cgroup) => (Some(cgroup), Vec::new()),
+            Err(_reason) if !job.require_scope => (None, Vec::new()),
             Err(reason) => (None, vec![reason]),
         };
-        if cgroup.is_none() {
+        if cgroup.is_none() && job.require_scope {
             // The cgroup path is unknown, so the unit is the only handle that
-            // can still reach every process of the job.
+            // can still reach every process of the job. A tool job never
+            // required the scope observation, so it has nothing to clean up.
             note(scope.kill_unit(), &mut diagnostics);
         }
         Ok(Started {
@@ -247,6 +270,32 @@ impl Supervisor<'_> {
             cgroup,
             diagnostics,
         })
+    }
+}
+
+/// Read the scope's limit files when the job asks for them.
+///
+/// A read failure is a diagnostic, not an error: the job still has to be torn
+/// down, and a missing read-back makes the canary control fail rather than the
+/// run vanish.
+fn read_limits(
+    cgroup: Option<&Path>,
+    requested: bool,
+    diagnostics: &mut Vec<String>,
+) -> Option<LimitReadback> {
+    if !requested {
+        return None;
+    }
+    let Some(observed) = cgroup else {
+        diagnostics.push("the scope's limits were requested but no cgroup was observed".to_owned());
+        return None;
+    };
+    match Scope::read_limits(observed) {
+        Ok(limits) => Some(limits),
+        Err(reason) => {
+            diagnostics.push(reason);
+            None
+        }
     }
 }
 

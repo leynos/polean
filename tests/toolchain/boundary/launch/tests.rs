@@ -240,9 +240,9 @@ fn a_broken_vector_is_reported(
     Ok(())
 }
 
-/// A zero or oversized scratch area is refused.
+/// A zero scratch area is refused; one above the memory limit is allowed.
 #[test]
-fn the_scratch_area_must_fit_below_the_memory_limit() -> Result<(), String> {
+fn the_scratch_area_must_be_non_empty_and_may_exceed_the_memory_limit() -> Result<(), String> {
     let mut spec = canonical_spec();
     spec.scratch_bytes = 0;
     check!(
@@ -250,10 +250,7 @@ fn the_scratch_area_must_fit_below_the_memory_limit() -> Result<(), String> {
         "a zero scratch area must be refused"
     );
     spec.scratch_bytes = spec.memory_bytes + 1;
-    check!(
-        spec.validate().is_err(),
-        "a scratch area above the memory limit must be refused"
-    );
+    spec.validate()?;
     Ok(())
 }
 

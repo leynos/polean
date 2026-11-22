@@ -148,6 +148,19 @@ impl Scope<'_> {
         }
     }
 
+    /// The limit files, read while the scope is active.
+    ///
+    /// # Errors
+    ///
+    /// Returns a diagnostic when a limit file cannot be read.
+    pub fn read_limits(cgroup: &Path) -> Result<LimitReadback, String> {
+        Ok(LimitReadback {
+            memory: read_cgroup(cgroup, "memory.max")?,
+            swap: read_cgroup(cgroup, "memory.swap.max")?,
+            pids: read_cgroup(cgroup, "pids.max")?,
+        })
+    }
+
     /// Wait until systemd records the scope's final state, then read `Result=`.
     ///
     /// A scope that succeeded is garbage-collected, so `None` means either "no

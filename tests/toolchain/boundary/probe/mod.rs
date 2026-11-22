@@ -15,18 +15,25 @@
 //! state and the host is shared with other agents.
 
 use std::{
+    io,
     path::{Path, PathBuf},
-    time::Duration,
+    thread,
+    time::{Duration, Instant},
 };
 
 use cap_std::fs::MetadataExt;
 
+mod bdd;
+mod bubblewrap;
+mod listeners;
+mod tools;
 mod unconfined;
 
 use super::{
+    canary,
     hostile::{self, Behaviour},
     launch::{LaunchSpec, ReadOnlyBind},
-    platform::Programs,
+    platform::{CanaryReport, Programs, RequestedLimits},
     supervisor::{Boundary, Job, Run, Supervisor},
 };
 use crate::{ambient, scratch::Scratch};
@@ -36,76 +43,8 @@ pub const PROBE_BINARY: &str = "/job/bin/probe";
 
 /// The path the input snapshot is bound at inside the boundary.
 pub const PROBE_INPUTS: &str = "/job/in";
-
-/// What one probe run asks for.
-pub struct Options {
-    /// Which launch chain to use.
-    pub boundary: Boundary,
-    /// `MemoryMax=`, in bytes.
-    pub memory_bytes: u64,
-    /// The private scratch area, in bytes.
-    pub scratch_bytes: u64,
-    /// The job's deadline.
-    pub deadline: Duration,
-    /// The standard-output cap.
-    pub stdout_cap: usize,
-    /// The standard-error cap.
-    pub stderr_cap: usize,
-    /// The target tokens passed to the child.
-    pub targets: Vec<String>,
-}
-
-impl Options {
-    /// The default for one boundary: 64 MiB, 8 MiB scratch, a 10 s deadline, and
-    /// the product's 1 MiB/64 KiB stream caps.
-    #[must_use]
-    pub fn new(boundary: Boundary) -> Self {
-        Self {
-            boundary,
-            memory_bytes: 64 * 1024 * 1024,
-            scratch_bytes: 8 * 1024 * 1024,
-            deadline: Duration::from_secs(10),
-            stdout_cap: 1024 * 1024,
-            stderr_cap: 64 * 1024,
-            targets: Vec::new(),
-        }
-    }
-
-    /// Set the memory limit.
-    #[must_use]
-    pub fn memory(mut self, bytes: u64) -> Self {
-        self.memory_bytes = bytes;
-        self
-    }
-
-    /// Set the scratch area.
-    #[must_use]
-    pub fn scratch(mut self, bytes: u64) -> Self {
-        self.scratch_bytes = bytes;
-        self
-    }
-
-    /// Set the deadline.
-    #[must_use]
-    pub fn deadline(mut self, deadline: Duration) -> Self {
-        self.deadline = deadline;
-        self
-    }
-
-    /// Set the standard-output cap.
-    #[must_use]
-    pub fn stdout_cap(mut self, cap: usize) -> Self {
-        self.stdout_cap = cap;
-        self
-    }
-
-    /// Add one target token.
-    #[must_use]
-    pub fn target(mut self, token: impl Into<String>) -> Self {
-        self.targets.push(token.into());
-        self
-    }
-}
+mod options;
+pub use self::options::{Options, ToolJob};
 
 /// One probe run's owned paths and identity.
 pub struct Probe {
@@ -169,6 +108,18 @@ impl Probe {
     #[must_use]
     pub fn scratch_path(&self) -> &Path { self.scratch.path() }
 
+    /// The input snapshot directory, which the probe writes before a job.
+    #[must_use]
+    pub fn inputs(&self) -> &Path { &self.inputs }
+
+    /// The standard programs.
+    #[must_use]
+    pub fn programs(&self) -> &Programs { &self.programs }
+
+    /// The runtime directory the scope is reached through.
+    #[must_use]
+    pub fn runtime_dir(&self) -> &Path { &self.runtime_dir }
+
     /// Build the launch specification for one behaviour.
     #[must_use]
     pub fn spec(&self, behaviour: Behaviour, options: &Options) -> LaunchSpec {
@@ -212,7 +163,79 @@ impl Probe {
             stdout_cap: options.stdout_cap,
             stderr_cap: options.stderr_cap,
             deadline: options.deadline,
+            read_limits: options.read_limits,
+            require_scope: true,
         })
+    }
+
+    /// Run a non-hostile program under the selected boundary.
+    ///
+    /// The tool's own binds are added to the input snapshot bind, and the
+    /// supervisor runs it through the same scope and capture every job uses.
+    ///
+    /// # Errors
+    ///
+    /// Returns a diagnostic when the tool's specification is invalid or the job
+    /// could not be observed.
+    pub fn run_tool(&self, tool: &ToolJob<'_>, options: &Options) -> Result<Run, String> {
+        let mut binds = tool.binds.clone();
+        binds.push(ReadOnlyBind {
+            source: self.inputs.clone(),
+            target: PROBE_INPUTS.to_owned(),
+        });
+        let spec = LaunchSpec {
+            host_program: tool.host_program.to_path_buf(),
+            sandbox_program: tool.sandbox_program.to_owned(),
+            args: tool.args.clone(),
+            binds,
+            scratch_bytes: options.scratch_bytes,
+            env: tool.env.clone(),
+            unit: format!("polean-probe-{}", self.nonce),
+            memory_bytes: options.memory_bytes,
+            swap_bytes: 0,
+            tasks_max: 32,
+            runtime_secs: options.deadline.as_secs() + 5,
+        };
+        spec.validate()?;
+        let supervisor = Supervisor {
+            programs: &self.programs,
+            runtime_dir: &self.runtime_dir,
+        };
+        supervisor.run(&Job {
+            spec,
+            boundary: options.boundary,
+            stdout_cap: options.stdout_cap,
+            stderr_cap: options.stderr_cap,
+            deadline: options.deadline,
+            read_limits: options.read_limits,
+            require_scope: false,
+        })
+    }
+
+    /// Run the canary under the selected boundary and parse its report.
+    ///
+    /// The supervisor reads the active scope's limits, so the report carries
+    /// both what the child observed and what systemd actually applied. The
+    /// descriptor set is the supervisor's observation of the job's own table.
+    ///
+    /// # Errors
+    ///
+    /// Returns the supervisor's diagnostic when the job could not be observed.
+    pub fn canary(&self, limits: &RequestedLimits) -> Result<(Run, CanaryReport), String> {
+        let options = Options::new(Boundary::Bubblewrap)
+            .memory(limits.memory_bytes)
+            .deadline(Duration::from_secs(10))
+            .read_limits()
+            .target(format!("polean-target=marker:{}", self.nonce));
+        let run = self.run(Behaviour::Canary, &options)?;
+        let readback = run.limits.clone().unwrap_or_default();
+        let mut report = canary::parse(
+            &String::from_utf8_lossy(&run.stdout),
+            &self.nonce,
+            &readback,
+        );
+        report.descriptors = run.fds.clone();
+        Ok((run, report))
     }
 
     /// The libtest and hostile arguments the child receives.
@@ -266,4 +289,39 @@ pub fn attempt<'a>(stdout: &'a str, name: &str) -> Result<&'a str, String> {
             format!("the child never reported an {name} attempt; stdout was {stdout:?}")
         })?;
     Ok(line)
+}
+
+/// How long a killed process's `/proc` entry may take to disappear.
+const GONE_BOUND: Duration = Duration::from_secs(2);
+
+/// How often a disappearing process is polled.
+const GONE_POLL: Duration = Duration::from_millis(20);
+
+/// Wait until a process's `/proc` entry has gone.
+///
+/// A process the boundary killed must not merely be signalled: a zombie that
+/// nobody reaps still holds its entry. The supervisor confirms the cgroup empty
+/// before this runs, so the entry disappears when the kernel releases it.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the entry is still present at the bound, or when it
+/// cannot be inspected for any reason other than absence.
+pub fn wait_until_gone(pid: u32) -> Result<(), String> {
+    let path = PathBuf::from(format!("/proc/{pid}"));
+    let started = Instant::now();
+    loop {
+        match ambient::metadata(&path) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(format!("cannot inspect {}: {error}", path.display())),
+            Ok(_metadata) => {
+                if started.elapsed() >= GONE_BOUND {
+                    return Err(format!(
+                        "the process {pid} is still present after {GONE_BOUND:?}"
+                    ));
+                }
+                thread::sleep(GONE_POLL);
+            }
+        }
+    }
 }

@@ -1142,7 +1142,15 @@ section and in each ADR.
 - [ ] EP-M2 gate re-run after the repairs, including the `make test` retry (the
   only red gate on `81baa02` was the pre-existing admission compile-fail test
   timing out at 600 s while the shared compile-admission queue was saturated).
-- [ ] EP-M3.
+- [x] 2026-11-22: EP-M3 implemented: `probe/bubblewrap.rs` (six
+      selected-boundary
+  cells), `probe/tools.rs` (OPA inside and outside, `http.send` silence, Lean
+  smoke), `probe/listeners.rs`, `probe/bdd.rs`, and
+  `tests/features/execution_boundary.feature`. Five consecutive
+  `make boundary-probe` runs pass all 20 probes (42–47 s each), the 90 boundary
+  unit tests pass, and the platform check reports `Ready` on the probe host.
+- [ ] EP-M3 gates: `make toolchain-smoke`, `make lint`, `make test`, and the
+  remaining gates at the fixpoint.
 - [ ] EP-M4, and the user's acceptance of ADR 0007.
 
 ## Surprises & discoveries
@@ -1207,6 +1215,19 @@ section and in each ADR.
 - 2026-11-21: `systemd-run --scope`'s client can stall, and `Command::output`
   waits indefinitely, so every control subprocess now runs through a bounded
   helper that kills and reaps at the bound.
+- 2026-11-22: a loopback TCP address inside an empty network namespace reports
+  `ECONNREFUSED`, not `ENETUNREACH`: the loopback route exists even with `lo`
+  down. The off-host canary connection still reports `ENETUNREACH`, and the
+  offline probe accepts either for its host listener.
+- 2026-11-22: under the PID namespace the escapee's reported pid is
+  namespace-local; read from the host it names an unrelated process. The
+  selected-boundary cell therefore relies on the empty survivor list and the
+  empty cgroup, not on `/proc/<inner pid>`.
+- 2026-11-22: a pinned tool can finish in about ten milliseconds, before the
+  supervisor's first successful scope poll, and systemd then garbage-collects a
+  successful scope. The canary's 250 ms window covers the hostile chain; tool
+  probes do not require the scope observation and rely on the unit's recorded
+  success plus the canary (D21).
 
 ## Decision log
 
@@ -1306,6 +1327,16 @@ section and in each ADR.
 - **D19, 2026-11-21 (review repair):** each stream reader reports its final trip
   state as well as its bytes, and the supervisor merges both states before
   classification, so a trip queued just before a natural exit is not lost.
+- **D21, 2026-11-22:** a tool job does not require the scope-join observation.
+  A pinned OPA evaluation can finish in about ten milliseconds, before the
+  supervisor's first successful poll, and a successful scope is then
+  garbage-collected at once. The hostile chain's 250 ms window (D13) covers
+  every probe that claims containment; the tool probes instead require the
+  unit's recorded `Result=success` and the canary's proof of the same launch
+  chain. The choice is a field on the job (`require_scope`) rather than an
+  implicit exception, and the ADR records it as residual trust: the tool probes
+  show the tools work inside the boundary and agree with their outside runs,
+  not that the supervisor observed each tool's cgroup.
 - **D20, 2026-11-22 (tolerance breach, recorded for ratification):** the code
   limit is breached before EP-M3. Measured against `git merge-base main HEAD`
   (`ad217c8`), excluding this plan and the reviewed snapshot: 43 files and
