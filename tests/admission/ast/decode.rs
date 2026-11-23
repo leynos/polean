@@ -223,9 +223,8 @@ fn module(fields: Fields<'_>, source: &str) -> Result<Module, Fault> {
 
 /// Decode the module's optional `__target__`.
 ///
-/// The frontend omits `target` when the module sets none. A present but empty
-/// target is therefore not something the frontend emits, and is rejected
-/// rather than accepted as "no target" (O2).
+/// The frontend omits `target` when the module sets none, so a present but
+/// empty target is rejected rather than accepted as "no target" (O2).
 fn target(fields: Fields<'_>) -> Result<Option<String>, Fault> {
     match fields.optional("target") {
         None => Ok(None),
