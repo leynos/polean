@@ -201,12 +201,18 @@ const HEAD_VARIANTS: &[Variant] = &[
     ),
 ];
 
-/// Decode the module body.
-fn module(fields: Fields<'_>, source: &str) -> Result<Module, Fault> {
+/// Check the module's boolean and counter fields have the right JSON types.
+fn module_header(fields: Fields<'_>) -> Result<(), Fault> {
     as_boolean(fields.value("rego_v1")?)?;
     as_number(fields.value("num_expressions")?)?;
     as_number(fields.value("num_statements")?)?;
     as_number(fields.value("num_queries")?)?;
+    Ok(())
+}
+
+/// Decode the module body.
+fn module(fields: Fields<'_>, source: &str) -> Result<Module, Fault> {
+    module_header(fields)?;
     Ok(Module {
         package: package(object(fields.value("package")?, PACKAGE_FIELDS)?, source)?,
         imports: each(fields.value("imports")?, source, import)?,
@@ -217,9 +223,8 @@ fn module(fields: Fields<'_>, source: &str) -> Result<Module, Fault> {
 
 /// Decode the module's optional `__target__`.
 ///
-/// The frontend omits `target` when the module sets none. A present but empty
-/// target is therefore not something the frontend emits, and is rejected
-/// rather than accepted as "no target" (O2).
+/// The frontend omits `target` when the module sets none, so a present but
+/// empty target is rejected rather than accepted as "no target" (O2).
 fn target(fields: Fields<'_>) -> Result<Option<String>, Fault> {
     match fields.optional("target") {
         None => Ok(None),
