@@ -184,6 +184,19 @@ pub(super) fn output_cap_stops_the_flood(report: &PlatformReport) -> Result<(), 
         .windows(start.len())
         .position(|window| window == start.as_bytes())
         .ok_or_else(|| "the kept output holds no start line".to_owned())?;
+    // libtest's own preamble precedes the child's protocol; checking it makes
+    // the assertion cover the complete retained stream rather than only the
+    // bytes after the start line.
+    let preamble = b"\nrunning 1 test\n";
+    check!(
+        run.stdout.starts_with(preamble),
+        "the retained stream must begin with libtest's preamble"
+    );
+    check_eq!(
+        offset,
+        preamble.len(),
+        "the start line must immediately follow the preamble"
+    );
     let flood = run.stdout.get(offset + start.len()..).unwrap_or_default();
     check!(
         !flood.is_empty(),

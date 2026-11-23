@@ -35,7 +35,15 @@ use super::{
     canary,
     hostile::{self, Behaviour},
     launch::{LaunchSpec, ReadOnlyBind},
-    platform::{CanaryReport, PlatformReport, Programs, RequestedLimits},
+    outcome::Verdict,
+    platform::{
+        CanaryReport,
+        Check,
+        PlatformReport,
+        Programs,
+        RequestedLimits,
+        check as platform_check,
+    },
     supervisor::{Boundary, Run},
 };
 use crate::{ambient, scratch::Scratch};
@@ -191,6 +199,10 @@ impl Probe {
             &readback,
         );
         report.descriptors = run.fds.clone();
+        report.separate_netns = match (&run.netns, netns_identity()) {
+            (Some(job), Some(supervisor)) => Some(job != &supervisor),
+            _ => None,
+        };
         Ok((run, report))
     }
 
@@ -210,6 +222,11 @@ impl Probe {
     }
 }
 
+/// The supervisor's own network-namespace identity.
+fn netns_identity() -> Option<std::path::PathBuf> {
+    ambient::link_target(Path::new("/proc/self/ns/net")).ok()
+}
+
 /// Run a canary on its own probe and require a ready platform report.
 ///
 /// One canary per probe test costs about a second, and it means a selected
@@ -222,15 +239,50 @@ impl Probe {
 pub(super) fn ready_report(label: &str) -> Result<PlatformReport, String> {
     let probe = Probe::new(label)?;
     let limits = RequestedLimits::default();
-    let (run, report) = probe.canary(&limits)?;
-    super::supervisor::require_outcome(&run, &super::outcome::Outcome::Completed)?;
-    let platform = super::platform::check(&super::platform::Check {
+    // Presence and manager checks run first, so a host missing a program gets
+    // one verdict naming every missing control instead of stopping at the
+    // canary. A failed canary is then folded into the same aggregate.
+    let presence = platform_check(&Check {
         programs: probe.programs(),
         runtime_dir: probe.runtime_dir(),
-        canary: Ok(&report),
+        canary: Err("the canary has not run".to_owned()),
         limits: &limits,
     });
-    if platform.verdict() != super::outcome::Verdict::Ready {
+    let missing: Vec<_> = presence
+        .controls
+        .iter()
+        .filter(|(kind, _)| {
+            !matches!(
+                kind,
+                super::outcome::ControlKind::CanaryIsolation
+                    | super::outcome::ControlKind::CanaryLimits
+            )
+        })
+        .filter_map(|(kind, availability)| match availability {
+            super::outcome::Availability::Available => None,
+            super::outcome::Availability::Missing(reason) => Some(format!("{kind:?}: {reason}")),
+        })
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!(
+            "the platform is not ready before the canary: {}",
+            missing.join("; ")
+        ));
+    }
+    let canary = match probe.canary(&limits) {
+        Ok((run, report)) => {
+            super::supervisor::require_outcome(&run, &super::outcome::Outcome::Completed)?;
+            Ok(report)
+        }
+        Err(reason) => Err(reason),
+    };
+    let platform = platform_check(&Check {
+        programs: probe.programs(),
+        runtime_dir: probe.runtime_dir(),
+        canary: canary.as_ref().map_err(Clone::clone),
+        limits: &limits,
+    });
+    if platform.verdict() != Verdict::Ready {
         return Err(format!(
             "the platform is not ready: {:?}",
             platform.verdict()

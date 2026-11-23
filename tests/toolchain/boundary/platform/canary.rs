@@ -95,6 +95,13 @@ fn outbound_unreachable(report: &CanaryReport) -> Result<(), String> {
 
 /// The canary inherited exactly its three standard streams.
 fn standard_descriptors(report: &CanaryReport) -> Result<(), String> {
+    match report.separate_netns {
+        Some(true) => (),
+        Some(false) => {
+            return Err("the job shares the supervisor's network namespace".to_owned());
+        }
+        None => return Err("the job's network namespace was not observed".to_owned()),
+    }
     match &report.descriptors {
         Some(descriptors) if descriptors.as_slice() == [0, 1, 2] => Ok(()),
         Some(descriptors) => Err(format!(

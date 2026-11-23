@@ -132,6 +132,8 @@ pub struct CanaryReport {
     pub outbound_error: Option<String>,
     /// The inherited descriptors the canary could see.
     pub descriptors: Option<Vec<i32>>,
+    /// Whether the job's network namespace differed from the supervisor's.
+    pub separate_netns: Option<bool>,
     /// `memory.max` read from the active scope.
     pub memory_max: Option<String>,
     /// `memory.swap.max` read from the active scope.

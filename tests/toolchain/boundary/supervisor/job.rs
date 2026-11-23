@@ -80,6 +80,8 @@ pub struct Run {
     pub result: Option<String>,
     /// The job's open descriptors while it was alive, when they were observed.
     pub fds: Option<Vec<i32>>,
+    /// The job's network-namespace identity, when it was observed.
+    pub netns: Option<std::path::PathBuf>,
     /// The scope's limit files, when the job asked for them.
     pub limits: Option<LimitReadback>,
     /// Observations that make the run fail closed, in the order they occurred.

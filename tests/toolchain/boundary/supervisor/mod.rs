@@ -46,7 +46,7 @@ use std::{
 
 use super::{
     launch::{bubblewrap_scope_argv, unconfined_scope_argv},
-    outcome::{Bound, ExitForm, Observation, Outcome, classify},
+    outcome::{Bound, Bounds, ExitForm, Observation, Outcome, classify},
     platform::Programs,
     scope::Scope,
 };
@@ -57,12 +57,12 @@ mod run;
 mod teardown;
 mod wait;
 pub use self::job::{Cancel, Job, Run};
-pub(crate) use self::wait::retain_seen;
+pub(crate) use self::{reader::contains_marker, wait::retain_seen};
 use self::{
     reader::{Readers, drain_readers, finish_readers, readers},
     run::{Awaiting, note, read_limits, read_result, reset_failed_unit},
     teardown::{Inputs, tear_down},
-    wait::{Waiting, snapshot_fds, wait},
+    wait::{Waiting, snapshot_job, wait},
 };
 
 /// Which launch chain a job uses.
@@ -128,6 +128,15 @@ fn tool_evidence(
         diagnostics.push(format!(
             "a tool job whose scope was not observed must record Result=success, got {result:?}"
         ));
+    }
+}
+
+/// Record that an out-of-memory result proves the memory bound.
+///
+/// systemd's record is authoritative whatever the exit status says.
+fn record_result(result: Option<&str>, bounds: &mut Bounds) {
+    if result == Some("oom-kill") {
+        bounds.insert(Bound::Memory);
     }
 }
 
@@ -223,13 +232,12 @@ impl Supervisor<'_> {
         let result = read_result(&scope, &mut diagnostics);
         reset_failed_unit(&scope, result.as_deref());
         tool_evidence(job, cgroup.as_deref(), result.as_deref(), &mut diagnostics);
-        if result.as_deref() == Some("oom-kill") {
-            bounds.insert(Bound::Memory);
-        }
+        record_result(result.as_deref(), &mut bounds);
+        let exit = exit_form(status);
         let cgroup_empty = cgroup_is_empty(job, cgroup.as_deref(), &report, &diagnostics);
         let outcome = classify(&Observation {
             bounds,
-            exit: exit_form(status),
+            exit,
             cgroup_empty,
             survivors: !report.survivors.is_empty(),
             unavailable: Vec::new(),
@@ -238,7 +246,7 @@ impl Supervisor<'_> {
             outcome,
             stdout,
             stderr,
-            exit: exit_form(status),
+            exit,
             bounds,
             survivors: report.survivors,
             cgroup_empty,
@@ -246,6 +254,7 @@ impl Supervisor<'_> {
             events: report.events,
             result,
             fds: waiting.fds,
+            netns: waiting.netns,
             limits,
             diagnostics,
             notes,

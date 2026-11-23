@@ -19,7 +19,7 @@ use super::{
     Supervisor,
     Waiting,
     drain_readers,
-    snapshot_fds,
+    snapshot_job,
     tear_down,
     wait,
 };
@@ -110,8 +110,9 @@ pub(super) struct Awaiting<'a> {
 }
 
 impl Supervisor<'_> {
-    /// Wait for the job, tearing it down if the wait itself fails.
     /// Wait for the job, sampling its descriptors and honouring its deadline.
+    ///
+    /// A wait failure tears the job down before the error is returned.
     pub(super) fn observe(&self, awaiting: Awaiting<'_>) -> Result<Waiting, String> {
         let Awaiting {
             job,
@@ -122,7 +123,7 @@ impl Supervisor<'_> {
             readers,
             cancel,
         } = awaiting;
-        let mut snapshot = || snapshot_fds(job, pgid, cgroup);
+        let mut snapshot = || snapshot_job(job, pgid, cgroup);
         let mut target = Target {
             child,
             pgid,
@@ -137,7 +138,7 @@ impl Supervisor<'_> {
         &self,
         target: &mut Target<'_>,
         readers: &Readers,
-        snapshot: &mut impl FnMut() -> Option<Vec<i32>>,
+        snapshot: &mut impl FnMut() -> Option<super::wait::Sample>,
     ) -> Result<Waiting, String> {
         let waited = wait(target, &readers.trips, snapshot);
         match waited {

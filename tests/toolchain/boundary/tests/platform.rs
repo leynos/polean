@@ -102,6 +102,7 @@ fn good_report() -> CanaryReport {
         interfaces: vec!["lo".to_owned()],
         outbound_error: Some("Network is unreachable (os error 101)".to_owned()),
         descriptors: Some(vec![0, 1, 2]),
+        separate_netns: Some(true),
         memory_max: Some("67108864".to_owned()),
         memory_swap_max: Some("0".to_owned()),
         pids_max: Some("32".to_owned()),
@@ -159,6 +160,22 @@ fn connected() -> CanaryReport {
     }
 }
 
+/// A report whose job shares the supervisor's network namespace.
+fn shared_netns() -> CanaryReport {
+    CanaryReport {
+        separate_netns: Some(false),
+        ..good_report()
+    }
+}
+
+/// A report whose network namespace was not observed.
+fn unknown_netns() -> CanaryReport {
+    CanaryReport {
+        separate_netns: None,
+        ..good_report()
+    }
+}
+
 /// A report that inherited an extra descriptor.
 fn leaked() -> CanaryReport {
     CanaryReport {
@@ -174,6 +191,8 @@ fn leaked() -> CanaryReport {
 #[case::capable(capable, "capabilities")]
 #[case::networked(networked, "interfaces")]
 #[case::connected(connected, "not refusal or unreachability")]
+#[case::shared_netns(shared_netns, "network namespace")]
+#[case::unknown_netns(unknown_netns, "network namespace")]
 #[case::leaked(leaked, "descriptors")]
 fn a_broken_isolation_control_names_its_reason(
     #[case] report: fn() -> CanaryReport,

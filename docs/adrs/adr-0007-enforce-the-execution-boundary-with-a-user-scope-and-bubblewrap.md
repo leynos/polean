@@ -172,11 +172,11 @@ silence window; they are observations, not the budgets roadmap 4.3.3 measures.
 
 _Table 2: Single-run observations from `make boundary-probe`._
 
-Five consecutive `make boundary-probe` runs each passed all twenty probes in
-42–47 s on the shared development host. A loopback TCP address inside the empty
+Repeated `make boundary-probe` runs each passed all twenty-one probes in 33–47
+s on the shared development host. A loopback TCP address inside the empty
 network namespace reports `ECONNREFUSED` rather than `ENETUNREACH`, because the
-loopback route exists even with `lo` down; the canary's off-host connection
-still reports `Network is unreachable`.
+loopback route exists even with `lo` down; the canary's probe-owned listener is
+then refused or unreachable, and the offline probe accepts either.
 
 ## Alternatives considered
 
@@ -257,11 +257,15 @@ does not hide socket files; the allowlisted filesystem view does.
   checked results; no verified trace harness checks that composition. The proof
   does not extend to the reader's I/O and threads, or to the operating system's
   enforcement.
-- **Canary outbound address.** The canary tries TEST-NET-1 (`192.0.2.1:53`,
-  RFC 5737), which is reserved for documentation and not routed. A host whose
-  network isolation failed reports a timeout rather than reaching a third-party
-  service, and the control fails closed because the expected
-  `Network is unreachable` is absent.
+- **Canary outbound target.** The canary connects to a loopback listener the
+  probe owns and passes in. Inside the empty network namespace the connection
+  is refused or unreachable; on a host whose isolation failed it reaches the
+  probe's own listener and the control fails closed because no connection error
+  was reported. The supervisor also compares the job's network-namespace inode
+  with its own, so a shared network namespace is refused independently of the
+  connection result. The probe therefore contacts nothing it does not own,
+  which is the plan's offline-probe constraint; the expected error is refusal
+  or unreachability rather than `ENETUNREACH` alone (D26).
 - **Inherited descriptors.** The supervisor lists the job's own descriptor
   directory from outside on every poll and keeps only the descriptors present
   in every sample, so a handle the job opens for its own work cannot be

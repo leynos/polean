@@ -35,6 +35,14 @@ use super::{
 };
 use crate::ambient;
 
+/// One sample of the job's process table.
+pub(super) struct Sample {
+    /// The job's open descriptors.
+    pub(super) fds: Vec<i32>,
+    /// The job's network-namespace inode, when readable.
+    pub(super) netns: Option<std::path::PathBuf>,
+}
+
 /// What one wait loop observed.
 pub(super) struct Waiting {
     /// The status `try_wait` observed, if the child exited on its own.
@@ -45,21 +53,25 @@ pub(super) struct Waiting {
     pub(super) running: bool,
     /// The job's descriptors, once observed.
     pub(super) fds: Option<Vec<i32>>,
+    /// The job's network-namespace inode, once observed.
+    pub(super) netns: Option<std::path::PathBuf>,
 }
 
 /// Poll the child, its stream trips, and the deadline until one stops it.
 pub(super) fn wait(
     target: &mut Target<'_>,
     trips: &Receiver<Bound>,
-    snapshot: &mut impl FnMut() -> Option<Vec<i32>>,
+    snapshot: &mut impl FnMut() -> Option<Sample>,
 ) -> Result<Waiting, String> {
     let mut evidence = Evidence {
         bounds: Bounds::none(),
         fds: None,
+        netns: None,
     };
     loop {
         if let Some(observed) = snapshot() {
-            evidence.fds = Some(retain_seen(evidence.fds.take(), &observed));
+            evidence.fds = Some(retain_seen(evidence.fds.take(), &observed.fds));
+            evidence.netns = evidence.netns.or(observed.netns);
         }
         if let Some(stopped) = stop_reason(target, trips, &mut evidence)? {
             return Ok(stopped);
@@ -90,6 +102,8 @@ struct Evidence {
     bounds: Bounds,
     /// The job's descriptors, once observed.
     fds: Option<Vec<i32>>,
+    /// The job's network-namespace inode, once observed.
+    netns: Option<std::path::PathBuf>,
 }
 
 /// Why the wait loop should stop, if it should, and with what evidence.
@@ -112,6 +126,7 @@ fn stop_reason(
                 bounds: evidence.bounds,
                 running: false,
                 fds: evidence.fds.clone(),
+                netns: evidence.netns.clone(),
             }));
         }
         Ok(None) => (),
@@ -124,6 +139,7 @@ fn stop_reason(
             bounds: evidence.bounds,
             running: true,
             fds: evidence.fds.clone(),
+            netns: evidence.netns.clone(),
         }));
     }
     if target
@@ -136,6 +152,7 @@ fn stop_reason(
             bounds: evidence.bounds,
             running: true,
             fds: evidence.fds.clone(),
+            netns: evidence.netns.clone(),
         }));
     }
     if target.clock.expired() {
@@ -145,28 +162,43 @@ fn stop_reason(
             bounds: evidence.bounds,
             running: true,
             fds: evidence.fds.clone(),
+            netns: evidence.netns.clone(),
         }));
     }
     Ok(None)
 }
 
-/// Snapshot the job's descriptors once the job process is running.
+/// Snapshot the job's process table once the job process is running.
 ///
 /// Under `Unconfined` the direct child *is* the job, so its own descriptor
 /// table is the answer once its command line matches. Under `Bubblewrap` the
 /// job is a different host process, found through the cgroup by its argument
 /// vector; the process listing is of that process's descriptor directory, so the
 /// supervisor's own transient handles are not part of it.
-pub(super) fn snapshot_fds(job: &Job, pgid: u32, cgroup: Option<&Path>) -> Option<Vec<i32>> {
-    let process = match job.boundary {
+pub(super) fn snapshot_job(job: &Job, pgid: u32, cgroup: Option<&Path>) -> Option<Sample> {
+    let process = job_process(job, pgid, cgroup)?;
+    let fds = ambient::open_fds(process).ok()?;
+    Some(Sample {
+        fds,
+        netns: netns_of(process),
+    })
+}
+
+/// The host pid of the job process, once it is running.
+fn job_process(job: &Job, pgid: u32, cgroup: Option<&Path>) -> Option<u32> {
+    match job.boundary {
         Boundary::Unconfined => process_matches(pgid, &job.spec.host_program).then_some(pgid),
         Boundary::Bubblewrap => cgroup.and_then(|scope_cgroup| {
             job_pid(scope_cgroup, Path::new(&job.spec.sandbox_program))
                 .ok()
                 .flatten()
         }),
-    };
-    process.and_then(|found| ambient::open_fds(found).ok())
+    }
+}
+
+/// The inode of `pid`'s network namespace.
+fn netns_of(pid: u32) -> Option<std::path::PathBuf> {
+    ambient::link_target(Path::new(&format!("/proc/{pid}/ns/net"))).ok()
 }
 
 /// Whether `pid`'s command line names `program`.

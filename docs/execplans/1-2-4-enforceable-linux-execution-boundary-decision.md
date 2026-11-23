@@ -1296,8 +1296,8 @@ section and in each ADR.
   helper that kills and reaps at the bound.
 - 2026-11-22: a loopback TCP address inside an empty network namespace reports
   `ECONNREFUSED`, not `ENETUNREACH`: the loopback route exists even with `lo`
-  down. The off-host canary connection still reports `ENETUNREACH`, and the
-  offline probe accepts either for its host listener.
+  down. The offline probe accepts either for its host listener, and the canary
+  now uses the same probe-owned loopback target (D26).
 - 2026-11-22: under the PID namespace the escapee's reported pid is
   namespace-local; read from the host it names an unrelated process. The
   selected-boundary cell therefore relies on the empty survivor list and the
@@ -1329,10 +1329,10 @@ section and in each ADR.
   enforced. A tool job whose scope was not observed now requires the unit's
   recorded `Result=success`; a missing or different record is a containment
   diagnostic, not a completion.
-- 2026-11-23: the canary's outbound address was a public resolver. It is now
-  TEST-NET-1 (`192.0.2.1:53`, RFC 5737), reserved for documentation and not
-  routed, so a host whose isolation failed cannot make the probe contact a
-  third-party service (D24).
+- 2026-11-23: the canary's outbound address was a public resolver. It first
+  moved to TEST-NET-1 (D24) and then to a loopback listener the probe owns
+  (D26), because a host route could still deliver a documentation address; the
+  probe now contacts nothing it does not own.
 - 2026-11-23: the whole-stream property is a manual composition: the checked
   per-`feed` contract and the checked model theorem (`fold_at`) match step for
   step, but no verified trace harness composes repeated executable calls. The
@@ -1457,11 +1457,10 @@ section and in each ADR.
   they must run before a verdict exists or without one. A unit test passes a
   spawn counter and requires it to stay at zero for missing and malformed
   verdicts.
-- **D24, 2026-11-23 (review repair):** the canary's outbound attempt uses
-  TEST-NET-1 (`192.0.2.1:53`), reserved by RFC 5737 and not routed, instead of
-  a public resolver. The expected `Network is unreachable` is unchanged inside
-  the boundary; on a host whose isolation failed the connection times out
-  without contacting a service the probe does not own.
+- **D24, 2026-11-23 (review repair, superseded by D26):** the canary's
+  outbound attempt first moved from a public resolver to TEST-NET-1
+  (`192.0.2.1:53`, RFC 5737). A host route could still deliver that address, so
+  D26 replaces it with a probe-owned listener.
 - **D26, 2026-11-23 (review repair, plan deviation recorded):** the canary's
   outbound attempt targets a loopback listener the probe owns and passes in,
   not a documentation address. The plan's control 4 said

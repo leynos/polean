@@ -55,6 +55,20 @@ fn beneath_root(path: &Path) -> io::Result<PathBuf> {
 /// Returns the underlying error, with its kind intact.
 pub fn metadata(path: &Path) -> io::Result<Metadata> { root()?.metadata(beneath_root(path)?) }
 
+/// The target of the symbolic link at `path`, for comparing namespace
+/// identities.
+///
+/// `/proc/<pid>/ns/*` entries are magic links whose targets name the namespace,
+/// so comparing targets identifies a shared namespace. Reading the link is used
+/// rather than `metadata`, which a capability refuses to apply to a magic link.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn link_target(path: &Path) -> io::Result<std::path::PathBuf> {
+    root()?.read_link(beneath_root(path)?)
+}
+
 /// Read `path` as bytes.
 ///
 /// # Errors

@@ -96,6 +96,16 @@ pub(super) fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
         .windows(start.len())
         .position(|window| window == start.as_bytes())
         .ok_or_else(|| "the kept output holds no start line".to_owned())?;
+    let preamble = b"\nrunning 1 test\n";
+    check!(
+        run.stdout.starts_with(preamble),
+        "the retained stream must begin with libtest's preamble"
+    );
+    check_eq!(
+        offset,
+        preamble.len(),
+        "the start line must immediately follow the preamble"
+    );
     let flood = run
         .stdout
         .get(offset + start.len()..offset + start.len() + super::hostile::output::FLOOD_BYTES)

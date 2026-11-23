@@ -63,28 +63,31 @@ pub(super) struct Readers {
     handles: [JoinHandle<()>; 2],
 }
 
-/// Request cancellation once the chunk carries the arming marker.
+/// Request cancellation once the kept bytes carry the arming marker.
 ///
-/// The marker is matched across a chunk boundary by searching the capture's
-/// kept bytes, which hold every byte up to the cap. A marker longer than the
-/// cap could not be observed, so the request would never be armed and the job
-/// would end at its deadline instead; the cancellation probe uses a short
-/// marker and asserts the cancelled bound, so that case fails rather than
-/// passing silently.
-fn arm(request: Option<&Cancel>, chunk: &[u8]) {
+/// The whole kept prefix is searched, not the latest chunk, so a marker split
+/// across two pipe reads is still found. A marker longer than the cap could
+/// not be observed, so the request would never be armed and the job would end
+/// at its deadline instead; the cancellation probe uses a short marker and
+/// asserts the cancelled bound, so that case fails rather than passing
+/// silently.
+fn arm(request: Option<&Cancel>, kept: &[u8]) {
     let Some(cancel) = request else {
         return;
     };
     if cancel.request.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
-    let marker = cancel.marker.as_bytes();
-    let found = chunk.windows(marker.len()).any(|window| window == marker);
-    if found {
+    if contains_marker(kept, cancel.marker.as_bytes()) {
         cancel
             .request
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
+}
+
+/// Whether `kept` contains `marker`.
+pub(crate) fn contains_marker(kept: &[u8], marker: &[u8]) -> bool {
+    !marker.is_empty() && kept.windows(marker.len()).any(|window| window == marker)
 }
 
 /// Start one bounded reader per stream.
@@ -156,7 +159,7 @@ fn drain(
             };
             let chunk = buffer.get(..read).unwrap_or(&[]);
             capture.feed(chunk);
-            arm(signals.arm.as_ref(), chunk);
+            arm(signals.arm.as_ref(), capture.kept());
             if !record_trip(&capture, &signals.trips, bound, &mut signalled) {
                 break;
             }

@@ -15,6 +15,7 @@ mod hostile;
 mod outcome;
 mod platform;
 mod probe;
+mod reader;
 mod submit;
 mod support;
 mod wait;
