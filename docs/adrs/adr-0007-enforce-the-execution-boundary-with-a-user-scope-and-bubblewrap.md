@@ -259,13 +259,16 @@ does not hide socket files; the allowlisted filesystem view does.
   enforcement.
 - **Canary outbound target.** The canary connects to a loopback listener the
   probe owns and passes in. Inside the empty network namespace the connection
-  is refused or unreachable; on a host whose isolation failed it reaches the
-  probe's own listener and the control fails closed because no connection error
-  was reported. The supervisor also compares the job's network-namespace inode
-  with its own, so a shared network namespace is refused independently of the
-  connection result. The probe therefore contacts nothing it does not own,
-  which is the plan's offline-probe constraint; the expected error is refusal
-  or unreachability rather than `ENETUNREACH` alone (D26).
+  is refused or unreachable. On a host whose isolation failed it normally
+  reaches the probe's own listener and the control fails closed because no
+  connection error was reported; a host firewall that refuses the connection
+  instead would produce the same error as a working boundary, which is why the
+  control does not rest on the connection alone. The supervisor also compares
+  the job's network-namespace link target with its own, so a shared or
+  unobserved network namespace is refused independently of the connection
+  result. The probe therefore contacts nothing it does not own, which is the
+  plan's offline-probe constraint; the expected error is refusal or
+  unreachability rather than `ENETUNREACH` alone (D26).
 - **Inherited descriptors.** The supervisor lists the job's own descriptor
   directory from outside on every poll and keeps only the descriptors present
   in every sample, so a handle the job opens for its own work cannot be

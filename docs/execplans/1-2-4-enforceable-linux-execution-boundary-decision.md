@@ -1337,8 +1337,9 @@ section and in each ADR.
   per-`feed` contract and the checked model theorem (`fold_at`) match step for
   step, but no verified trace harness composes repeated executable calls. The
   ADR and this plan state that boundary rather than claiming Verus checked the
-  composition (D25). The proof files total 607 lines against the 450-line
-  escalation tolerance; the overrun is recorded for ratification, not hidden.
+  composition (D25). The four proof files — the entry point, specification,
+  lemmas, and witnesses — total 620 lines against the 450-line escalation
+  tolerance; the overrun is recorded for ratification, not hidden.
 
 ## Decision log
 
@@ -1461,21 +1462,25 @@ section and in each ADR.
   outbound attempt first moved from a public resolver to TEST-NET-1
   (`192.0.2.1:53`, RFC 5737). A host route could still deliver that address, so
   D26 replaces it with a probe-owned listener.
-- **D26, 2026-11-23 (review repair, plan deviation recorded):** the canary's
-  outbound attempt targets a loopback listener the probe owns and passes in,
-  not a documentation address. The plan's control 4 said
-  `ENETUNREACH for an outbound connect`; inside the boundary the empty network
-  namespace now reports a refusal or unreachability, and the control accepts
-  either. This keeps the plan's constraint that offline probes contact only
-  listeners they create, at the cost of a plan wording change that awaits the
-  sponsor's ratification. A host whose isolation failed connects to the probe's
-  own listener, which is an observation failure.
+- **D26, 2026-11-23 (review repair, plan deviations recorded):** two plan
+  wordings change, both awaiting the sponsor's ratification. First, the
+  canary's outbound attempt targets a loopback listener the probe owns and
+  passes in, not a documentation address, so the probe contacts nothing it does
+  not own. Control 4 and AC1 both said `ENETUNREACH for an outbound connect`;
+  inside the boundary the empty network namespace reports a refusal or
+  unreachability, because a loopback route exists even with `lo` down, and both
+  the canary and the offline cell accept either. Second, the supervisor
+  compares the job's network-namespace link target with its own, so a shared or
+  unobserved namespace fails the control independently of the connection
+  result; a host firewall that refused the probe's listener would otherwise
+  look like isolation. A host whose isolation failed normally connects to the
+  probe's own listener, which is also an observation failure.
 - **D25, 2026-11-23 (review repair, tolerance breach recorded):** the capture
   proof's whole-stream property is a manual composition. The executable
   `Capture::feed` contract is checked per call, and the model's `fold_at`
   theorem is checked over every finite chunk sequence; no verified trace
   harness composes repeated executable calls. The ADR states that boundary. The
-  three proof files total 607 lines against the plan's 450-line escalation
+  four proof files total 620 lines against the plan's 450-line escalation
   tolerance, so the overrun is recorded for ratification, as D20 records the
   code-size breach. No proof clause was removed to meet the tolerance.
 - **D22, 2026-11-22 (rebase repair):** the supervisor samples the job's
@@ -1504,11 +1509,11 @@ section and in each ADR.
   8,500 net lines and 55 files, or direct a reduction. The work continues under
   the user's explicit completion directive, and the overrun is reported for
   post-hoc ratification, as 1.2.2 and 1.2.3 were. No control has been weakened
-  to save lines. Final measurement against `5447c62`, excluding this plan and
-  the reviewed snapshot: 9,249 net code lines in 59 files (the classification
-  counts `Makefile`, the feature file, `tests/**/*.rs`, `verus/*.rs`, and
-  `scripts/*.py` as code); documentation 9 files and 486 net lines; one
-  snapshot of 60 lines.
+  to save lines. Final measurement against `5447c62` at head `6cd33bd`,
+  excluding this plan and the reviewed snapshot: 9,696 net code lines in 60
+  files (the classification counts `Makefile`, the feature file,
+  `tests/**/*.rs`, `verus/*.rs`, and `scripts/*.py` as code); documentation 9
+  files and 492 net lines; one snapshot of 60 lines.
 
 ## Outcomes & retrospective
 

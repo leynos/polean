@@ -116,6 +116,25 @@ pub(super) fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
             .all(|byte| *byte == super::hostile::output::FLOOD_BYTE),
         "the supervisor must keep the whole flood unchanged"
     );
+    // After the flood comes the child's attempt line and libtest's own
+    // summary, so the complete retained stream is checked, not just its head.
+    let expect_tail = format!(
+        "\npolean-hostile attempt stdout wrote {}",
+        super::hostile::output::FLOOD_BYTES
+    );
+    let tail = run
+        .stdout
+        .get(offset + start.len() + super::hostile::output::FLOOD_BYTES..)
+        .ok_or_else(|| "the kept output ends inside the flood".to_owned())?;
+    let after_flood = String::from_utf8_lossy(tail);
+    check!(
+        after_flood.starts_with(&expect_tail),
+        "the attempt line must follow the flood, got {after_flood:?}"
+    );
+    check!(
+        after_flood.contains("test result: ok"),
+        "libtest's summary must be retained after the attempt line, got {after_flood:?}"
+    );
     check!(
         !run.bounds.contains(Bound::Stdout),
         "the lifted cap must not trip"

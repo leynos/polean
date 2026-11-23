@@ -79,14 +79,21 @@ fn platform_reports_ready(state: &BoundaryState) -> Result<(), String> {
 fn platform_report() -> Result<PlatformReport, String> {
     let probe = super::Probe::new("boundary-bdd-canary")?;
     let limits = RequestedLimits::default();
-    let (run, report) = probe.canary(&limits)?;
-    super::super::supervisor::require_outcome(&run, &super::super::outcome::Outcome::Completed)?;
-    Ok(check(&Check {
-        programs: probe.programs(),
-        runtime_dir: probe.runtime_dir(),
-        canary: Ok(&report),
-        limits: &limits,
-    }))
+    Ok(super::super::platform::readiness(
+        probe.programs(),
+        probe.runtime_dir(),
+        &limits,
+        || match probe.canary(&limits) {
+            Ok((run, report)) => {
+                super::super::supervisor::require_outcome(
+                    &run,
+                    &super::super::outcome::Outcome::Completed,
+                )?;
+                Ok(report)
+            }
+            Err(reason) => Err(reason),
+        },
+    ))
 }
 
 /// The report recorded by the readiness given step.

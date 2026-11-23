@@ -185,6 +185,67 @@ impl PlatformReport {
     }
 }
 
+/// Decide the platform report, running the canary only after the controls that
+/// need no job are satisfied.
+///
+/// Presence, manager, and delegation failures are reported together and the
+/// canary closure is not called, so a missing program starts nothing. Once
+/// those controls hold, the closure's result (success or failure) is folded
+/// into the same report, so every path returns one aggregate verdict.
+pub fn readiness(
+    programs: &Programs,
+    runtime_dir: &Path,
+    limits: &RequestedLimits,
+    canary: impl FnOnce() -> Result<CanaryReport, String>,
+) -> PlatformReport {
+    let presence = check(&Check {
+        programs,
+        runtime_dir,
+        canary: Err("the canary has not run".to_owned()),
+        limits,
+    });
+    complete(presence, limits, canary)
+}
+
+/// Fold a canary result into a presence report.
+///
+/// The canary closure is called only when every control that needs no job is
+/// available. A canary failure becomes the two canary controls' reason, so the
+/// returned report always accounts for all five controls.
+#[must_use]
+pub fn complete(
+    presence: PlatformReport,
+    limits: &RequestedLimits,
+    canary: impl FnOnce() -> Result<CanaryReport, String>,
+) -> PlatformReport {
+    let needs_job = presence.controls.iter().any(|(kind, availability)| {
+        !matches!(
+            kind,
+            ControlKind::CanaryIsolation | ControlKind::CanaryLimits
+        ) && !matches!(availability, Availability::Available)
+    });
+    if needs_job {
+        return presence;
+    }
+    let (isolation, canary_limits) = match canary() {
+        Ok(report) => evaluate_canary(&report, limits),
+        Err(reason) => {
+            let missing = Availability::Missing(format!("the canary did not run: {reason}"));
+            (missing.clone(), missing)
+        }
+    };
+    let mut controls = presence.controls;
+    controls.retain(|(kind, _)| {
+        !matches!(
+            kind,
+            ControlKind::CanaryIsolation | ControlKind::CanaryLimits
+        )
+    });
+    controls.push((ControlKind::CanaryIsolation, isolation));
+    controls.push((ControlKind::CanaryLimits, canary_limits));
+    PlatformReport { controls }
+}
+
 /// Run every control that can be observed without starting a job.
 ///
 /// The canary is supplied by the caller: it is a job, so it cannot be part of a
