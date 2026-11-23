@@ -50,7 +50,7 @@ permissions:
 # two forks sharing a branch name would cancel each other's runs. A push to
 # main is never cancelled, because it is the observation of what landed.
 concurrency:
-  group: toolchain-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  group: toolchain-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
