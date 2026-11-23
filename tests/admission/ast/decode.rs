@@ -201,12 +201,18 @@ const HEAD_VARIANTS: &[Variant] = &[
     ),
 ];
 
-/// Decode the module body.
-fn module(fields: Fields<'_>, source: &str) -> Result<Module, Fault> {
+/// Check the module's boolean and counter fields have the right JSON types.
+fn module_header(fields: Fields<'_>) -> Result<(), Fault> {
     as_boolean(fields.value("rego_v1")?)?;
     as_number(fields.value("num_expressions")?)?;
     as_number(fields.value("num_statements")?)?;
     as_number(fields.value("num_queries")?)?;
+    Ok(())
+}
+
+/// Decode the module body.
+fn module(fields: Fields<'_>, source: &str) -> Result<Module, Fault> {
+    module_header(fields)?;
     Ok(Module {
         package: package(object(fields.value("package")?, PACKAGE_FIELDS)?, source)?,
         imports: each(fields.value("imports")?, source, import)?,
