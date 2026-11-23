@@ -5,15 +5,7 @@
 //! and [`Probe::run_tool`] are the mechanism used by the canary, the negative
 //! controls, and the tests that have already established readiness.
 
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc,
-    },
-    thread,
-    time::Duration,
-};
+use std::sync::{Arc, atomic::AtomicBool};
 
 use super::{
     super::{
@@ -21,7 +13,7 @@ use super::{
         launch::{LaunchSpec, ReadOnlyBind},
         platform::PlatformReport,
         submit::{Submitted, submit as gate},
-        supervisor::{Job, Run, Supervisor},
+        supervisor::{Cancel, Job, Run, Supervisor},
     },
     Options,
     PROBE_INPUTS,
@@ -29,12 +21,21 @@ use super::{
     ToolJob,
 };
 
+/// A ready report and the marker that arms an explicit cancellation.
+#[derive(Clone, Copy)]
+pub struct Armed<'a> {
+    /// The platform report the submission is gated on.
+    pub report: &'a PlatformReport,
+    /// The marker that arms the cancellation once observed.
+    pub marker: &'a str,
+}
+
 /// Whether a job requires the scope observation and any cancellation request.
 struct RunRequest {
     /// Whether the scope join is required evidence.
     require_scope: bool,
     /// The cancellation request, when the caller supplies one.
-    cancel: Option<Arc<AtomicBool>>,
+    cancel: Option<Cancel>,
 }
 
 impl RunRequest {
@@ -47,7 +48,7 @@ impl RunRequest {
     }
 
     /// A hostile job with a cancellation request.
-    const fn cancelled(cancel: Arc<AtomicBool>) -> Self {
+    const fn cancelled(cancel: Cancel) -> Self {
         Self {
             require_scope: true,
             cancel: Some(cancel),
@@ -98,10 +99,12 @@ impl Probe {
         )
     }
 
-    /// Run one behaviour and request cancellation after `after`.
+    /// Run one behaviour and request cancellation once `marker` is observed.
     ///
-    /// The request is delivered while the job is running, so the property is
-    /// the supervisor's explicit-cancellation path, not a pre-spawn refusal.
+    /// Arming on the marker rather than on elapsed time makes the order
+    /// deterministic: the request cannot be delivered before the job has
+    /// reported the state the test asserts. The job's deadline remains the
+    /// backstop if the marker never appears.
     ///
     /// # Errors
     ///
@@ -110,28 +113,17 @@ impl Probe {
         &self,
         behaviour: Behaviour,
         options: &Options,
-        after: Duration,
+        marker: &str,
     ) -> Result<Run, String> {
-        let cancel = Arc::new(AtomicBool::new(false));
-        let flag = Arc::clone(&cancel);
-        let (stop, stopped) = mpsc::channel();
-        let timer = thread::spawn(move || {
-            if stopped.recv_timeout(after).is_err() {
-                flag.store(true, Ordering::Relaxed);
-            }
-        });
-        let run = self.execute(
+        let cancel = Cancel {
+            request: Arc::new(AtomicBool::new(false)),
+            marker: marker.to_owned(),
+        };
+        self.execute(
             self.spec(behaviour, options),
             options,
             RunRequest::cancelled(cancel),
-        );
-        if stop.send(()).is_err() {
-            // The timer has already fired and set the flag; nothing to stop.
-        }
-        timer
-            .join()
-            .map_err(|_| "the cancellation timer panicked".to_owned())?;
-        run
+        )
     }
 
     /// Run one prepared specification through the supervisor.
@@ -158,6 +150,41 @@ impl Probe {
         })
     }
 
+    /// Submit a cancellation probe, which arms only after `marker` is seen.
+    ///
+    /// # Errors
+    ///
+    /// Returns the supervisor's diagnostic when the platform is ready and the
+    /// job could not be observed.
+    pub fn submit_cancelled(
+        &self,
+        behaviour: Behaviour,
+        options: &Options,
+        armed: Armed<'_>,
+    ) -> Result<Submitted<Run>, String> {
+        gate(armed.report, || {
+            self.run_cancelled(behaviour, options, armed.marker)
+        })
+    }
+
+    /// Submit a non-hostile program under the selected boundary.
+    ///
+    /// The job starts only when `report` is ready; a missing control returns
+    /// the refusal and starts nothing.
+    ///
+    /// # Errors
+    ///
+    /// Returns the supervisor's diagnostic when the platform is ready and the
+    /// job could not be observed.
+    pub fn submit_tool(
+        &self,
+        tool: &ToolJob<'_>,
+        options: &Options,
+        report: &PlatformReport,
+    ) -> Result<Submitted<Run>, String> {
+        gate(report, || self.run_tool(tool, options))
+    }
+
     /// Run a non-hostile program under the selected boundary.
     ///
     /// The tool's own binds are added to the input snapshot bind, and the
@@ -167,7 +194,7 @@ impl Probe {
     ///
     /// Returns a diagnostic when the tool's specification is invalid or the job
     /// could not be observed.
-    pub fn run_tool(&self, tool: &ToolJob<'_>, options: &Options) -> Result<Run, String> {
+    pub(super) fn run_tool(&self, tool: &ToolJob<'_>, options: &Options) -> Result<Run, String> {
         let mut binds = tool.binds.clone();
         binds.push(ReadOnlyBind {
             source: self.inputs.clone(),

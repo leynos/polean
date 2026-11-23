@@ -56,7 +56,7 @@ mod reader;
 mod run;
 mod teardown;
 mod wait;
-pub use self::job::{Job, Run};
+pub use self::job::{Cancel, Job, Run};
 pub(crate) use self::wait::retain_seen;
 use self::{
     reader::{Readers, drain_readers, finish_readers, readers},
@@ -207,7 +207,7 @@ impl Supervisor<'_> {
             cgroup: cgroup.as_deref(),
             clock,
             readers: &readers,
-            cancel: job.cancel.as_deref(),
+            cancel: job.cancel.as_ref().map(|cancel| cancel.request.as_ref()),
         })?;
         let (report, status, errors) = tear_down(Inputs {
             child: &mut child,

@@ -7,9 +7,12 @@
 //! tripped exactly when the stream is longer than the cap.
 //!
 //! Both functions recur on the chunk count, so the model's step is the same
-//! shape as the kernel's: one chunk appended to the previous prefix. That is
-//! what lets the induction in `verus/boundary_capture_lemmas.rs` lift the
-//! kernel's per-call contract to every finite stream.
+//! shape as the kernel's: one chunk appended to the previous prefix. The
+//! lemmas in `verus/boundary_capture_lemmas.rs` prove the model theorem for
+//! every finite stream, and the kernel's `feed` is checked against one model
+//! step. The step from repeated `feed` calls to the fold is a manual
+//! composition of those two checked results; no verified trace harness
+//! performs it.
 //!
 //! These definitions name no executable function. They are the model the proof
 //! reasons about, so executable code that agreed with itself could not make the

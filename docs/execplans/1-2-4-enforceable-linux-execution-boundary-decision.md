@@ -595,9 +595,9 @@ The platform check reports five controls, each `Available` or `Missing(reason)`:
    `cgroup.subtree_control`.
 4. **Canary isolation:** a canary run through the full chain prints the run's
    nonce and reports `NoNewPrivs: 1`, `CapEff: 0`, a single loopback interface,
-   `ENETUNREACH` for an outbound connect, and only standard descriptors. A
-   `bwrap` set-up failure, such as AppArmor refusing the user namespace, lands
-   here with its message.
+   a refused or unreachable connection to a loopback listener the probe owns,
+   and only standard descriptors. A `bwrap` set-up failure, such as AppArmor
+   refusing the user namespace, lands here with its message.
 5. **Canary limits:** while the canary's scope is active, `memory.max`,
    `memory.swap.max`, and `pids.max` read back the requested values. systemd
    accepts limits it cannot apply, so this read-back is the only evidence that
@@ -1462,6 +1462,15 @@ section and in each ADR.
   a public resolver. The expected `Network is unreachable` is unchanged inside
   the boundary; on a host whose isolation failed the connection times out
   without contacting a service the probe does not own.
+- **D26, 2026-11-23 (review repair, plan deviation recorded):** the canary's
+  outbound attempt targets a loopback listener the probe owns and passes in,
+  not a documentation address. The plan's control 4 said
+  `ENETUNREACH for an outbound connect`; inside the boundary the empty network
+  namespace now reports a refusal or unreachability, and the control accepts
+  either. This keeps the plan's constraint that offline probes contact only
+  listeners they create, at the cost of a plan wording change that awaits the
+  sponsor's ratification. A host whose isolation failed connects to the probe's
+  own listener, which is an observation failure.
 - **D25, 2026-11-23 (review repair, tolerance breach recorded):** the capture
   proof's whole-stream property is a manual composition. The executable
   `Capture::feed` contract is checked per call, and the model's `fold_at`

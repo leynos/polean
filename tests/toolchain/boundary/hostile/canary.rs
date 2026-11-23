@@ -14,26 +14,24 @@ use std::{
     time::Duration,
 };
 
-use super::report;
+use super::{Targets, report};
 use crate::ambient;
-
-/// The outbound address the canary tries; a literal, so no resolver is needed.
-///
-/// This is TEST-NET-1 (RFC 5737), reserved for documentation and not routed on
-/// the public internet. Inside the boundary the empty network namespace reports
-/// `Network is unreachable`; on a host whose isolation failed, the connection
-/// times out without reaching any service the probe does not own.
-const OUTBOUND: &str = "192.0.2.1:53";
 
 /// How long the outbound attempt may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Report the canary's observations.
 ///
+/// The outbound attempt targets the probe-owned loopback listener the probe
+/// passed as `polean-target=tcp:<address>`. Inside the empty network namespace
+/// the connection is refused; on a host whose isolation failed it reaches the
+/// probe's own listener, which is an observation failure rather than a third
+/// party being contacted.
+///
 /// # Errors
 ///
-/// Returns a diagnostic when `/proc` cannot be read.
-pub fn run() -> Result<(), String> {
+/// Returns a diagnostic when `/proc` cannot be read or the target is missing.
+pub fn run(targets: &Targets) -> Result<(), String> {
     let status = ambient::read_to_string(Path::new("/proc/self/status"))
         .map_err(|error| format!("cannot read /proc/self/status: {error}"))?;
     field("nonewprivs", status_field(&status, "NoNewPrivs"));
@@ -41,7 +39,7 @@ pub fn run() -> Result<(), String> {
     for name in interfaces()? {
         report(&format!("polean-canary iface {name}"));
     }
-    match outbound() {
+    match outbound(targets) {
         Ok(()) => report("polean-canary outbound connected"),
         Err(reason) => report(&format!("polean-canary outbound {reason}")),
     }
@@ -86,13 +84,20 @@ pub fn interfaces() -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-/// Try one outbound TCP connection; `Ok(())` means it reached the network.
+/// Try one outbound TCP connection to the probe-owned listener.
+///
+/// `Ok(())` means it reached the listener, which is the failure observation.
 ///
 /// # Errors
 ///
-/// Returns the connection error's text, which is the observation.
-pub fn outbound() -> Result<(), String> {
-    let address = OUTBOUND
+/// Returns the connection error's text, which is the observation, or a
+/// diagnostic when no target was supplied.
+pub fn outbound(targets: &Targets) -> Result<(), String> {
+    let target = targets
+        .tcp
+        .as_deref()
+        .ok_or_else(|| "the canary has no outbound target".to_owned())?;
+    let address = target
         .parse::<SocketAddr>()
         .map_err(|error| format!("the outbound address is invalid: {error}"))?;
     match TcpStream::connect_timeout(&address, CONNECT_TIMEOUT) {

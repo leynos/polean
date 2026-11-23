@@ -89,16 +89,25 @@ fn platform_report() -> Result<PlatformReport, String> {
     }))
 }
 
+/// The report recorded by the readiness given step.
+fn report(state: &BoundaryState) -> Result<PlatformReport, String> {
+    state
+        .platform
+        .with_ref(Clone::clone)
+        .ok_or_else(|| "the platform report was not recorded".to_owned())
+}
+
 /// The probe creates its host listeners as part of the offline behaviour.
 #[given("the probe listens on a loopback port, an abstract socket, and a socket file")]
 fn probe_listens(_state: &BoundaryState) {}
 
 /// The hostile job tries every listener.
 #[when("a hostile job tries to connect to each of them")]
-fn hostile_job_connects(state: &BoundaryState) {
+fn hostile_job_connects(state: &BoundaryState) -> Result<(), String> {
     state
         .behaviour
-        .set(bubblewrap::host_listeners_are_unreachable());
+        .set(bubblewrap::host_listeners_are_unreachable(&report(state)?));
+    Ok(())
 }
 
 /// Every connection attempt failed.
@@ -115,10 +124,13 @@ fn only_standard_descriptors(state: &BoundaryState) -> Result<(), String> { beha
 
 /// A job allocates above its memory limit.
 #[when("a job allocates 256 MiB under a 64 MiB limit")]
-fn job_allocates(state: &BoundaryState) {
+fn job_allocates(state: &BoundaryState) -> Result<(), String> {
     state
         .behaviour
-        .set(bubblewrap::memory_limit_kills_the_allocation());
+        .set(bubblewrap::memory_limit_kills_the_allocation(&report(
+            state,
+        )?));
+    Ok(())
 }
 
 /// The outcome names the memory limit.
@@ -131,10 +143,11 @@ fn control_group_is_empty(state: &BoundaryState) -> Result<(), String> { behavio
 
 /// A job floods standard output.
 #[when("a job writes 2 MiB to standard output under a 1 MiB cap")]
-fn job_floods(state: &BoundaryState) {
+fn job_floods(state: &BoundaryState) -> Result<(), String> {
     state
         .behaviour
-        .set(bubblewrap::output_cap_stops_the_flood());
+        .set(bubblewrap::output_cap_stops_the_flood(&report(state)?));
+    Ok(())
 }
 
 /// The outcome names the output limit.
@@ -151,10 +164,11 @@ fn job_has_escapee(_state: &BoundaryState) {}
 
 /// The job's deadline expires.
 #[when("the job's deadline expires")]
-fn deadline_expires(state: &BoundaryState) {
+fn deadline_expires(state: &BoundaryState) -> Result<(), String> {
     state
         .behaviour
-        .set(bubblewrap::deadline_reaches_the_escapee());
+        .set(bubblewrap::deadline_reaches_the_escapee(&report(state)?));
+    Ok(())
 }
 
 /// The outcome names the deadline.
@@ -163,10 +177,11 @@ fn outcome_names_deadline(state: &BoundaryState) -> Result<(), String> { behavio
 
 /// A job writes to every forbidden path.
 #[when("a job writes to its scratch area, the root, its inputs, and a host path")]
-fn job_writes_everywhere(state: &BoundaryState) {
+fn job_writes_everywhere(state: &BoundaryState) -> Result<(), String> {
     state
         .behaviour
-        .set(bubblewrap::job_writes_only_to_scratch());
+        .set(bubblewrap::job_writes_only_to_scratch(&report(state)?));
+    Ok(())
 }
 
 /// Only the scratch write succeeded.

@@ -99,8 +99,8 @@ iterating, so a failure is attributable to one gate. Do not run these
 concurrently: the build cache serializes better sequentially, and concurrent
 gate runs interleave their output. `make verus` is a proof check, not part of
 that loop or of `make all`; run it when the recognizer kernel, the settlement
-decision, or either proof's specification or lemmas change. It runs both entry
-points and then replays the fifteen negative controls. CI runs it through
+decision, or either proof's specification or lemmas change. It runs all three
+entry points and then replays the nineteen negative controls. CI runs it through
 `.github/workflows/proofs.yml` on GitHub-hosted runners, installing Verus and
 Z3 only through the shared `install-prover-tools` action, on pull requests and
 pushes that touch the proofs and weekly.
@@ -281,17 +281,18 @@ control requires a non-zero Verus exit, an error, and the expected output
 substrings, and each substring is searched for independently over the combined
 output. A passing control shows that its edit was detected and that the
 expected failure kind and source path appear somewhere; it does not show that
-the intended obligation rejected the defect. Both are on-demand: `make all` and
-CI do not need a solver, a network connection, or several gigabytes of disk for
-Verus. The recognizer proof establishes the kernel's byte-level soundness for
-sources of any length. Its completeness result is stated only for a
-canonical-token predicate, which is a sufficient condition for a successful
-recognition rather than a characterization of every input it accepts. The
-settlement proof establishes what acceptance means for a report settlement is
-given; it does not establish that the worker told the truth. Neither proof
-establishes that the AST walk maps Regorus faithfully, that the renderer
-chooses the right tokens, or that Rego means what the model means. Those remain
-tested or open as the record describes.
+the intended obligation rejected the defect. `make verus` is on-demand:
+`make all` needs no solver, network connection, or several gigabytes of disk
+for Verus, while the separate proofs workflow runs the same target in CI. The
+recognizer proof establishes the kernel's byte-level soundness for sources of
+any length. Its completeness result is stated only for a canonical-token
+predicate, which is a sufficient condition for a successful recognition rather
+than a characterization of every input it accepts. The settlement proof
+establishes what acceptance means for a report settlement is given; it does not
+establish that the worker told the truth. Neither proof establishes that the
+AST walk maps Regorus faithfully, that the renderer chooses the right tokens,
+or that Rego means what the model means. Those remain tested or open as the
+record describes.
 
 ## The execution-boundary probe (1.2.4)
 
@@ -313,13 +314,14 @@ rather than running without isolation.
 
 The pieces:
 
-- `capture/mod.rs` is the bounded stream kernel, verified by
-  `verus/boundary_capture.rs` over every finite chunk sequence. `outcome.rs`
-  classifies a job and decides the fail-closed platform verdict. `launch/`
-  builds and checks the systemd and bubblewrap argument vectors; `platform/`
-  observes the five enforcement controls; `scope/` and `supervisor/` run a job
-  and tear it down; `process.rs` bounds every control subprocess; `canary.rs`
-  parses the canary's report.
+- `capture/mod.rs` is the bounded stream kernel: `Capture::feed` is verified
+  against one model step, and the whole-stream theorem over every finite chunk
+  sequence is proved for the model and composed with the per-call contract by a
+  manual argument. `outcome.rs` classifies a job and decides the fail-closed
+  platform verdict. `launch/` builds and checks the systemd and bubblewrap
+  argument vectors; `platform/` observes the five enforcement controls;
+  `scope/` and `supervisor/` run a job and tear it down; `process.rs` bounds
+  every control subprocess; `canary.rs` parses the canary's report.
 - `hostile/` is the child the probes re-execute. One ignored test is the entry
   point, selected by the `polean-hostile=<behaviour>:<nonce>` argument token,
   so an accidental `--ignored` run of the whole binary starts nothing. Its

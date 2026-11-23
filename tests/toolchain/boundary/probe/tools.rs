@@ -18,6 +18,7 @@ use super::{
     super::{
         launch::ReadOnlyBind,
         outcome::{ExitForm, Outcome},
+        platform::PlatformReport,
         supervisor::{Boundary, Run, require_outcome},
     },
     Options,
@@ -165,7 +166,12 @@ struct Query<'a> {
 /// # Errors
 ///
 /// Returns a diagnostic when the job could not be observed.
-fn opa_inside(probe: &Probe, opa: &Path, query: &Query<'_>) -> Result<Run, String> {
+fn opa_inside(
+    probe: &Probe,
+    opa: &Path,
+    query: &Query<'_>,
+    report: &PlatformReport,
+) -> Result<Run, String> {
     let tool = ToolJob {
         host_program: opa,
         sandbox_program: OPA,
@@ -189,7 +195,9 @@ fn opa_inside(probe: &Probe, opa: &Path, query: &Query<'_>) -> Result<Run, Strin
     let options = Options::new(Boundary::Bubblewrap)
         .memory(256 * 1024 * 1024)
         .deadline(Duration::from_secs(30));
-    probe.run_tool(&tool, &options)
+    probe
+        .submit_tool(&tool, &options, report)?
+        .require("the OPA probe")
 }
 
 /// Pinned OPA decides the same Booleans inside and outside the boundary.
@@ -197,6 +205,7 @@ fn opa_inside(probe: &Probe, opa: &Path, query: &Query<'_>) -> Result<Run, Strin
 #[ignore = "run by make boundary-probe; needs make tools and starts supervised jobs"]
 fn opa_decides_the_same_inside_and_outside() -> Result<(), String> {
     let opa = pinned_opa()?;
+    let report = super::ready_report("boundary-tools-opa-gate")?;
     let probe = Probe::new("boundary-tools-opa")?;
     let source = baseline_source_path();
     let inside_policy = copy_input(&probe, &source, "policy.rego")?;
@@ -237,6 +246,7 @@ fn opa_decides_the_same_inside_and_outside() -> Result<(), String> {
                 request: &inside_request,
                 entry: ENTRY,
             },
+            &report,
         )?;
         require_outcome(&run, &Outcome::Completed)?;
         let inside = decided(&String::from_utf8_lossy(&run.stdout), ENTRY)?;
@@ -254,6 +264,7 @@ fn opa_decides_the_same_inside_and_outside() -> Result<(), String> {
 #[ignore = "run by make boundary-probe; needs make tools and starts supervised jobs"]
 fn opa_cannot_reach_a_host_listener() -> Result<(), String> {
     let opa = pinned_opa()?;
+    let report = super::ready_report("boundary-tools-http-gate")?;
     let probe = Probe::new("boundary-tools-http")?;
     let (endpoints, watchers) = listeners::listen(probe.nonce())?;
     let port = endpoints
@@ -272,6 +283,7 @@ fn opa_cannot_reach_a_host_listener() -> Result<(), String> {
             request: &request,
             entry: "data.probe.http.allow",
         },
+        &report,
     )?;
     watchers.require_silent()?;
     check!(
@@ -307,6 +319,7 @@ fn opa_cannot_reach_a_host_listener() -> Result<(), String> {
 #[ignore = "run by make boundary-probe; needs make tools and starts supervised jobs"]
 fn lean_checks_the_smoke_module() -> Result<(), String> {
     let root = pinned_lean()?;
+    let report = super::ready_report("boundary-tools-lean-gate")?;
     let probe = Probe::new("boundary-tools-lean")?;
     let smoke = repository_path("lean/PoleanSmoke.lean");
     let smoke_text = ambient::read_to_string(&smoke)
@@ -328,7 +341,9 @@ fn lean_checks_the_smoke_module() -> Result<(), String> {
         .memory(2_147_483_648)
         .scratch(64 * 1024 * 1024)
         .deadline(Duration::from_secs(60));
-    let run = probe.run_tool(&tool, &options)?;
+    let run = probe
+        .submit_tool(&tool, &options, &report)?
+        .require("the Lean probe")?;
     let stderr = String::from_utf8_lossy(&run.stderr);
     check!(
         !stderr.contains("error"),

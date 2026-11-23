@@ -15,7 +15,7 @@ use super::{
     super::{
         hostile::Behaviour,
         outcome::{Bound, Outcome, Verdict},
-        platform::{Check, RequestedLimits, check as platform_check},
+        platform::{Check, PlatformReport, RequestedLimits, check as platform_check},
         supervisor::{Boundary, Run, require_outcome},
     },
     Options,
@@ -38,7 +38,8 @@ fn limits() -> RequestedLimits { RequestedLimits::default() }
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
 fn host_listeners_are_unreachable_inside_the_boundary() -> Result<(), String> {
-    host_listeners_are_unreachable()
+    let report = super::ready_report("boundary-gate-offline")?;
+    host_listeners_are_unreachable(&report)
 }
 
 /// The offline property, for the feature scenario.
@@ -46,7 +47,7 @@ fn host_listeners_are_unreachable_inside_the_boundary() -> Result<(), String> {
 /// The scenario runs the same behaviour beside its negative control, so a
 /// scenario pass cannot come from a job that would fail to notice the property
 /// at all (plan E1 to E5).
-pub(super) fn host_listeners_are_unreachable() -> Result<(), String> {
+pub(super) fn host_listeners_are_unreachable(report: &PlatformReport) -> Result<(), String> {
     super::unconfined::host_listeners_are_reachable_without_the_boundary()?;
     let probe = Probe::new("boundary-bubblewrap-offline")?;
     let (endpoints, watchers) = listeners::listen(probe.nonce())?;
@@ -54,7 +55,9 @@ pub(super) fn host_listeners_are_unreachable() -> Result<(), String> {
         .deadline(Duration::from_secs(10))
         .targets(endpoints.targets())
         .target(format!("polean-target=marker:{}", probe.nonce()));
-    let run = probe.run(Behaviour::Offline, &options)?;
+    let run = probe
+        .submit(Behaviour::Offline, &options, report)?
+        .require("the offline probe")?;
     let stdout = started(&run, &probe)?;
     let tcp = attempt(&stdout, "tcp")?;
     // A loopback address has a route inside an empty network namespace, so the
@@ -84,13 +87,14 @@ pub(super) fn host_listeners_are_unreachable() -> Result<(), String> {
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
 fn the_memory_limit_kills_the_allocation() -> Result<(), String> {
-    memory_limit_kills_the_allocation()
+    let report = super::ready_report("boundary-gate-memory")?;
+    memory_limit_kills_the_allocation(&report)
 }
 
 /// The allocation property, for the feature scenario.
-pub(super) fn memory_limit_kills_the_allocation() -> Result<(), String> {
+pub(super) fn memory_limit_kills_the_allocation(report: &PlatformReport) -> Result<(), String> {
     super::unconfined::the_allocation_completes_without_a_memory_limit()?;
-    memory_kill("boundary-bubblewrap-memory", "allocate", None)
+    memory_kill("boundary-bubblewrap-memory", "allocate", None, report)
 }
 
 /// A scratch fill larger than the memory limit is killed by the memory limit,
@@ -98,16 +102,23 @@ pub(super) fn memory_limit_kills_the_allocation() -> Result<(), String> {
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
 fn the_scratch_fill_is_killed_by_the_memory_limit() -> Result<(), String> {
+    let report = super::ready_report("boundary-gate-scratch")?;
     super::unconfined::the_allocation_completes_without_a_memory_limit()?;
     memory_kill(
         "boundary-bubblewrap-scratch-oom",
         "fill",
         Some(128 * 1024 * 1024),
+        &report,
     )
 }
 
 /// Run one memory behaviour and require the out-of-memory kill.
-fn memory_kill(probe_name: &str, mode: &str, scratch: Option<u64>) -> Result<(), String> {
+fn memory_kill(
+    probe_name: &str,
+    mode: &str,
+    scratch: Option<u64>,
+    report: &PlatformReport,
+) -> Result<(), String> {
     let probe = Probe::new(probe_name)?;
     let mut options = Options::new(Boundary::Bubblewrap)
         .memory(limits().memory_bytes)
@@ -116,7 +127,9 @@ fn memory_kill(probe_name: &str, mode: &str, scratch: Option<u64>) -> Result<(),
     if let Some(bytes) = scratch {
         options = options.scratch(bytes);
     }
-    let run = probe.run(Behaviour::Memory, &options)?;
+    let run = probe
+        .submit(Behaviour::Memory, &options, report)?
+        .require("the memory probe")?;
     let stdout = started(&run, &probe)?;
     let marker = if mode == "fill" { "scratch" } else { "memory" };
     let _starting = attempt_containing(&stdout, marker, "starting")?;
@@ -138,16 +151,21 @@ fn require_memory_kill(run: &Run) -> Result<(), String> {
 /// A flood past the output cap stops the job and keeps exactly the cap.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn the_output_cap_stops_the_flood() -> Result<(), String> { output_cap_stops_the_flood() }
+fn the_output_cap_stops_the_flood() -> Result<(), String> {
+    let report = super::ready_report("boundary-gate-output")?;
+    output_cap_stops_the_flood(&report)
+}
 
 /// The output property, for the feature scenario.
-pub(super) fn output_cap_stops_the_flood() -> Result<(), String> {
+pub(super) fn output_cap_stops_the_flood(report: &PlatformReport) -> Result<(), String> {
     super::unconfined::the_flood_is_kept_whole_without_the_cap()?;
     let probe = Probe::new("boundary-bubblewrap-output")?;
     let options = Options::new(Boundary::Bubblewrap)
         .deadline(Duration::from_secs(15))
         .stdout_cap(1024 * 1024);
-    let run = probe.run(Behaviour::Output, &options)?;
+    let run = probe
+        .submit(Behaviour::Output, &options, report)?
+        .require("the output probe")?;
     drop(started(&run, &probe)?);
     require_outcome(&run, &Outcome::BoundsExhausted(vec![Bound::Stdout]))?;
     let cap = 1024 * 1024;
@@ -184,14 +202,19 @@ pub(super) fn output_cap_stops_the_flood() -> Result<(), String> {
 /// namespace, and the cgroup is empty afterwards.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn a_deadline_reaches_the_escapee() -> Result<(), String> { deadline_reaches_the_escapee() }
+fn a_deadline_reaches_the_escapee() -> Result<(), String> {
+    let report = super::ready_report("boundary-gate-deadline")?;
+    deadline_reaches_the_escapee(&report)
+}
 
 /// The cancellation property, for the feature scenario.
-pub(super) fn deadline_reaches_the_escapee() -> Result<(), String> {
+pub(super) fn deadline_reaches_the_escapee(report: &PlatformReport) -> Result<(), String> {
     super::unconfined::an_escapee_outlives_the_process_group_kill()?;
     let probe = Probe::new("boundary-bubblewrap-escapee")?;
     let options = Options::new(Boundary::Bubblewrap).deadline(Duration::from_millis(1500));
-    let run = probe.run(Behaviour::Escapee, &options)?;
+    let run = probe
+        .submit(Behaviour::Escapee, &options, report)?
+        .require("the deadline probe")?;
     let stdout = started(&run, &probe)?;
     let line = attempt(&stdout, "escapee")?;
     check!(
@@ -215,9 +238,20 @@ pub(super) fn deadline_reaches_the_escapee() -> Result<(), String> {
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
 fn a_cancellation_request_reaches_the_escapee() -> Result<(), String> {
+    let report = super::ready_report("boundary-gate-cancel")?;
     let probe = Probe::new("boundary-bubblewrap-cancel")?;
     let options = Options::new(Boundary::Bubblewrap).deadline(Duration::from_secs(20));
-    let run = probe.run_cancelled(Behaviour::Escapee, &options, Duration::from_millis(600))?;
+    let marker = format!("{} attempt escapee started", super::hostile::REPORT_PREFIX);
+    let run = probe
+        .submit_cancelled(
+            Behaviour::Escapee,
+            &options,
+            super::run::Armed {
+                report: &report,
+                marker: &marker,
+            },
+        )?
+        .require("the cancellation probe")?;
     let stdout = started(&run, &probe)?;
     let line = attempt(&stdout, "escapee")?;
     check!(
@@ -238,10 +272,13 @@ fn a_cancellation_request_reaches_the_escapee() -> Result<(), String> {
 /// host, and a fill past `--size` fails with `ENOSPC`.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn the_job_writes_only_to_its_scratch_area() -> Result<(), String> { job_writes_only_to_scratch() }
+fn the_job_writes_only_to_its_scratch_area() -> Result<(), String> {
+    let report = super::ready_report("boundary-gate-storage")?;
+    job_writes_only_to_scratch(&report)
+}
 
 /// The storage property, for the feature scenario.
-pub(super) fn job_writes_only_to_scratch() -> Result<(), String> {
+pub(super) fn job_writes_only_to_scratch(report: &PlatformReport) -> Result<(), String> {
     super::unconfined::the_job_writes_into_a_host_directory_without_the_boundary()?;
     let probe = Probe::new("boundary-bubblewrap-storage")?;
     let host = probe.scratch_path().join("hostdir");
@@ -255,7 +292,9 @@ pub(super) fn job_writes_only_to_scratch() -> Result<(), String> {
             host.join("marker").display()
         ))
         .target(format!("polean-target=marker:{}", probe.nonce()));
-    let run = probe.run(Behaviour::Storage, &options)?;
+    let run = probe
+        .submit(Behaviour::Storage, &options, report)?
+        .require("the storage probe")?;
     let stdout = started(&run, &probe)?;
     check_eq!(
         attempt(&stdout, "scratch")?,
@@ -318,8 +357,8 @@ pub(super) fn platform_is_ready() -> Result<(), String> {
         .unwrap_or_default()
         .to_owned();
     check!(
-        outbound.contains("Network is unreachable"),
-        "the outbound attempt must be unreachable, got {outbound:?}"
+        outbound.contains("Connection refused") || outbound.contains("Network is unreachable"),
+        "the outbound attempt must be refused or unreachable, got {outbound:?}"
     );
     check_eq!(
         report.descriptors,

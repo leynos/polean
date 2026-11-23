@@ -23,6 +23,7 @@ use super::{
         capture::Capture,
         outcome::{Bound, Bounds},
     },
+    Cancel,
     Job,
 };
 
@@ -35,6 +36,8 @@ struct Signals {
     trips: Sender<Bound>,
     /// The delivered bytes.
     done: Sender<Drained>,
+    /// The cancellation request this stream arms, when it carries the marker.
+    arm: Option<Cancel>,
 }
 
 /// What one drained stream delivered.
@@ -60,6 +63,30 @@ pub(super) struct Readers {
     handles: [JoinHandle<()>; 2],
 }
 
+/// Request cancellation once the chunk carries the arming marker.
+///
+/// The marker is matched across a chunk boundary by searching the capture's
+/// kept bytes, which hold every byte up to the cap. A marker longer than the
+/// cap could not be observed, so the request would never be armed and the job
+/// would end at its deadline instead; the cancellation probe uses a short
+/// marker and asserts the cancelled bound, so that case fails rather than
+/// passing silently.
+fn arm(request: Option<&Cancel>, chunk: &[u8]) {
+    let Some(cancel) = request else {
+        return;
+    };
+    if cancel.request.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let marker = cancel.marker.as_bytes();
+    let found = chunk.windows(marker.len()).any(|window| window == marker);
+    if found {
+        cancel
+            .request
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// Start one bounded reader per stream.
 pub(super) fn readers(child: &mut Child, job: &Job) -> Result<Readers, String> {
     let (trip_sender, trips) = channel();
@@ -80,6 +107,7 @@ pub(super) fn readers(child: &mut Child, job: &Job) -> Result<Readers, String> {
         Signals {
             trips: trip_sender.clone(),
             done: stdout_sender,
+            arm: job.cancel.clone(),
         },
     );
     let stderr_handle = drain(
@@ -89,6 +117,7 @@ pub(super) fn readers(child: &mut Child, job: &Job) -> Result<Readers, String> {
         Signals {
             trips: trip_sender,
             done: stderr_sender,
+            arm: None,
         },
     );
     Ok(Readers {
@@ -127,6 +156,7 @@ fn drain(
             };
             let chunk = buffer.get(..read).unwrap_or(&[]);
             capture.feed(chunk);
+            arm(signals.arm.as_ref(), chunk);
             if !record_trip(&capture, &signals.trips, bound, &mut signalled) {
                 break;
             }

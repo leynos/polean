@@ -35,7 +35,7 @@ use super::{
     canary,
     hostile::{self, Behaviour},
     launch::{LaunchSpec, ReadOnlyBind},
-    platform::{CanaryReport, Programs, RequestedLimits},
+    platform::{CanaryReport, PlatformReport, Programs, RequestedLimits},
     supervisor::{Boundary, Run},
 };
 use crate::{ambient, scratch::Scratch};
@@ -159,12 +159,31 @@ impl Probe {
     ///
     /// Returns the supervisor's diagnostic when the job could not be observed.
     pub fn canary(&self, limits: &RequestedLimits) -> Result<(Run, CanaryReport), String> {
+        // The canary's outbound attempt targets this listener, so the probe
+        // owns every endpoint it can reach: a failed isolation can only reach
+        // the probe itself.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .map_err(|error| format!("cannot bind the canary listener: {error}"))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|error| format!("cannot make the canary listener non-blocking: {error}"))?;
+        let address = listener
+            .local_addr()
+            .map_err(|error| format!("cannot read the canary listener address: {error}"))?;
         let options = Options::new(Boundary::Bubblewrap)
             .memory(limits.memory_bytes)
             .deadline(Duration::from_secs(10))
             .read_limits()
+            .target(format!("polean-target=tcp:{address}"))
             .target(format!("polean-target=marker:{}", self.nonce));
         let run = self.run(Behaviour::Canary, &options)?;
+        // A connection that arrived here is a failed isolation observation; the
+        // canary reports it as `connected`, and this listener corroborates it.
+        if listener.accept().is_ok() {
+            drop(listener);
+            return Err("the canary reached the probe's listener".to_owned());
+        }
+        drop(listener);
         let readback = run.limits.clone().unwrap_or_default();
         let mut report = canary::parse(
             &String::from_utf8_lossy(&run.stdout),
@@ -189,6 +208,35 @@ impl Probe {
         args.extend(targets.iter().cloned());
         args
     }
+}
+
+/// Run a canary on its own probe and require a ready platform report.
+///
+/// One canary per probe test costs about a second, and it means a selected
+/// job is submitted only after this host's controls were observed, not after a
+/// check some other test ran.
+///
+/// # Errors
+///
+/// Returns a diagnostic when the canary cannot run or a control is missing.
+pub(super) fn ready_report(label: &str) -> Result<PlatformReport, String> {
+    let probe = Probe::new(label)?;
+    let limits = RequestedLimits::default();
+    let (run, report) = probe.canary(&limits)?;
+    super::supervisor::require_outcome(&run, &super::outcome::Outcome::Completed)?;
+    let platform = super::platform::check(&super::platform::Check {
+        programs: probe.programs(),
+        runtime_dir: probe.runtime_dir(),
+        canary: Ok(&report),
+        limits: &limits,
+    });
+    if platform.verdict() != super::outcome::Verdict::Ready {
+        return Err(format!(
+            "the platform is not ready: {:?}",
+            platform.verdict()
+        ));
+    }
+    Ok(platform)
 }
 
 /// Require the child's start line, then return its output as text.

@@ -87,6 +87,25 @@ pub(super) fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
         line.starts_with("wrote 2097152"),
         "the flood must be written whole under the lifted cap, got {line:?}"
     );
+    // The marker alone would not show that the supervisor kept the bytes, so
+    // compare the retained stream: after the start line come exactly the flood
+    // bytes, then the attempt line.
+    let start = format!("{}\n", super::canary::start_line(probe.nonce()));
+    let offset = run
+        .stdout
+        .windows(start.len())
+        .position(|window| window == start.as_bytes())
+        .ok_or_else(|| "the kept output holds no start line".to_owned())?;
+    let flood = run
+        .stdout
+        .get(offset + start.len()..offset + start.len() + super::hostile::output::FLOOD_BYTES)
+        .ok_or_else(|| "the kept output is shorter than the flood".to_owned())?;
+    check!(
+        flood
+            .iter()
+            .all(|byte| *byte == super::hostile::output::FLOOD_BYTE),
+        "the supervisor must keep the whole flood unchanged"
+    );
     check!(
         !run.bounds.contains(Bound::Stdout),
         "the lifted cap must not trip"

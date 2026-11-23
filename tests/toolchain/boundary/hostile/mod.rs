@@ -294,7 +294,7 @@ pub fn attempt(name: &str, detail: &str) { report(&format!("attempt {name} {deta
 /// observation.
 pub fn run(request: &Request, targets: &Targets) -> Result<(), String> {
     match request.behaviour {
-        Behaviour::Canary => canary::run(),
+        Behaviour::Canary => canary::run(targets),
         Behaviour::Offline => offline::run(targets),
         Behaviour::Memory => memory::run(targets),
         Behaviour::Output => output::run(),

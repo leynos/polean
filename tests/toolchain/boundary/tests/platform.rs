@@ -173,7 +173,7 @@ fn leaked() -> CanaryReport {
 #[case::privileged(privileged, "NoNewPrivs")]
 #[case::capable(capable, "capabilities")]
 #[case::networked(networked, "interfaces")]
-#[case::connected(connected, "Network is unreachable")]
+#[case::connected(connected, "not refusal or unreachability")]
 #[case::leaked(leaked, "descriptors")]
 fn a_broken_isolation_control_names_its_reason(
     #[case] report: fn() -> CanaryReport,

@@ -79,12 +79,16 @@ fn loopback_only(report: &CanaryReport) -> Result<(), String> {
     ))
 }
 
-/// An outbound connection reported that the network is unreachable.
+/// An outbound connection to the probe-owned listener was refused or unreachable.
 fn outbound_unreachable(report: &CanaryReport) -> Result<(), String> {
     match report.outbound_error.as_deref() {
-        Some(error) if error.contains("Network is unreachable") => Ok(()),
+        Some(error)
+            if error.contains("Connection refused") || error.contains("Network is unreachable") =>
+        {
+            Ok(())
+        }
         other => Err(format!(
-            "an outbound connection reported {other:?}, not `Network is unreachable`"
+            "an outbound connection reported {other:?}, not refusal or unreachability"
         )),
     }
 }

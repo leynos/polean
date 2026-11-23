@@ -25,6 +25,24 @@ impl<T> Submitted<T> {
     /// Whether the submission was refused.
     #[must_use]
     pub const fn is_refused(&self) -> bool { matches!(self, Self::Refused(_)) }
+
+    /// Require a started job, turning a refusal into a diagnostic.
+    ///
+    /// A probe that claims an enforcement property calls this after `submit`:
+    /// a refusal means the host failed a control, so the property was not
+    /// observed and the probe must not read as a pass.
+    ///
+    /// # Errors
+    ///
+    /// Returns a diagnostic naming every missing control when refused.
+    pub fn require(self, context: &str) -> Result<T, String> {
+        match self {
+            Self::Ran(value) => Ok(value),
+            Self::Refused(missing) => Err(format!(
+                "{context}: the platform refused the job and started nothing: {missing:?}"
+            )),
+        }
+    }
 }
 
 /// Run `spawn` only when `report` is ready.

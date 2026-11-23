@@ -28,9 +28,9 @@ pub struct Job {
     pub deadline: Duration,
     /// Whether to read the scope's limit files while it is active.
     pub read_limits: bool,
-    /// A cancellation request the wait loop observes, when a caller supplies
-    /// one. The request stops the job and is recorded as `Bound::Cancelled`.
-    pub cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// A cancellation request, when a caller supplies one. The request stops
+    /// the job and is recorded as `Bound::Cancelled`.
+    pub cancel: Option<Cancel>,
     /// Whether the scope join is required evidence for this job.
     ///
     /// Hostile jobs require it: the probe's claim is that the job ran inside
@@ -40,6 +40,19 @@ pub struct Job {
     /// on the canary's proof of the same launch chain, and this flag records
     /// that choice rather than hiding it.
     pub require_scope: bool,
+}
+
+/// A cancellation request, armed only once the job has said it started.
+///
+/// Arming on the observed marker rather than on elapsed time makes the test
+/// order deterministic: the request cannot be delivered before the job has
+/// reported the state the test asserts.
+#[derive(Clone, Debug)]
+pub struct Cancel {
+    /// The flag the wait loop polls.
+    pub request: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// The marker that arms the request, matched in standard output.
+    pub marker: String,
 }
 
 /// One finished job.

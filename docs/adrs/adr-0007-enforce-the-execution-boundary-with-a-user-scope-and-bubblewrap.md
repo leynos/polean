@@ -130,13 +130,13 @@ The probe shows all five properties enforced on the probe host, each beside a
 negative control that shows the hostile behaviour succeeding without the
 boundary:
 
-| Property          | Selected boundary (observed)                                                                                               | Negative control (observed)                                          |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Offline execution | TCP refused; abstract and socket-file UNIX connections refused or absent; no listener recorded a connection; fds `[0,1,2]` | All three listeners accepted; the job held its standard streams only |
-| Memory limit      | Allocation and scratch fill both `oom-kill`, scope empty                                                                   | 256 MiB allocation completed under a lifted limit                    |
-| Output limit      | Exactly the first 1 MiB kept; job stopped                                                                                  | 2 MiB flood kept whole under a lifted cap                            |
-| Cancellation      | Deadline or explicit request named; escapee removed by the PID namespace; cgroup empty                                     | Escapee outlived the group kill; only `cgroup.kill` removed it       |
-| Private storage   | Only the scratch write succeeded; fill failed with `ENOSPC`; no host file                                                  | Marker written into the probe's host directory                       |
+| Property          | Selected boundary (observed)                                                                                                                                         | Negative control (observed)                                          |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Offline execution | TCP refused; abstract and socket-file UNIX connections refused or absent; no listener recorded a connection; the canary's probe-owned listener silent; fds `[0,1,2]` | All three listeners accepted; the job held its standard streams only |
+| Memory limit      | Allocation and scratch fill both `oom-kill`, scope empty                                                                                                             | 256 MiB allocation completed under a lifted limit                    |
+| Output limit      | Exactly the first 1 MiB kept; job stopped                                                                                                                            | 2 MiB flood kept whole under a lifted cap                            |
+| Cancellation      | Deadline or explicit request named; escapee removed by the PID namespace; cgroup empty                                                                               | Escapee outlived the group kill; only `cgroup.kill` removed it       |
+| Private storage   | Only the scratch write succeeded; fill failed with `ENOSPC`; no host file                                                                                            | Marker written into the probe's host directory                       |
 
 _Table 1: The probe's property matrix on the probe host._
 

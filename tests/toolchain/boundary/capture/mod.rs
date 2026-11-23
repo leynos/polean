@@ -17,11 +17,12 @@
 //!             value with "this chunk did not fit whole"
 //! ```
 //!
-//! The whole-stream property follows by induction over the chunk sequence and
-//! is stated in [`spec`]: after any finite stream, the kept bytes are exactly
-//! its first `min(cap, |stream|)` bytes and `tripped` holds exactly when the
-//! stream is longer than the cap. That induction is what the Verus entry point
-//! verifies; this file's `feed` is verified against one step of it.
+//! The whole-stream property is stated in [`spec`]: after any finite stream,
+//! the kept bytes are exactly its first `min(cap, |stream|)` bytes and
+//! `tripped` holds exactly when the stream is longer than the cap. The model
+//! theorem is proved by induction in the lemmas; this file's `feed` is checked
+//! against one model step, and composing repeated calls into the fold is a
+//! manual argument over the two checked results, not a verified trace.
 //!
 //! # Verification
 //!
