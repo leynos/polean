@@ -257,6 +257,14 @@ does not hide socket files; the allowlisted filesystem view does.
   checked results; no verified trace harness checks that composition. The proof
   does not extend to the reader's I/O and threads, or to the operating system's
   enforcement.
+- **Kernel invariant and public fields.** `Capture::feed` requires
+  `well_formed()` — the kept length is at most the cap — and `Capture::new`
+  establishes it. The struct's fields are public so the Verus datatype is not
+  opaque, which means the invariant is a caller obligation, not a
+  representation invariant the type enforces. The reader constructs its capture
+  through `new` and never mutates a field directly, so it preserves the
+  precondition; an unverified caller that broke it is outside what the proof
+  guarantees.
 - **Canary outbound target.** The canary connects to a loopback listener the
   probe owns and passes in. Inside the empty network namespace the connection
   is refused or unreachable. On a host whose isolation failed it normally
