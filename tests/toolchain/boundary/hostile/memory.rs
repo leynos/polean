@@ -41,6 +41,10 @@ pub fn run(targets: &Targets) -> Result<(), String> {
 
 /// Allocate and touch [`ALLOCATION_BYTES`], reporting when it returns.
 pub fn allocate() {
+    // The start marker makes the kill attributable to this attempt: an
+    // out-of-memory kill after the start line but before this marker cannot be
+    // read as the allocation's own.
+    attempt("memory", "starting allocation");
     let mut blocks: Vec<Vec<u8>> = Vec::new();
     let mut total = 0usize;
     while total < ALLOCATION_BYTES {
@@ -52,6 +56,7 @@ pub fn allocate() {
 
 /// Fill the scratch area until the filesystem refuses, reporting where.
 fn fill() -> Result<(), String> {
+    attempt("scratch", "starting fill");
     let mut file = ambient::create(std::path::Path::new(SCRATCH))
         .map_err(|error| format!("cannot create {SCRATCH}: {error}"))?;
     let block = vec![b'x'; FILL_BYTES];

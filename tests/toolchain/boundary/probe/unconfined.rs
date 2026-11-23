@@ -16,7 +16,7 @@ use super::{
     super::{
         hostile::Behaviour,
         outcome::{Bound, ExitForm, Outcome},
-        probe::{Options, Probe, attempt, started, wait_until_gone},
+        probe::{Options, Probe, attempt, attempt_containing, started, wait_until_gone},
         supervisor::{Boundary, require_outcome},
     },
     listeners,
@@ -29,7 +29,7 @@ use crate::{
 /// The negative control for offline execution and inherited descriptors.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn host_listeners_are_reachable_without_the_boundary() -> Result<(), String> {
+pub(super) fn host_listeners_are_reachable_without_the_boundary() -> Result<(), String> {
     let probe = Probe::new("boundary-unconfined-offline")?;
     let (endpoints, watchers) = listeners::listen(probe.nonce())?;
     let options = Options::new(Boundary::Unconfined)
@@ -56,7 +56,7 @@ fn host_listeners_are_reachable_without_the_boundary() -> Result<(), String> {
 /// The negative control for the memory limit.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn the_allocation_completes_without_a_memory_limit() -> Result<(), String> {
+pub(super) fn the_allocation_completes_without_a_memory_limit() -> Result<(), String> {
     let probe = Probe::new("boundary-unconfined-memory")?;
     let options = Options::new(Boundary::Unconfined)
         .memory(1024 * 1024 * 1024)
@@ -64,7 +64,7 @@ fn the_allocation_completes_without_a_memory_limit() -> Result<(), String> {
         .target("polean-target=memory:allocate");
     let run = probe.run(Behaviour::Memory, &options)?;
     let stdout = started(&run, &probe)?;
-    let line = attempt(&stdout, "memory")?;
+    let line = attempt_containing(&stdout, "memory", "allocated")?;
     check!(
         line.contains("allocated"),
         "the allocation must complete under the lifted limit, got {line:?}"
@@ -75,7 +75,7 @@ fn the_allocation_completes_without_a_memory_limit() -> Result<(), String> {
 /// The negative control for the output cap.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
+pub(super) fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
     let probe = Probe::new("boundary-unconfined-output")?;
     let options = Options::new(Boundary::Unconfined)
         .stdout_cap(4 * 1024 * 1024)
@@ -97,7 +97,7 @@ fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
 /// The negative control for private storage.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn the_job_writes_into_a_host_directory_without_the_boundary() -> Result<(), String> {
+pub(super) fn the_job_writes_into_a_host_directory_without_the_boundary() -> Result<(), String> {
     let probe = Probe::new("boundary-unconfined-storage")?;
     let host = probe.scratch_path().join("hostdir");
     ambient::create_dir(&host)
@@ -131,7 +131,7 @@ fn the_job_writes_into_a_host_directory_without_the_boundary() -> Result<(), Str
 /// A grandchild that left the process group outlives a group kill.
 #[test]
 #[ignore = "run by make boundary-probe; starts supervised hostile jobs"]
-fn an_escapee_outlives_the_process_group_kill() -> Result<(), String> {
+pub(super) fn an_escapee_outlives_the_process_group_kill() -> Result<(), String> {
     let probe = Probe::new("boundary-unconfined-escapee")?;
     let options = Options::new(Boundary::Unconfined).deadline(Duration::from_millis(1500));
     let run = probe.run(Behaviour::Escapee, &options)?;

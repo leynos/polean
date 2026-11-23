@@ -35,7 +35,7 @@ mod canary;
 mod escapee;
 mod memory;
 mod offline;
-mod output;
+pub mod output;
 mod storage;
 
 /// The module path the entry point is reached through.

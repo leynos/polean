@@ -1212,6 +1212,19 @@ section and in each ADR.
   `Bounds` iteration, a flatter `wait_until_gone`, and `Supervisor::run` below
   seventy lines (its clippy expectation was removed). The rechecked delta is
   clear apart from a pre-existing improvement note on `tests/admission`.
+- [x] 2026-11-23: two hosted assessments were requested on the rebased head.
+  The completeness assessment found five substantive issues and did not clear;
+  the proof assessment was satisfied with the proof as modular, subject to a
+  composition qualification. Every valid finding was repaired: the submission
+  gate (D23); the D21 recorded-success requirement; discovery bounded by the
+  remaining budget; an explicit-cancellation cell; output compared byte for
+  byte; memory start markers required; the escapee's successful start required;
+  each behavioural scenario now runs its negative control; the canary's
+  reserved address (D24); the recorded `classify` mutation; and the proof
+  composition and size records (D25). The rebuttals are recorded against the
+  assessment: the ADR already defers an explicit user cancellation outcome to
+  roadmap 4.3.1, and the feature file, which is authoritative, has no
+  negative-control steps inside the scenarios.
 - [x] `SHA256SUMS` was stale before this branch: five rows (the audit manifest,
   three validation modules, and the regenerated validation summary) did not
   match their files even at `ad217c8`. They are regenerated here, so
@@ -1299,6 +1312,33 @@ section and in each ADR.
   `[0, 1, 2, 3]`, where descriptor 3 was the `/proc` read or the outbound
   socket the canary had open at that instant, not an inherited handle. Sampling
   until the job stops and keeping the intersection distinguishes the two (D22).
+- 2026-11-23: the EP-M1 `classify` mutation check the verification plan
+  requires was applied by hand: deleting the `BoundsExhausted` branch, so a
+  fired bound falls through to `Completed`, failed three tests
+  (`classify_never_completes_under_failure`, `every_fired_bound_is_listed`, and
+  the enumeration case) and passed ten after the branch was restored. The
+  enumeration is therefore load-bearing, not a restatement of the
+  implementation.
+- 2026-11-23: a code review found that the AC6 wording "the supervisor starts
+  no job" was not established by the missing-enforcement scenario: its
+  `job_submitted` step was empty and "no job is started" only re-read the
+  verdict. Submission is now a gated decision (D23), the scenario submits
+  through it, and a unit test passes a spawn counter that stays at zero for a
+  missing or malformed verdict.
+- 2026-11-23: the tool-job evidence the plan's D21 relies on was read but not
+  enforced. A tool job whose scope was not observed now requires the unit's
+  recorded `Result=success`; a missing or different record is a containment
+  diagnostic, not a completion.
+- 2026-11-23: the canary's outbound address was a public resolver. It is now
+  TEST-NET-1 (`192.0.2.1:53`, RFC 5737), reserved for documentation and not
+  routed, so a host whose isolation failed cannot make the probe contact a
+  third-party service (D24).
+- 2026-11-23: the whole-stream property is a manual composition: the checked
+  per-`feed` contract and the checked model theorem (`fold_at`) match step for
+  step, but no verified trace harness composes repeated executable calls. The
+  ADR and this plan state that boundary rather than claiming Verus checked the
+  composition (D25). The proof files total 607 lines against the 450-line
+  escalation tolerance; the overrun is recorded for ratification, not hidden.
 
 ## Decision log
 
@@ -1408,6 +1448,28 @@ section and in each ADR.
   implicit exception, and the ADR records it as residual trust: the tool probes
   show the tools work inside the boundary and agree with their outside runs,
   not that the supervisor observed each tool's cgroup.
+- **D23, 2026-11-23 (review repair):** submission is a gated decision, not a
+  convention. `boundary::submit::submit` takes the platform report and either
+  runs the spawn action or returns `Submitted::Refused` naming every missing
+  control; `Probe::submit` is the probe's gated entry, and the BDD
+  missing-enforcement scenario submits through it. The canary and the
+  unconfined negative controls keep an explicitly named ungated path, because
+  they must run before a verdict exists or without one. A unit test passes a
+  spawn counter and requires it to stay at zero for missing and malformed
+  verdicts.
+- **D24, 2026-11-23 (review repair):** the canary's outbound attempt uses
+  TEST-NET-1 (`192.0.2.1:53`), reserved by RFC 5737 and not routed, instead of
+  a public resolver. The expected `Network is unreachable` is unchanged inside
+  the boundary; on a host whose isolation failed the connection times out
+  without contacting a service the probe does not own.
+- **D25, 2026-11-23 (review repair, tolerance breach recorded):** the capture
+  proof's whole-stream property is a manual composition. The executable
+  `Capture::feed` contract is checked per call, and the model's `fold_at`
+  theorem is checked over every finite chunk sequence; no verified trace
+  harness composes repeated executable calls. The ADR states that boundary. The
+  three proof files total 607 lines against the plan's 450-line escalation
+  tolerance, so the overrun is recorded for ratification, as D20 records the
+  code-size breach. No proof clause was removed to meet the tolerance.
 - **D22, 2026-11-22 (rebase repair):** the supervisor samples the job's
   descriptor table on every poll and keeps the descriptors present in every
   sample, instead of taking one snapshot. A single snapshot taken while the
@@ -1434,7 +1496,11 @@ section and in each ADR.
   8,500 net lines and 55 files, or direct a reduction. The work continues under
   the user's explicit completion directive, and the overrun is reported for
   post-hoc ratification, as 1.2.2 and 1.2.3 were. No control has been weakened
-  to save lines.
+  to save lines. Final measurement against `5447c62`, excluding this plan and
+  the reviewed snapshot: 9,249 net code lines in 59 files (the classification
+  counts `Makefile`, the feature file, `tests/**/*.rs`, `verus/*.rs`, and
+  `scripts/*.py` as code); documentation 9 files and 486 net lines; one
+  snapshot of 60 lines.
 
 ## Outcomes & retrospective
 

@@ -87,6 +87,8 @@ pub(super) struct Target<'a> {
     pub(super) cgroup: Option<&'a Path>,
     /// The job's deadline and start.
     pub(super) clock: Clock,
+    /// The cancellation request, when the caller supplied one.
+    pub(super) cancel: Option<&'a std::sync::atomic::AtomicBool>,
 }
 
 /// The parts of a running job the wait needs.
@@ -103,6 +105,8 @@ pub(super) struct Awaiting<'a> {
     pub(super) clock: Clock,
     /// The stream readers.
     pub(super) readers: &'a Readers,
+    /// The cancellation request, when the caller supplied one.
+    pub(super) cancel: Option<&'a std::sync::atomic::AtomicBool>,
 }
 
 impl Supervisor<'_> {
@@ -116,6 +120,7 @@ impl Supervisor<'_> {
             cgroup,
             clock,
             readers,
+            cancel,
         } = awaiting;
         let mut snapshot = || snapshot_fds(job, pgid, cgroup);
         let mut target = Target {
@@ -123,6 +128,7 @@ impl Supervisor<'_> {
             pgid,
             cgroup,
             clock,
+            cancel,
         };
         self.wait_for_job(&mut target, readers, &mut snapshot)
     }
@@ -133,7 +139,7 @@ impl Supervisor<'_> {
         readers: &Readers,
         snapshot: &mut impl FnMut() -> Option<Vec<i32>>,
     ) -> Result<Waiting, String> {
-        let waited = wait(target.child, &readers.trips, target.clock, snapshot);
+        let waited = wait(target, &readers.trips, snapshot);
         match waited {
             Ok(waiting) => Ok(waiting),
             Err(reason) => Err(abandon(target, readers, self.programs, &reason)),

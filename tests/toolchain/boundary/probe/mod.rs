@@ -27,6 +27,7 @@ mod bdd;
 mod bubblewrap;
 mod listeners;
 mod pins;
+mod run;
 mod tools;
 mod unconfined;
 
@@ -35,7 +36,7 @@ use super::{
     hostile::{self, Behaviour},
     launch::{LaunchSpec, ReadOnlyBind},
     platform::{CanaryReport, Programs, RequestedLimits},
-    supervisor::{Boundary, Job, Run, Supervisor},
+    supervisor::{Boundary, Run},
 };
 use crate::{ambient, scratch::Scratch};
 
@@ -148,71 +149,6 @@ impl Probe {
         }
     }
 
-    /// Run one hostile behaviour under the selected boundary.
-    ///
-    /// # Errors
-    ///
-    /// Returns the supervisor's diagnostic when the job could not be observed.
-    pub fn run(&self, behaviour: Behaviour, options: &Options) -> Result<Run, String> {
-        let supervisor = Supervisor {
-            programs: &self.programs,
-            runtime_dir: &self.runtime_dir,
-        };
-        supervisor.run(&Job {
-            spec: self.spec(behaviour, options),
-            boundary: options.boundary,
-            stdout_cap: options.stdout_cap,
-            stderr_cap: options.stderr_cap,
-            deadline: options.deadline,
-            read_limits: options.read_limits,
-            require_scope: true,
-        })
-    }
-
-    /// Run a non-hostile program under the selected boundary.
-    ///
-    /// The tool's own binds are added to the input snapshot bind, and the
-    /// supervisor runs it through the same scope and capture every job uses.
-    ///
-    /// # Errors
-    ///
-    /// Returns a diagnostic when the tool's specification is invalid or the job
-    /// could not be observed.
-    pub fn run_tool(&self, tool: &ToolJob<'_>, options: &Options) -> Result<Run, String> {
-        let mut binds = tool.binds.clone();
-        binds.push(ReadOnlyBind {
-            source: self.inputs.clone(),
-            target: PROBE_INPUTS.to_owned(),
-        });
-        let spec = LaunchSpec {
-            host_program: tool.host_program.to_path_buf(),
-            sandbox_program: tool.sandbox_program.to_owned(),
-            args: tool.args.clone(),
-            binds,
-            scratch_bytes: options.scratch_bytes,
-            env: tool.env.clone(),
-            unit: format!("polean-probe-{}", self.nonce),
-            memory_bytes: options.memory_bytes,
-            swap_bytes: 0,
-            tasks_max: 32,
-            runtime_secs: options.deadline.as_secs() + 5,
-        };
-        spec.validate()?;
-        let supervisor = Supervisor {
-            programs: &self.programs,
-            runtime_dir: &self.runtime_dir,
-        };
-        supervisor.run(&Job {
-            spec,
-            boundary: options.boundary,
-            stdout_cap: options.stdout_cap,
-            stderr_cap: options.stderr_cap,
-            deadline: options.deadline,
-            read_limits: options.read_limits,
-            require_scope: false,
-        })
-    }
-
     /// Run the canary under the selected boundary and parse its report.
     ///
     /// The supervisor reads the active scope's limits, so the report carries
@@ -290,6 +226,30 @@ pub fn attempt<'a>(stdout: &'a str, name: &str) -> Result<&'a str, String> {
             format!("the child never reported an {name} attempt; stdout was {stdout:?}")
         })?;
     Ok(line)
+}
+
+/// Require an attempt line for `name` whose detail contains `needle`.
+///
+/// A behaviour that reports both a start marker and a result is checked for
+/// the specific line the property needs, so a later line cannot stand in for
+/// an earlier one.
+///
+/// # Errors
+///
+/// Returns a diagnostic when no matching attempt was reported.
+pub fn attempt_containing<'a>(
+    stdout: &'a str,
+    name: &str,
+    needle: &str,
+) -> Result<&'a str, String> {
+    let prefix = format!("polean-hostile attempt {name} ");
+    stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix(&prefix))
+        .find(|detail| detail.contains(needle))
+        .ok_or_else(|| {
+            format!("the child never reported an {name} attempt containing {needle:?};                      stdout was {stdout:?}")
+        })
 }
 
 /// How long a killed process's `/proc` entry may take to disappear.

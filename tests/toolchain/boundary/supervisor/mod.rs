@@ -45,16 +45,18 @@ use std::{
 };
 
 use super::{
-    launch::{LaunchSpec, bubblewrap_scope_argv, unconfined_scope_argv},
-    outcome::{Bound, Bounds, ExitForm, Observation, Outcome, classify},
+    launch::{bubblewrap_scope_argv, unconfined_scope_argv},
+    outcome::{Bound, ExitForm, Observation, Outcome, classify},
     platform::Programs,
-    scope::{LimitReadback, Scope},
+    scope::Scope,
 };
 
+mod job;
 mod reader;
 mod run;
 mod teardown;
 mod wait;
+pub use self::job::{Job, Run};
 pub(crate) use self::wait::retain_seen;
 use self::{
     reader::{Readers, drain_readers, finish_readers, readers},
@@ -70,88 +72,6 @@ pub enum Boundary {
     Unconfined,
     /// The scope around bubblewrap: the selected boundary.
     Bubblewrap,
-}
-
-/// One job for the supervisor to run.
-pub struct Job {
-    /// The launch specification, validated before anything starts.
-    pub spec: LaunchSpec,
-    /// Which launch chain to use.
-    pub boundary: Boundary,
-    /// The cap on standard output, which carries the structured result.
-    pub stdout_cap: usize,
-    /// The cap on standard error, which carries diagnostics.
-    pub stderr_cap: usize,
-    /// The single deadline for the whole job.
-    pub deadline: Duration,
-    /// Whether to read the scope's limit files while it is active.
-    pub read_limits: bool,
-    /// Whether the scope join is required evidence for this job.
-    ///
-    /// Hostile jobs require it: the probe's claim is that the job ran inside
-    /// the scope. A pinned tool can finish in milliseconds, before the first
-    /// successful poll, and systemd garbage-collects a successful scope at
-    /// once; the tool probes therefore rely on the unit's recorded success and
-    /// on the canary's proof of the same launch chain, and this flag records
-    /// that choice rather than hiding it.
-    pub require_scope: bool,
-}
-
-/// One finished job.
-#[derive(Debug)]
-pub struct Run {
-    /// The probe's outcome category.
-    pub outcome: Outcome,
-    /// The kept prefix of standard output.
-    pub stdout: Vec<u8>,
-    /// The kept prefix of standard error.
-    pub stderr: Vec<u8>,
-    /// How the direct child ended.
-    pub exit: ExitForm,
-    /// Every bound that fired.
-    pub bounds: Bounds,
-    /// Processes that outlived the process-group kill.
-    pub survivors: Vec<u32>,
-    /// Whether the job's cgroup was empty after teardown.
-    pub cgroup_empty: bool,
-    /// The processes still in the cgroup when the emptiness bound expired.
-    pub residual: Vec<u32>,
-    /// The last `cgroup.events` text seen, for a containment diagnostic.
-    pub events: Option<String>,
-    /// systemd's `Result=` for the scope, when it recorded one.
-    pub result: Option<String>,
-    /// The job's open descriptors while it was alive, when they were observed.
-    pub fds: Option<Vec<i32>>,
-    /// The scope's limit files, when the job asked for them.
-    pub limits: Option<LimitReadback>,
-    /// Observations that make the run fail closed, in the order they occurred.
-    pub diagnostics: Vec<String>,
-    /// Observations recorded without making the run fail closed.
-    pub notes: Vec<String>,
-}
-
-/// Runs jobs through the selected boundary.
-pub struct Supervisor<'a> {
-    /// The launcher programs.
-    pub programs: &'a Programs,
-    /// The directory the user manager is reached through.
-    pub runtime_dir: &'a Path,
-}
-
-/// One started job's state.
-struct Started<'a> {
-    /// The direct child.
-    child: Child,
-    /// The direct child's process-group id.
-    pgid: u32,
-    /// The job's scope.
-    scope: Scope<'a>,
-    /// The job's cgroup, when the scope was observed.
-    cgroup: Option<std::path::PathBuf>,
-    /// Why the scope was not observed, when it was not.
-    join_error: Option<String>,
-    /// Observations that already make the run fail closed.
-    diagnostics: Vec<String>,
 }
 
 /// The job's single deadline, and when it started.
@@ -192,6 +112,25 @@ fn scope_observation(
     }
 }
 
+/// Require the evidence a tool job's unobserved scope still needs.
+///
+/// D21: a tool job that finished before its scope was observed has no cgroup
+/// evidence, so the unit's recorded success is its containment evidence. A
+/// missing or different record is not a pass.
+fn tool_evidence(
+    job: &Job,
+    cgroup: Option<&Path>,
+    result: Option<&str>,
+    diagnostics: &mut Vec<String>,
+) {
+    let unobserved_tool = !job.require_scope && cgroup.is_none();
+    if unobserved_tool && result != Some("success") {
+        diagnostics.push(format!(
+            "a tool job whose scope was not observed must record Result=success, got {result:?}"
+        ));
+    }
+}
+
 /// Whether the job's containment can be called empty.
 ///
 /// An observation the supervisor could not make is never a pass, except for a
@@ -208,6 +147,30 @@ fn cgroup_is_empty(
     } else {
         diagnostics.is_empty()
     }
+}
+
+/// Runs jobs through the selected boundary.
+pub struct Supervisor<'a> {
+    /// The launcher programs.
+    pub programs: &'a Programs,
+    /// The directory the user manager is reached through.
+    pub runtime_dir: &'a Path,
+}
+
+/// One started job's state.
+struct Started<'a> {
+    /// The direct child.
+    child: Child,
+    /// The direct child's process-group id.
+    pgid: u32,
+    /// The job's scope.
+    scope: Scope<'a>,
+    /// The job's cgroup, when the scope was observed.
+    cgroup: Option<std::path::PathBuf>,
+    /// Why the scope was not observed, when it was not.
+    join_error: Option<String>,
+    /// Observations that already make the run fail closed.
+    diagnostics: Vec<String>,
 }
 
 impl Supervisor<'_> {
@@ -244,6 +207,7 @@ impl Supervisor<'_> {
             cgroup: cgroup.as_deref(),
             clock,
             readers: &readers,
+            cancel: job.cancel.as_deref(),
         })?;
         let (report, status, errors) = tear_down(Inputs {
             child: &mut child,
@@ -258,14 +222,14 @@ impl Supervisor<'_> {
             finish_readers(readers, waiting.bounds, &mut diagnostics);
         let result = read_result(&scope, &mut diagnostics);
         reset_failed_unit(&scope, result.as_deref());
+        tool_evidence(job, cgroup.as_deref(), result.as_deref(), &mut diagnostics);
         if result.as_deref() == Some("oom-kill") {
             bounds.insert(Bound::Memory);
         }
-        let exit = exit_form(status);
         let cgroup_empty = cgroup_is_empty(job, cgroup.as_deref(), &report, &diagnostics);
         let outcome = classify(&Observation {
             bounds,
-            exit,
+            exit: exit_form(status),
             cgroup_empty,
             survivors: !report.survivors.is_empty(),
             unavailable: Vec::new(),
@@ -274,7 +238,7 @@ impl Supervisor<'_> {
             outcome,
             stdout,
             stderr,
-            exit,
+            exit: exit_form(status),
             bounds,
             survivors: report.survivors,
             cgroup_empty,

@@ -135,7 +135,7 @@ boundary:
 | Offline execution | TCP refused; abstract and socket-file UNIX connections refused or absent; no listener recorded a connection; fds `[0,1,2]` | All three listeners accepted; the job held its standard streams only |
 | Memory limit      | Allocation and scratch fill both `oom-kill`, scope empty                                                                   | 256 MiB allocation completed under a lifted limit                    |
 | Output limit      | Exactly the first 1 MiB kept; job stopped                                                                                  | 2 MiB flood kept whole under a lifted cap                            |
-| Cancellation      | Deadline named; escapee removed by the PID namespace; cgroup empty                                                         | Escapee outlived the group kill; only `cgroup.kill` removed it       |
+| Cancellation      | Deadline or explicit request named; escapee removed by the PID namespace; cgroup empty                                     | Escapee outlived the group kill; only `cgroup.kill` removed it       |
 | Private storage   | Only the scratch write succeeded; fill failed with `ENOSPC`; no host file                                                  | Marker written into the probe's host directory                       |
 
 _Table 1: The probe's property matrix on the probe host._
@@ -245,11 +245,23 @@ does not hide socket files; the allowlisted filesystem view does.
   milliseconds, before the supervisor's first successful scope poll, and
   systemd garbage-collects a successful scope immediately. Hostile probes hold
   a 250 ms observation window after their start line, which makes the
-  observation deterministic; tool probes do not require it and rely on the
-  unit's recorded `Result=success` and the canary's proof of the same launch
-  chain. The tool probes therefore show the tools work inside the boundary and
+  observation deterministic; tool probes do not require it and instead require
+  the unit's recorded `Result=success`, with the canary's proof of the same
+  launch chain. A missing or different record is a containment diagnostic, not
+  a pass. The tool probes therefore show the tools work inside the boundary and
   agree with their outside runs, not that the supervisor observed each tool's
   cgroup.
+- **Proof composition.** The Verus proof checks the capture kernel's per-`feed`
+  contract and the model's whole-stream theorem separately. Composing repeated
+  executable calls into the model's fold is a manual argument over the two
+  checked results; no verified trace harness checks that composition. The proof
+  does not extend to the reader's I/O and threads, or to the operating system's
+  enforcement.
+- **Canary outbound address.** The canary tries TEST-NET-1 (`192.0.2.1:53`,
+  RFC 5737), which is reserved for documentation and not routed. A host whose
+  network isolation failed reports a timeout rather than reaching a third-party
+  service, and the control fails closed because the expected
+  `Network is unreachable` is absent.
 - **Inherited descriptors.** The supervisor lists the job's own descriptor
   directory from outside on every poll and keeps only the descriptors present
   in every sample, so a handle the job opens for its own work cannot be

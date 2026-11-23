@@ -22,12 +22,7 @@
 //! job. The policy is therefore "the deadline kills a job still running at a
 //! poll", and an exit observed at a poll is an exit.
 
-use std::{
-    path::Path,
-    process::{Child, ExitStatus},
-    sync::mpsc::Receiver,
-    thread,
-};
+use std::{path::Path, process::ExitStatus, sync::mpsc::Receiver, thread};
 
 use super::{
     super::{
@@ -35,8 +30,8 @@ use super::{
         scope::{POLL, job_pid},
     },
     Boundary,
-    Clock,
     Job,
+    run::Target,
 };
 use crate::ambient;
 
@@ -54,9 +49,8 @@ pub(super) struct Waiting {
 
 /// Poll the child, its stream trips, and the deadline until one stops it.
 pub(super) fn wait(
-    child: &mut Child,
+    target: &mut Target<'_>,
     trips: &Receiver<Bound>,
-    clock: Clock,
     snapshot: &mut impl FnMut() -> Option<Vec<i32>>,
 ) -> Result<Waiting, String> {
     let mut evidence = Evidence {
@@ -67,7 +61,7 @@ pub(super) fn wait(
         if let Some(observed) = snapshot() {
             evidence.fds = Some(retain_seen(evidence.fds.take(), &observed));
         }
-        if let Some(stopped) = stop_reason(child, trips, clock, &mut evidence)? {
+        if let Some(stopped) = stop_reason(target, trips, &mut evidence)? {
             return Ok(stopped);
         }
         thread::sleep(POLL);
@@ -104,12 +98,11 @@ struct Evidence {
 /// drained into the bounds: a stream that crossed its cap just as the child
 /// finished must not report completion.
 fn stop_reason(
-    child: &mut Child,
+    target: &mut Target<'_>,
     trips: &Receiver<Bound>,
-    clock: Clock,
     evidence: &mut Evidence,
 ) -> Result<Option<Waiting>, String> {
-    match child.try_wait() {
+    match target.child.try_wait() {
         Ok(Some(status)) => {
             while let Ok(bound) = trips.try_recv() {
                 evidence.bounds.insert(bound);
@@ -133,7 +126,19 @@ fn stop_reason(
             fds: evidence.fds.clone(),
         }));
     }
-    if clock.expired() {
+    if target
+        .cancel
+        .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed))
+    {
+        evidence.bounds.insert(Bound::Cancelled);
+        return Ok(Some(Waiting {
+            status: None,
+            bounds: evidence.bounds,
+            running: true,
+            fds: evidence.fds.clone(),
+        }));
+    }
+    if target.clock.expired() {
         evidence.bounds.insert(Bound::Deadline);
         return Ok(Some(Waiting {
             status: None,

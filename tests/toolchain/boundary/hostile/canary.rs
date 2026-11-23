@@ -18,7 +18,12 @@ use super::report;
 use crate::ambient;
 
 /// The outbound address the canary tries; a literal, so no resolver is needed.
-const OUTBOUND: &str = "1.1.1.1:53";
+///
+/// This is TEST-NET-1 (RFC 5737), reserved for documentation and not routed on
+/// the public internet. Inside the boundary the empty network namespace reports
+/// `Network is unreachable`; on a host whose isolation failed, the connection
+/// times out without reaching any service the probe does not own.
+const OUTBOUND: &str = "192.0.2.1:53";
 
 /// How long the outbound attempt may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);

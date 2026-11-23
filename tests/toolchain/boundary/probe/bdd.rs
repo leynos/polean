@@ -38,10 +38,14 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use super::{
     super::{
         outcome::{ControlKind, Verdict},
-        platform::{Check, Programs, RequestedLimits, check},
+        platform::{Check, PlatformReport, Programs, RequestedLimits, check},
+        submit::Submitted,
+        supervisor::Run,
     },
+    Options,
     bubblewrap,
 };
+use crate::boundary::supervisor::Boundary;
 
 /// Cargo recompiles this target when the specification changes.
 const _: [&str; 1] = [include_str!("../../../features/execution_boundary.feature")];
@@ -49,8 +53,10 @@ const _: [&str; 1] = [include_str!("../../../features/execution_boundary.feature
 /// The state one scenario accumulates.
 #[derive(Default, ScenarioState)]
 struct BoundaryState {
-    /// The platform check's verdict.
-    platform: Slot<Verdict>,
+    /// The platform check's report.
+    platform: Slot<PlatformReport>,
+    /// The outcome of the attempted job submission.
+    submission: Slot<Submitted<Run>>,
     /// The probe helper's outcome.
     behaviour: Slot<Result<(), String>>,
 }
@@ -58,18 +64,19 @@ struct BoundaryState {
 /// The platform check reports every control available on the probe host.
 #[given("the platform check reports every control available")]
 fn platform_reports_ready(state: &BoundaryState) -> Result<(), String> {
-    let verdict = platform_verdict()?;
-    if verdict != Verdict::Ready {
+    let report = platform_report()?;
+    if report.verdict() != Verdict::Ready {
         return Err(format!(
-            "the platform check must report every control available, got {verdict:?}"
+            "the platform check must report every control available, got {:?}",
+            report.verdict()
         ));
     }
-    state.platform.set(verdict);
+    state.platform.set(report);
     Ok(())
 }
 
-/// Run the canary and decide the platform verdict.
-fn platform_verdict() -> Result<Verdict, String> {
+/// Run the canary and decide the platform report.
+fn platform_report() -> Result<PlatformReport, String> {
     let probe = super::Probe::new("boundary-bdd-canary")?;
     let limits = RequestedLimits::default();
     let (run, report) = probe.canary(&limits)?;
@@ -79,8 +86,7 @@ fn platform_verdict() -> Result<Verdict, String> {
         runtime_dir: probe.runtime_dir(),
         canary: Ok(&report),
         limits: &limits,
-    })
-    .verdict())
+    }))
 }
 
 /// The probe creates its host listeners as part of the offline behaviour.
@@ -174,12 +180,12 @@ fn no_file_remains(state: &BoundaryState) -> Result<(), String> { behaviour(stat
 /// Bubblewrap is not at its configured path.
 #[given("bubblewrap is not at its configured path")]
 fn bubblewrap_missing(state: &BoundaryState) -> Result<(), String> {
-    state.platform.set(missing_bubblewrap_verdict()?);
+    state.platform.set(missing_bubblewrap_report()?);
     Ok(())
 }
 
-/// The check with an injected missing bubblewrap path starts no job.
-fn missing_bubblewrap_verdict() -> Result<Verdict, String> {
+/// The check with an injected missing bubblewrap path reports it missing.
+fn missing_bubblewrap_report() -> Result<PlatformReport, String> {
     let probe = super::Probe::new("boundary-bdd-missing")?;
     let absent = probe.scratch_path().join("absent-bwrap");
     let programs = Programs {
@@ -187,47 +193,59 @@ fn missing_bubblewrap_verdict() -> Result<Verdict, String> {
         ..Programs::standard()
     };
     let limits = RequestedLimits::default();
-    let report = check(&Check {
+    Ok(check(&Check {
         programs: &programs,
         runtime_dir: probe.runtime_dir(),
         canary: Err("the canary is not run when bubblewrap is absent".to_owned()),
         limits: &limits,
-    });
-    Ok(report.verdict())
+    }))
 }
 
-/// A job is submitted.
+/// A job is submitted through the gated path.
 #[when("a job is submitted")]
-fn job_submitted(_state: &BoundaryState) {}
+fn job_submitted(state: &BoundaryState) -> Result<(), String> {
+    let report = state
+        .platform
+        .with_ref(Clone::clone)
+        .ok_or_else(|| "the platform report was not recorded".to_owned())?;
+    let probe = super::Probe::new("boundary-bdd-submit")?;
+    let options = Options::new(Boundary::Bubblewrap);
+    state
+        .submission
+        .set(probe.submit(super::hostile::Behaviour::Canary, &options, &report)?);
+    Ok(())
+}
 
-/// The outcome is unavailable and names bubblewrap.
+/// The submission is refused and names bubblewrap.
 #[then("the outcome is unavailable and names bubblewrap")]
 fn unavailable_names_bubblewrap(state: &BoundaryState) -> Result<(), String> {
-    let verdict = state
-        .platform
-        .with_ref(Verdict::clone)
-        .ok_or_else(|| "the platform verdict was not recorded".to_owned())?;
-    match verdict {
-        Verdict::Unavailable(missing)
+    let refused = state
+        .submission
+        .with_ref(|submitted| match submitted {
+            Submitted::Refused(missing) => Some(missing.clone()),
+            Submitted::Ran(_) => None,
+        })
+        .ok_or_else(|| "the job submission was not recorded".to_owned())?;
+    match refused {
+        Some(missing)
             if missing.iter().any(|control| {
                 control.kind == ControlKind::Programs && control.reason.contains("bwrap")
             }) =>
         {
             Ok(())
         }
-        other => Err(format!(
-            "the verdict must be unavailable and name bubblewrap, got {other:?}"
-        )),
+        Some(missing) => Err(format!("the refusal must name bubblewrap, got {missing:?}")),
+        None => Err("a missing control must refuse the submission".to_owned()),
     }
 }
 
 /// No job is started.
 #[then("no job is started")]
 fn no_job_started(state: &BoundaryState) -> Result<(), String> {
-    match state.platform.with_ref(Verdict::clone) {
-        Some(Verdict::Ready) => Err("a missing control must start no job".to_owned()),
-        Some(_verdict) => Ok(()),
-        None => Err("the platform verdict was not recorded".to_owned()),
+    match state.submission.with_ref(Submitted::is_refused) {
+        Some(true) => Ok(()),
+        Some(false) => Err("a refused submission must start no job".to_owned()),
+        None => Err("the job submission was not recorded".to_owned()),
     }
 }
 

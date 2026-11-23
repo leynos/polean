@@ -15,6 +15,9 @@ pub const FLOOD_BYTES: usize = 2 * 1024 * 1024;
 /// The block each write uses.
 const BLOCK_BYTES: usize = 64 * 1024;
 
+/// The byte the flood writes, so the kept prefix can be compared.
+pub const FLOOD_BYTE: u8 = b'x';
+
 /// Write [`FLOOD_BYTES`] to standard output and report how far it got.
 ///
 /// # Errors
@@ -25,7 +28,7 @@ const BLOCK_BYTES: usize = 64 * 1024;
     reason = "every behaviour shares the dispatch signature so a failure is reported the same way"
 )]
 pub fn run() -> Result<(), String> {
-    let block = vec![b'x'; BLOCK_BYTES];
+    let block = vec![FLOOD_BYTE; BLOCK_BYTES];
     let mut out = std::io::stdout().lock();
     let mut written = 0usize;
     while written < FLOOD_BYTES {

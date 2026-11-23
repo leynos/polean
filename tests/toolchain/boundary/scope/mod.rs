@@ -129,17 +129,20 @@ impl Scope<'_> {
     pub fn wait_until_joined_within(&self, pid: u32, bound: Duration) -> Result<PathBuf, String> {
         let started = Instant::now();
         loop {
-            if let Some(cgroup) = self.active_with(pid, bound)? {
-                return Ok(cgroup);
-            }
-            if started.elapsed() >= bound {
+            let remaining = bound.saturating_sub(started.elapsed());
+            if remaining.is_zero() {
                 return Err(format!(
                     "the scope {} did not become active with the job inside it within {:?}",
                     self.systemd_unit(),
                     bound
                 ));
             }
-            thread::sleep(POLL);
+            // Each query gets only what is left of the bound, so successive
+            // slow queries cannot push discovery past the job's deadline.
+            if let Some(cgroup) = self.active_with(pid, remaining)? {
+                return Ok(cgroup);
+            }
+            thread::sleep(POLL.min(remaining));
         }
     }
 

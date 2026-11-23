@@ -39,6 +39,7 @@ pub(crate) mod platform;
 pub(crate) mod probe;
 pub(crate) mod process;
 pub(crate) mod scope;
+pub(crate) mod submit;
 pub(crate) mod supervisor;
 
 #[cfg(test)]
