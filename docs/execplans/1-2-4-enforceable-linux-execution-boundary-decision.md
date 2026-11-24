@@ -1228,9 +1228,9 @@ section and in each ADR.
   assessment: the ADR already defers an explicit user cancellation outcome to
   roadmap 4.3.1, and the feature file, which is authoritative, has no
   negative-control steps inside the scenarios.
-- [x] 2026-11-24: five consecutive 21-cell `make boundary-probe` runs at the
-  final code passed in 34.16 s, 30.49 s, 40.25 s, 34.22 s, and 40.89 s. The
-  lifted-cap control compares the complete retained stream: preamble, start
+- [x] 2026-11-24: five consecutive 21-cell `make boundary-probe` runs at
+  revision `7d7a429` passed in 34.16 s, 30.49 s, 40.25 s, 34.22 s, and 40.89 s.
+  The lifted-cap control compares the complete retained stream: preamble, start
   line, the whole flood, the child's attempt and completion lines, and
   libtest's summary, whose numeric fields are parsed and whose two trailing
   newlines are required.
@@ -1519,7 +1519,7 @@ section and in each ADR.
   the user's explicit completion directive, and the overrun is reported for
   post-hoc ratification, as 1.2.2 and 1.2.3 were. No control has been weakened
   to save lines. Final measurement against the rebased base `13dc116c`,
-  excluding this plan and the reviewed snapshot: 9,878 net code lines in 61
+  excluding this plan and the reviewed snapshot: 9,879 net code lines in 61
   files (the classification counts `Makefile`, the feature file,
   `tests/**/*.rs`, `verus/*.rs`, and `scripts/*.py` as code); documentation 9
   files and 503 net lines; one snapshot of 60 lines.
