@@ -92,7 +92,10 @@ and neither `Cargo.toml` nor `clippy.toml` enables it. Whitaker's experimental
 `macro_aware_cognitive_complexity` gates it at `max_complexity = 9`,
 CodeScene's ceiling. `dylint.toml` opts in with
 `[whitaker] experimental = ["macro_aware_cognitive_complexity"]`. Fix a finding
-by extracting named helpers, never by raising the threshold.
+by extracting named helpers, never by raising the threshold. A Whitaker suite
+installed before the lint existed (v0.2.12 or earlier) rejects the opt-in, so
+rerun `whitaker-installer --cranelift` to refresh the suite after updating a
+checkout.
 
 Test code reaches the filesystem through `cap-std`: the toolchain tests share
 the ambient-authority helpers in `tests/toolchain/ambient.rs`, because
