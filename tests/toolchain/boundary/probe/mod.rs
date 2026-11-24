@@ -232,19 +232,15 @@ fn netns_identity() -> Option<std::path::PathBuf> {
 pub(super) fn ready_report(label: &str) -> Result<PlatformReport, String> {
     let probe = Probe::new(label)?;
     let limits = RequestedLimits::default();
+    let observation = super::platform::observe(probe.programs(), probe.runtime_dir());
     let report =
-        super::platform::readiness(
-            probe.programs(),
-            probe.runtime_dir(),
-            &limits,
-            || match probe.canary(&limits) {
-                Ok((run, report)) => {
-                    super::supervisor::require_outcome(&run, &super::outcome::Outcome::Completed)?;
-                    Ok(report)
-                }
-                Err(reason) => Err(reason),
-            },
-        );
+        super::platform::readiness(&observation, &limits, || match probe.canary(&limits) {
+            Ok((run, report)) => {
+                super::supervisor::require_outcome(&run, &super::outcome::Outcome::Completed)?;
+                Ok(report)
+            }
+            Err(reason) => Err(reason),
+        });
     if report.verdict() != Verdict::Ready {
         return Err(format!("the platform is not ready: {:?}", report.verdict()));
     }

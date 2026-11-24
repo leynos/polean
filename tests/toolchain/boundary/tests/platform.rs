@@ -4,8 +4,6 @@
 //! programs check on scratch paths, and the canary entries from reports the
 //! canary could have produced; no boundary process runs.
 
-use std::path::Path;
-
 use rstest::rstest;
 
 use super::super::{
@@ -13,15 +11,16 @@ use super::super::{
     platform::{
         CanaryReport,
         Check,
+        Observation,
         Programs,
         RequestedLimits,
         canary_isolation,
         canary_limits,
         check as platform_check,
-        check_programs,
         delegation_from,
         executable,
         manager_state,
+        observe_programs,
         parse_bwrap_version,
         user_manager_cgroup,
     },
@@ -250,11 +249,14 @@ fn the_check_fails_closed_and_names_what_is_missing() -> Result<(), String> {
     };
     let reason = "the canary could not start".to_owned();
     let limits = RequestedLimits::default();
+    let observation = Observation {
+        programs: observe_programs(&programs),
+        manager: Availability::Missing("no manager".to_owned()),
+        delegation: Availability::Available,
+    };
     let report = platform_check(&Check {
-        programs: &programs,
-        runtime_dir: Path::new("/run/user/0"),
+        observation: &observation,
         canary: Err(reason.clone()),
-        delegation: Ok(Availability::Available),
         limits: &limits,
     });
     let missing = report.missing();
@@ -326,7 +328,7 @@ fn a_non_executable_file_is_not_a_program() -> Result<(), String> {
         kill: path.clone(),
         bwrap: path,
     };
-    match check_programs(&programs) {
+    match observe_programs(&programs) {
         Availability::Missing(reason) => check!(
             reason.contains("not executable"),
             "the reason must say the program is not executable, got {reason:?}"
@@ -358,37 +360,4 @@ fn a_directory_or_absent_path_is_not_a_program() -> Result<(), String> {
     scratch
         .cleanup()
         .map_err(|error| format!("cannot clean scratch: {error}"))
-}
-
-/// Control 3 is decided from an injected observation, not a host read.
-#[test]
-fn delegation_is_injected_into_the_platform_decision() -> Result<(), String> {
-    let absent = Path::new("/nonexistent/absent");
-    let programs = Programs {
-        systemd_run: absent.to_path_buf(),
-        systemctl: absent.to_path_buf(),
-        kill: absent.to_path_buf(),
-        bwrap: absent.to_path_buf(),
-    };
-    let limits = RequestedLimits::default();
-    let report = platform_check(&Check {
-        programs: &programs,
-        runtime_dir: Path::new("/nonexistent/runtime"),
-        canary: Err("not run".to_owned()),
-        delegation: Err("the injected delegation failure".to_owned()),
-        limits: &limits,
-    });
-    let delegation = report
-        .controls
-        .iter()
-        .find(|(kind, _)| *kind == ControlKind::Delegation)
-        .map(|(_, availability)| availability.clone());
-    match delegation {
-        Some(Availability::Missing(reason)) if reason.contains("injected delegation failure") => {
-            Ok(())
-        }
-        other => Err(format!(
-            "the injected delegation observation must be reported, got {other:?}"
-        )),
-    }
 }

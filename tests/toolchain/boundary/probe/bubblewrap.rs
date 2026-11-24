@@ -378,11 +378,10 @@ pub(super) fn platform_is_ready() -> Result<(), String> {
         Some(vec![0, 1, 2]),
         "the canary must hold only its standard streams"
     );
+    let observation = super::super::platform::observe(probe.programs(), probe.runtime_dir());
     let platform = platform_check(&Check {
-        programs: probe.programs(),
-        runtime_dir: probe.runtime_dir(),
+        observation: &observation,
         canary: Ok(&report),
-        delegation: super::super::platform::observe_delegation(),
         limits: &limits,
     });
     check_eq!(

@@ -9,7 +9,19 @@ use std::path::Path;
 
 use super::super::{
     outcome::{Availability, ControlKind, Verdict},
-    platform::{CanaryReport, PlatformReport, Programs, RequestedLimits, complete, readiness},
+    platform::{
+        CanaryReport,
+        Check,
+        Observation,
+        PlatformReport,
+        Programs,
+        RequestedLimits,
+        check as decide,
+        complete,
+        observe,
+        observe_programs,
+        readiness,
+    },
 };
 use crate::scratch::{check, check_eq};
 
@@ -50,15 +62,11 @@ fn readiness_does_not_run_the_canary_when_a_program_is_missing() -> Result<(), S
         bwrap: absent.to_path_buf(),
     };
     let mut called = false;
-    let report = readiness(
-        &programs,
-        Path::new("/nonexistent/runtime"),
-        &RequestedLimits::default(),
-        || {
-            called = true;
-            Err("the canary must not run".to_owned())
-        },
-    );
+    let observation = observe(&programs, Path::new("/nonexistent/runtime"));
+    let report = readiness(&observation, &RequestedLimits::default(), || {
+        called = true;
+        Err("the canary must not run".to_owned())
+    });
     check!(!called, "a missing program must not run the canary");
     check!(
         matches!(report.verdict(), Verdict::Unavailable(_)),
@@ -114,4 +122,40 @@ fn readiness_keeps_the_canary_controls_separate() -> Result<(), String> {
         "a good canary and a ready presence must be ready"
     );
     Ok(())
+}
+
+/// Control 3 is decided from an injected observation, not a host read.
+#[test]
+fn delegation_is_injected_into_the_platform_decision() -> Result<(), String> {
+    let absent = Path::new("/nonexistent/absent");
+    let programs = Programs {
+        systemd_run: absent.to_path_buf(),
+        systemctl: absent.to_path_buf(),
+        kill: absent.to_path_buf(),
+        bwrap: absent.to_path_buf(),
+    };
+    let limits = RequestedLimits::default();
+    let observation = Observation {
+        programs: observe_programs(&programs),
+        manager: Availability::Missing("no manager".to_owned()),
+        delegation: Availability::Missing("the injected delegation failure".to_owned()),
+    };
+    let report = decide(&Check {
+        observation: &observation,
+        canary: Err("not run".to_owned()),
+        limits: &limits,
+    });
+    let delegation = report
+        .controls
+        .iter()
+        .find(|(kind, _)| *kind == ControlKind::Delegation)
+        .map(|(_, availability)| availability.clone());
+    match delegation {
+        Some(Availability::Missing(reason)) if reason.contains("injected delegation failure") => {
+            Ok(())
+        }
+        other => Err(format!(
+            "the injected delegation observation must be reported, got {other:?}"
+        )),
+    }
 }

@@ -38,7 +38,7 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use super::{
     super::{
         outcome::{ControlKind, Verdict},
-        platform::{Check, PlatformReport, Programs, RequestedLimits, check, observe_delegation},
+        platform::{Check, PlatformReport, Programs, RequestedLimits, check},
         submit::Submitted,
         supervisor::Run,
     },
@@ -79,9 +79,9 @@ fn platform_reports_ready(state: &BoundaryState) -> Result<(), String> {
 fn platform_report() -> Result<PlatformReport, String> {
     let probe = super::Probe::new("boundary-bdd-canary")?;
     let limits = RequestedLimits::default();
+    let observation = super::super::platform::observe(probe.programs(), probe.runtime_dir());
     Ok(super::super::platform::readiness(
-        probe.programs(),
-        probe.runtime_dir(),
+        &observation,
         &limits,
         || match probe.canary(&limits) {
             Ok((run, report)) => {
@@ -215,11 +215,10 @@ fn missing_bubblewrap_report() -> Result<PlatformReport, String> {
         ..Programs::standard()
     };
     let limits = RequestedLimits::default();
+    let observation = super::super::platform::observe(&programs, probe.runtime_dir());
     Ok(check(&Check {
-        programs: &programs,
-        runtime_dir: probe.runtime_dir(),
+        observation: &observation,
         canary: Err("the canary is not run when bubblewrap is absent".to_owned()),
-        delegation: observe_delegation(),
         limits: &limits,
     }))
 }

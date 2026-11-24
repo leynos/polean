@@ -142,17 +142,41 @@ pub struct CanaryReport {
     pub pids_max: Option<String>,
 }
 
-/// The inputs to one platform check.
+/// What the host reported for the controls that need no job.
+///
+/// This is the output of [`observe`]: every process execution and filesystem
+/// read has already happened, so [`check`] is a pure decision over it. Tests
+/// build synthetic observations and never touch the host.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Observation {
+    /// Control 1: the launcher programs and bubblewrap's release.
+    pub programs: Availability,
+    /// Control 2: the systemd user manager answers.
+    pub manager: Availability,
+    /// Control 3: the user manager delegates `memory` and `pids`.
+    pub delegation: Availability,
+}
+
+/// Observe the controls that need no job.
+///
+/// This performs every process execution and filesystem read the platform
+/// decision needs, and returns the observations. Nothing here decides whether
+/// the platform is ready.
+#[must_use]
+pub fn observe(programs: &Programs, runtime_dir: &Path) -> Observation {
+    Observation {
+        programs: observe_programs(programs),
+        manager: observe_user_manager(programs.systemctl.as_path(), runtime_dir),
+        delegation: observe_delegation().unwrap_or_else(Availability::Missing),
+    }
+}
+
+/// The inputs to one platform decision.
 pub struct Check<'a> {
-    /// The launcher programs, injectable so a test can make one absent.
-    pub programs: &'a Programs,
-    /// The directory systemd's user manager is reached through.
-    pub runtime_dir: &'a Path,
+    /// The host observations.
+    pub observation: &'a Observation,
     /// The canary's report, or the reason it could not run.
     pub canary: Result<&'a CanaryReport, String>,
-    /// The delegation observation, supplied by the caller so the decision is
-    /// pure and injectable like the programs and runtime directory.
-    pub delegation: Result<Availability, String>,
     /// The limits the canary's scope requested.
     pub limits: &'a RequestedLimits,
 }
@@ -196,16 +220,13 @@ impl PlatformReport {
 /// those controls hold, the closure's result (success or failure) is folded
 /// into the same report, so every path returns one aggregate verdict.
 pub fn readiness(
-    programs: &Programs,
-    runtime_dir: &Path,
+    observation: &Observation,
     limits: &RequestedLimits,
     canary: impl FnOnce() -> Result<CanaryReport, String>,
 ) -> PlatformReport {
     let presence = check(&Check {
-        programs,
-        runtime_dir,
+        observation,
         canary: Err("the canary has not run".to_owned()),
-        delegation: self::observe_delegation(),
         limits,
     });
     complete(presence, limits, canary)
@@ -250,19 +271,14 @@ pub fn complete(
     PlatformReport { controls }
 }
 
-/// Run every control that can be observed without starting a job.
+/// Decide every control that can be decided without starting a job.
 ///
 /// The canary is supplied by the caller: it is a job, so it cannot be part of a
 /// check that must start no job. A canary that did not run marks both canary
-/// controls missing, naming the reason.
+/// controls missing, naming the reason. This function performs no I/O.
 #[must_use]
 pub fn check(inputs: &Check<'_>) -> PlatformReport {
-    let programs = check_programs(inputs.programs);
-    let manager = check_user_manager(inputs.programs.systemctl.as_path(), inputs.runtime_dir);
-    let delegation = match &inputs.delegation {
-        Ok(availability) => availability.clone(),
-        Err(reason) => Availability::Missing(reason.clone()),
-    };
+    let observed = inputs.observation;
     let (isolation, limits) = match &inputs.canary {
         Ok(report) => evaluate_canary(report, inputs.limits),
         Err(reason) => {
@@ -272,18 +288,19 @@ pub fn check(inputs: &Check<'_>) -> PlatformReport {
     };
     PlatformReport {
         controls: vec![
-            (ControlKind::Programs, programs),
-            (ControlKind::UserManager, manager),
-            (ControlKind::Delegation, delegation),
+            (ControlKind::Programs, observed.programs.clone()),
+            (ControlKind::UserManager, observed.manager.clone()),
+            (ControlKind::Delegation, observed.delegation.clone()),
             (ControlKind::CanaryIsolation, isolation),
             (ControlKind::CanaryLimits, limits),
         ],
     }
 }
 
-/// Control 1: every program exists, is executable, and bubblewrap is current.
+/// Observe control 1: every program exists, is executable, and bubblewrap is
+/// current.
 #[must_use]
-pub fn check_programs(programs: &Programs) -> Availability {
+pub fn observe_programs(programs: &Programs) -> Availability {
     for (role, path) in programs.listed() {
         match executable(path) {
             Ok(true) => (),
@@ -298,7 +315,7 @@ pub fn check_programs(programs: &Programs) -> Availability {
             }
         }
     }
-    check_bwrap_version(programs.bwrap.as_path())
+    observe_bwrap_version(programs.bwrap.as_path())
 }
 
 /// Whether `path` exists and carries an execute bit.
@@ -320,7 +337,7 @@ pub fn executable(path: &Path) -> Result<bool, String> {
 }
 
 /// Control 1, part two: bubblewrap reports at least [`MINIMUM_BWRAP`].
-fn check_bwrap_version(bwrap: &Path) -> Availability {
+fn observe_bwrap_version(bwrap: &Path) -> Availability {
     let output = match process::run(bwrap, &["--version"], &[], process::CONTROL_BOUND) {
         Ok(output) => output,
         Err(error) => {

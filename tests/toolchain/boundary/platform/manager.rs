@@ -20,7 +20,7 @@ use crate::ambient;
 /// unit failed. `starting`, `maintenance`, `stopping`, and `offline` are not,
 /// because a manager that is not settled cannot be relied on to apply limits.
 #[must_use]
-pub fn check_user_manager(systemctl: &Path, runtime_dir: &Path) -> Availability {
+pub fn observe_user_manager(systemctl: &Path, runtime_dir: &Path) -> Availability {
     let output = match process::run(
         systemctl,
         &["--user", "is-system-running"],
@@ -51,8 +51,8 @@ pub fn manager_state(state: &str) -> Availability {
 
 /// Observe control 3: the user manager delegates `memory` and `pids`.
 ///
-/// This is the host observation; [`super::check`] takes its result as input so
-/// the platform decision stays pure and injectable.
+/// This is the host observation; [`super::observe`] collects it and
+/// [`super::check`] decides from the resulting [`super::Observation`].
 ///
 /// # Errors
 ///
