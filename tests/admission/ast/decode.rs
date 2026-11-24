@@ -201,9 +201,6 @@ const HEAD_VARIANTS: &[Variant] = &[
     ),
 ];
 
-
-
-
 /// Check the module's boolean and counter fields have the right JSON types.
 fn module_header(fields: Fields<'_>) -> Result<(), Fault> {
     as_boolean(fields.value("rego_v1")?)?;
@@ -399,4 +396,3 @@ pub(super) fn spans(value: &Json, source: &str) -> Result<Vec<Span>, Fault> {
         .map(|item| span(item, source))
         .collect()
 }
-// weave: run 'weave explain tests/admission/ast/decode.rs' for per-hunk detail, 'weave check' to verify your resolution
