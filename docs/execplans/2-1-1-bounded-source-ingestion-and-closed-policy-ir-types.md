@@ -5,9 +5,9 @@ This ExecPlan (execution plan) is a living document. Keep `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: APPROVED (revision 3). The community-of-experts review has been applied,
-and the user decided Q1 and Q2 on 2026-11-22 (D17, D18). The user approved the
-plan and authorized implementation on 2026-11-24.
+Status: APPROVED (revision 3). The community-of-experts review has been
+applied, and the user decided Q1 and Q2 on 2026-11-22 (D17, D18). The user
+approved the plan and authorized implementation on 2026-11-24.
 
 Roadmap item: [2.1.1](../roadmap.md). Branch:
 `2-1-1-bounded-source-ingestion-and-closed-policy-ir-types`.
@@ -280,7 +280,11 @@ The estimate behind these limits is in `Context and orientation`.
   `main` had moved to `5447c62` meanwhile, adding a CI proof job (#55); D15 is
   withdrawn as redundant, and the ADR number moves to 0008 (D16).
 - [x] (2026-11-24) The user approved the plan and authorized implementation.
-- [ ] `EP-M1`: profile constants and bounded source ingestion.
+- [x] (2026-11-24) Rebased onto `origin/main` at `13dc116` (D19); merge base is
+  `13dc116c28d147f0f7be14ec471057b0e1d410ba`.
+- [x] (2026-11-24) `EP-M1` implemented: `src/profile.rs`, `src/bounded/`, and
+  `src/source/`, with unit, contract, property, and BDD coverage. 58 focused
+  tests pass. Seeded faults recorded under `Artefacts and notes`.
 - [ ] `EP-M2`: closed IR types, canonical encoder, and strict decoders.
 - [ ] `EP-M3`: proof tooling, then the Verus proof of the canonical encoding.
 - [ ] `EP-M4`: documentation, ADR 0008, and delivery closure.
@@ -1680,6 +1684,58 @@ a specification-level parser as a left inverse, and not the library.
 
 Seeded-fault transcripts, red-step outputs, `numstat` measurements, and the
 control attribution for (c) and (d) are recorded here during implementation.
+
+### EP-M1
+
+Red step. The first `cargo check --all-targets` after adding the tests failed
+with `E0277` at `src/bounded/tests.rs:131` and `src/source/tests.rs:97`: the
+`matches_pattern!` field matcher is applied to a reference, so `limit: eq(x)`
+does not compile and `limit: eq(&x)` does. The first test run then failed 5 of
+58: the four contract tests could not read their fixtures, because
+`cap_std::fs::Dir::read` resolves only relative paths and the loader passed an
+absolute one, and `the_cap_is_exact_for_any_filler` wrongly included NUL among
+its fillers, which ingestion refuses on its own account.
+
+Seeded fault, INV-SRC-CAP consumption. `src/bounded/mod.rs`'s allowance was
+changed from `limit.saturating_add(1)` to `limit.saturating_add(2)` and the
+bounded tests re-run:
+
+```plaintext
+Summary 18 tests run: 17 passed, 1 failed
+FAIL bounded::tests::the_read_stops_one_byte_past_the_limit
+```
+
+That is the consumption test, so the bound is enforced by the test that names
+it. The change was reverted with `cp` from a saved copy and no seeded text
+remains.
+
+`numstat` for EP-M1, measured from the merge base `13dc116` with the
+tolerances' exclusions. Configuration is unchanged; every line is code:
+
+```plaintext
+113	0	src/bounded/mod.rs
+242	0	src/bounded/tests.rs
+ 17	4	src/lib.rs
+ 45	0	src/profile.rs
+176	0	src/source/mod.rs
+227	0	src/source/tests.rs
+261	0	tests/ingestion/bdd.rs
+115	0	tests/ingestion/contracts.rs
+ 28	0	tests/ingestion/features/policy_ingestion.feature
+ 17	0	tests/ingestion/main.rs
+  7	0	tests/ingestion/properties/mod.rs
+105	0	tests/ingestion/properties/source.rs
+124	0	tests/ingestion/support.rs
+```
+
+That is 1,477 net code lines, which is 77 lines (5.5 per cent) over EP-M1's
+1,400-line budget. Two trims reclaimed 72 lines from the first measurement of
+1,549: duplicate interruption and boundary rows, and a bespoke fixture error
+type replaced by a message. What remains is genuinely named behaviour — five
+BDD scenarios, six rejection classes, and two properties — so it is recorded as
+an overrun rather than cut further. The overall 8,000-line limit has ample
+room, and no file approaches the 400-line module limit.
+
 
 ## Interfaces and dependencies
 
