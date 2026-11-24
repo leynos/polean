@@ -38,7 +38,7 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use super::{
     super::{
         outcome::{ControlKind, Verdict},
-        platform::{Check, PlatformReport, Programs, RequestedLimits, check},
+        platform::{Check, PlatformReport, Programs, RequestedLimits, check, observe_delegation},
         submit::Submitted,
         supervisor::Run,
     },
@@ -219,6 +219,7 @@ fn missing_bubblewrap_report() -> Result<PlatformReport, String> {
         programs: &programs,
         runtime_dir: probe.runtime_dir(),
         canary: Err("the canary is not run when bubblewrap is absent".to_owned()),
+        delegation: observe_delegation(),
         limits: &limits,
     }))
 }

@@ -382,6 +382,7 @@ pub(super) fn platform_is_ready() -> Result<(), String> {
         programs: probe.programs(),
         runtime_dir: probe.runtime_dir(),
         canary: Ok(&report),
+        delegation: super::super::platform::observe_delegation(),
         limits: &limits,
     });
     check_eq!(

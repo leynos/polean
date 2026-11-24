@@ -49,27 +49,29 @@ pub fn manager_state(state: &str) -> Availability {
     }
 }
 
-/// Control 3: the user manager delegates `memory` and `pids`.
-#[must_use]
-pub fn check_delegation() -> Availability {
-    let proc_cgroup = match ambient::read_to_string(Path::new("/proc/self/cgroup")) {
-        Ok(text) => text,
-        Err(error) => {
-            return Availability::Missing(format!("cannot read /proc/self/cgroup: {error}"));
-        }
-    };
+/// Observe control 3: the user manager delegates `memory` and `pids`.
+///
+/// This is the host observation; [`super::check`] takes its result as input so
+/// the platform decision stays pure and injectable.
+///
+/// # Errors
+///
+/// Returns a diagnostic when `/proc/self/cgroup` cannot be read.
+pub fn observe_delegation() -> Result<Availability, String> {
+    let proc_cgroup = ambient::read_to_string(Path::new("/proc/self/cgroup"))
+        .map_err(|error| format!("cannot read /proc/self/cgroup: {error}"))?;
     let Some(manager) = user_manager_cgroup(&proc_cgroup) else {
-        return Availability::Missing(
+        return Ok(Availability::Missing(
             "the caller is not inside a systemd user manager cgroup".to_owned(),
-        );
+        ));
     };
     let path = Path::new("/sys/fs/cgroup")
         .join(manager.trim_start_matches('/'))
         .join("cgroup.subtree_control");
-    match ambient::read_to_string(&path) {
+    Ok(match ambient::read_to_string(&path) {
         Ok(text) => delegation_from(&text),
         Err(error) => Availability::Missing(format!("cannot read {}: {error}", path.display())),
-    }
+    })
 }
 
 /// The caller's user-manager cgroup, from `/proc/self/cgroup`.

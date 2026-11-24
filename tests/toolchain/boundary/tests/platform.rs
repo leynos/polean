@@ -254,6 +254,7 @@ fn the_check_fails_closed_and_names_what_is_missing() -> Result<(), String> {
         programs: &programs,
         runtime_dir: Path::new("/run/user/0"),
         canary: Err(reason.clone()),
+        delegation: Ok(Availability::Available),
         limits: &limits,
     });
     let missing = report.missing();
@@ -357,4 +358,37 @@ fn a_directory_or_absent_path_is_not_a_program() -> Result<(), String> {
     scratch
         .cleanup()
         .map_err(|error| format!("cannot clean scratch: {error}"))
+}
+
+/// Control 3 is decided from an injected observation, not a host read.
+#[test]
+fn delegation_is_injected_into_the_platform_decision() -> Result<(), String> {
+    let absent = Path::new("/nonexistent/absent");
+    let programs = Programs {
+        systemd_run: absent.to_path_buf(),
+        systemctl: absent.to_path_buf(),
+        kill: absent.to_path_buf(),
+        bwrap: absent.to_path_buf(),
+    };
+    let limits = RequestedLimits::default();
+    let report = platform_check(&Check {
+        programs: &programs,
+        runtime_dir: Path::new("/nonexistent/runtime"),
+        canary: Err("not run".to_owned()),
+        delegation: Err("the injected delegation failure".to_owned()),
+        limits: &limits,
+    });
+    let delegation = report
+        .controls
+        .iter()
+        .find(|(kind, _)| *kind == ControlKind::Delegation)
+        .map(|(_, availability)| availability.clone());
+    match delegation {
+        Some(Availability::Missing(reason)) if reason.contains("injected delegation failure") => {
+            Ok(())
+        }
+        other => Err(format!(
+            "the injected delegation observation must be reported, got {other:?}"
+        )),
+    }
 }

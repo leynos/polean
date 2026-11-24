@@ -150,6 +150,9 @@ pub struct Check<'a> {
     pub runtime_dir: &'a Path,
     /// The canary's report, or the reason it could not run.
     pub canary: Result<&'a CanaryReport, String>,
+    /// The delegation observation, supplied by the caller so the decision is
+    /// pure and injectable like the programs and runtime directory.
+    pub delegation: Result<Availability, String>,
     /// The limits the canary's scope requested.
     pub limits: &'a RequestedLimits,
 }
@@ -202,6 +205,7 @@ pub fn readiness(
         programs,
         runtime_dir,
         canary: Err("the canary has not run".to_owned()),
+        delegation: self::observe_delegation(),
         limits,
     });
     complete(presence, limits, canary)
@@ -255,7 +259,10 @@ pub fn complete(
 pub fn check(inputs: &Check<'_>) -> PlatformReport {
     let programs = check_programs(inputs.programs);
     let manager = check_user_manager(inputs.programs.systemctl.as_path(), inputs.runtime_dir);
-    let delegation = check_delegation();
+    let delegation = match &inputs.delegation {
+        Ok(availability) => availability.clone(),
+        Err(reason) => Availability::Missing(reason.clone()),
+    };
     let (isolation, limits) = match &inputs.canary {
         Ok(report) => evaluate_canary(report, inputs.limits),
         Err(reason) => {
