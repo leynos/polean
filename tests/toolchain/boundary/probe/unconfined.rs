@@ -17,7 +17,7 @@ use super::{
         hostile::Behaviour,
         outcome::{Bound, ExitForm, Outcome},
         probe::{Options, Probe, attempt, attempt_containing, started, wait_until_gone},
-        supervisor::{Boundary, require_outcome},
+        supervisor::{Boundary, Run, require_outcome},
     },
     listeners,
 };
@@ -96,6 +96,16 @@ pub(super) fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
         .windows(start.len())
         .position(|window| window == start.as_bytes())
         .ok_or_else(|| "the kept output holds no start line".to_owned())?;
+    check_retained_stream(&run, offset, start.len())?;
+    check!(
+        !run.bounds.contains(Bound::Stdout),
+        "the lifted cap must not trip"
+    );
+    require_outcome(&run, &Outcome::Completed)
+}
+
+/// Check the complete retained stream after the start line was located.
+fn check_retained_stream(run: &Run, offset: usize, start_len: usize) -> Result<(), String> {
     let preamble = b"\nrunning 1 test\n";
     check!(
         run.stdout.starts_with(preamble),
@@ -108,7 +118,7 @@ pub(super) fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
     );
     let flood = run
         .stdout
-        .get(offset + start.len()..offset + start.len() + super::hostile::output::FLOOD_BYTES)
+        .get(offset + start_len..offset + start_len + super::hostile::output::FLOOD_BYTES)
         .ok_or_else(|| "the kept output is shorter than the flood".to_owned())?;
     check!(
         flood
@@ -118,28 +128,42 @@ pub(super) fn the_flood_is_kept_whole_without_the_cap() -> Result<(), String> {
     );
     // After the flood comes the child's attempt line and libtest's own
     // summary, so the complete retained stream is checked, not just its head.
-    let expect_tail = format!(
-        "\npolean-hostile attempt stdout wrote {}",
-        super::hostile::output::FLOOD_BYTES
-    );
     let tail = run
         .stdout
-        .get(offset + start.len() + super::hostile::output::FLOOD_BYTES..)
+        .get(offset + start_len + super::hostile::output::FLOOD_BYTES..)
         .ok_or_else(|| "the kept output ends inside the flood".to_owned())?;
     let after_flood = String::from_utf8_lossy(tail);
-    check!(
-        after_flood.starts_with(&expect_tail),
-        "the attempt line must follow the flood, got {after_flood:?}"
+    // The retained suffix is the child's attempt line and libtest's summary.
+    // The summary's filtered count and duration vary, so those two fields are
+    // parsed and every fixed character is compared.
+    let marker = format!(
+        concat!(
+            "\npolean-hostile attempt stdout wrote {} bytes",
+            "\npolean-hostile done\n.\ntest result: ok. 1 passed;",
+            " 0 failed; 0 ignored; 0 measured; ",
+        ),
+        super::hostile::output::FLOOD_BYTES
     );
+    let rest = after_flood
+        .strip_prefix(&marker)
+        .ok_or_else(|| format!("the retained suffix has an unexpected shape: {after_flood:?}"))?;
+    let (count, summary) = rest
+        .split_once(" filtered out; finished in ")
+        .ok_or_else(|| format!("libtest's summary is incomplete: {rest:?}"))?;
     check!(
-        after_flood.contains("test result: ok"),
-        "libtest's summary must be retained after the attempt line, got {after_flood:?}"
+        !count.is_empty() && count.chars().all(|digit| digit.is_ascii_digit()),
+        "libtest's filtered count must be numeric, got {count:?}"
     );
+    // The summary ends with exactly two newlines; pinning them means a
+    // truncated or altered ending fails instead of being trimmed away.
+    let number = summary
+        .strip_suffix("s\n\n")
+        .ok_or_else(|| format!("libtest's summary must end with two newlines, got {summary:?}"))?;
     check!(
-        !run.bounds.contains(Bound::Stdout),
-        "the lifted cap must not trip"
+        !number.is_empty() && number.parse::<f64>().is_ok(),
+        "libtest's duration must be numeric, got {number:?}"
     );
-    require_outcome(&run, &Outcome::Completed)
+    Ok(())
 }
 
 /// The negative control for private storage.

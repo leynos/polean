@@ -1116,11 +1116,14 @@ section and in each ADR.
   `make verus` (136 s; 89 + 64 + 29 verified, all 19 controls rejected),
   `test-scripts` (152 passed), and `make toolchain-smoke` (262 s after
   provisioning; 22 passed). Pushed as `f23f920`.
-- [ ] EP-M1 milestone CodeRabbit CLI review. The CLI (`0.9.6`) refused with
-  `rate_limit`, `recoverable: true`, `waitTime: 7 minutes and 51 seconds`, and
-  "you've used all 10 included reviews currently available"; it reviewed
-  nothing, so this is an evidence gap rather than a pass. Retry once the
-  documented wait has elapsed, then record the findings.
+- [x] EP-M1 milestone CodeRabbit CLI review, superseded rather than performed.
+  The CLI (`0.9.6`) refused with `rate_limit`, `recoverable: true`,
+  `waitTime: 7 minutes and 51 seconds`, and "you've used all 10 included
+  reviews currently available", so it reviewed nothing. The hosted CodeRabbit
+  app then reviewed the branch across three rounds (`81baa02`, `01f9211`,
+  `864b540`) and answered six assessment requests across `a24d163` to
+  `91d3f07`. Those reviews cover the milestone's scope; the CLI run itself
+  remains unperformed and is recorded as such.
 - [x] 2026-11-21: EP-M2 implemented: `scope.rs`, `supervisor/` (with
   `teardown.rs`), the six hostile behaviour families, `boundary/canary.rs` (the
   report parser), `probe/unconfined.rs`, and the `make boundary-probe` target.
@@ -1225,6 +1228,12 @@ section and in each ADR.
   assessment: the ADR already defers an explicit user cancellation outcome to
   roadmap 4.3.1, and the feature file, which is authoritative, has no
   negative-control steps inside the scenarios.
+- [x] 2026-11-24: five consecutive 21-cell `make boundary-probe` runs at the
+  final code passed in 34.16 s, 30.49 s, 40.25 s, 34.22 s, and 40.89 s. The
+  lifted-cap control compares the complete retained stream: preamble, start
+  line, the whole flood, the child's attempt and completion lines, and
+  libtest's summary, whose numeric fields are parsed and whose two trailing
+  newlines are required.
 - [x] `SHA256SUMS` was stale before this branch: five rows (the audit manifest,
   three validation modules, and the regenerated validation summary) did not
   match their files even at `ad217c8`. They are regenerated here, so
@@ -1509,11 +1518,11 @@ section and in each ADR.
   8,500 net lines and 55 files, or direct a reduction. The work continues under
   the user's explicit completion directive, and the overrun is reported for
   post-hoc ratification, as 1.2.2 and 1.2.3 were. No control has been weakened
-  to save lines. Final measurement against `5447c62` at head `6cd33bd`,
-  excluding this plan and the reviewed snapshot: 9,696 net code lines in 60
+  to save lines. Final measurement against the rebased base `13dc116c`,
+  excluding this plan and the reviewed snapshot: 9,878 net code lines in 61
   files (the classification counts `Makefile`, the feature file,
   `tests/**/*.rs`, `verus/*.rs`, and `scripts/*.py` as code); documentation 9
-  files and 492 net lines; one snapshot of 60 lines.
+  files and 503 net lines; one snapshot of 60 lines.
 
 ## Outcomes & retrospective
 
@@ -1524,7 +1533,7 @@ limit, cancellation, and private storage — each beside a negative control that
 shows the hostile behaviour succeeding without the boundary. Pinned OPA decides
 the same Booleans inside and outside and reaches no listener through
 `http.send`; pinned Lean checks its smoke module inside the 2 GiB and 60 s
-defaults. `make boundary-probe` runs twenty probes in about 30 s on the shared
+defaults. `make boundary-probe` runs twenty-one probes in 30–41 s on the shared
 host.
 
 What the work establishes and what it does not is the main lesson. The Verus

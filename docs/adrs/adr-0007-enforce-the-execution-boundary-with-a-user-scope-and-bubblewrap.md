@@ -172,7 +172,7 @@ silence window; they are observations, not the budgets roadmap 4.3.3 measures.
 
 _Table 2: Single-run observations from `make boundary-probe`._
 
-Repeated `make boundary-probe` runs each passed all twenty-one probes in 33–47
+Repeated `make boundary-probe` runs each passed all twenty-one probes in 30–41
 s on the shared development host. A loopback TCP address inside the empty
 network namespace reports `ECONNREFUSED` rather than `ENETUNREACH`, because the
 loopback route exists even with `lo` down; the canary's probe-owned listener is
