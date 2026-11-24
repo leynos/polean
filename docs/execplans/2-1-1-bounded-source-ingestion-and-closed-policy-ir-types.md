@@ -5,10 +5,9 @@ This ExecPlan (execution plan) is a living document. Keep `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: DRAFT (revision 3). The community-of-experts review has been applied,
-and the user decided Q1 and Q2 on 2026-11-22 (D17, D18). Awaiting the user's
-approval of the plan. Implementation must not begin until the user approves
-this plan.
+Status: APPROVED (revision 3). The community-of-experts review has been applied,
+and the user decided Q1 and Q2 on 2026-11-22 (D17, D18). The user approved the
+plan and authorized implementation on 2026-11-24.
 
 Roadmap item: [2.1.1](../roadmap.md). Branch:
 `2-1-1-bounded-source-ingestion-and-closed-policy-ir-types`.
@@ -280,7 +279,7 @@ The estimate behind these limits is in `Context and orientation`.
   dependency) and Q2 (no new CI job in this item); recorded as D17 and D18.
   `main` had moved to `5447c62` meanwhile, adding a CI proof job (#55); D15 is
   withdrawn as redundant, and the ADR number moves to 0008 (D16).
-- [ ] User approval of the plan.
+- [x] (2026-11-24) The user approved the plan and authorized implementation.
 - [ ] `EP-M1`: profile constants and bounded source ingestion.
 - [ ] `EP-M2`: closed IR types, canonical encoder, and strict decoders.
 - [ ] `EP-M3`: proof tooling, then the Verus proof of the canonical encoding.
