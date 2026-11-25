@@ -31,6 +31,24 @@
 
 use vstd::prelude::*;
 
+// The injectivity proof and its specification exist only for the verifier.
+// `verus!` erases ghost items under plain `rustc`, so compiling these modules
+// would leave their imports unused and `-D warnings` would fail the build.
+// They are gated together for that reason, exactly as the settlement decision
+// gates its specification, lemmas, and witnesses.
+#[cfg(verus_keep_ghost)]
+#[path = "../../../verus/policy_canonical_spec.rs"]
+mod spec;
+
+#[cfg(verus_keep_ghost)]
+#[path = "../../../verus/policy_canonical_injective.rs"]
+mod injective;
+
+#[cfg(verus_keep_ghost)]
+pub use self::injective::*;
+#[cfg(verus_keep_ghost)]
+pub use self::spec::*;
+
 verus! {
 
 broadcast use vstd::seq::group_seq_axioms;
