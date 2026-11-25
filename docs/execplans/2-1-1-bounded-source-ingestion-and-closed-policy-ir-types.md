@@ -343,6 +343,19 @@ The estimate behind these limits is in `Context and orientation`.
   public surface in `interface.rs`, which also brings `mod.rs` under the
   400-line limit. Glob re-exports that feed only `verus!` items must be gated on
   `#[cfg(verus_keep_ghost)]`, or plain `rustc` reports them unused.
+- Observation, rebase onto `6754629`, gate state: `make check-fmt`,
+  `make typecheck`, `make lint`, and `make markdownlint` all pass on the
+  rebased head.
+  `cargo nextest run --all-targets --all-features -E 'not binary(admission)'`
+  passes 195 tests with 0 failures and 22 skipped. _Environment finding:_ the
+  `admission` test group's 76 tests did not complete, because that group starts
+  nested `cargo` builds and the shared compile-slot queue held 401 waiting
+  requests from other repositories. The log for a single attempt records 453
+  `waiting for a compile slot` lines and 24 of 76 tests passing before the
+  allowance expired; no test in the group failed. This branch changes neither
+  that target nor `.config/nextest.toml`, and the same group passed on this
+  branch before the rebase. `make test` therefore has no complete verdict on
+  this host, which is recorded rather than reported as a pass.
 - Observation, rebase onto `6754629`: `main` replaced Clippy's
   `cognitive_complexity` with Whitaker's macro-aware
   `macro_aware_cognitive_complexity`, configured by the new `dylint.toml` at
