@@ -343,19 +343,26 @@ The estimate behind these limits is in `Context and orientation`.
   public surface in `interface.rs`, which also brings `mod.rs` under the
   400-line limit. Glob re-exports that feed only `verus!` items must be gated on
   `#[cfg(verus_keep_ghost)]`, or plain `rustc` reports them unused.
-- Observation, rebase onto `6754629`, gate state: `make check-fmt`,
-  `make typecheck`, `make lint`, and `make markdownlint` all pass on the
-  rebased head.
-  `cargo nextest run --all-targets --all-features -E 'not binary(admission)'`
-  passes 195 tests with 0 failures and 22 skipped. _Environment finding:_ the
-  `admission` test group's 76 tests did not complete, because that group starts
-  nested `cargo` builds and the shared compile-slot queue held 401 waiting
-  requests from other repositories. The log for a single attempt records 453
+- Observation, gate state after the stack was introduced: every gate passes on
+  this head. `make test` completes with 271 passed, 0 failed, 22 skipped in
+  about 172 s, plus five doctests; `make check-fmt`, `make typecheck`,
+  `make lint`, and `make markdownlint` also pass, and `make verus` reports 43
+  verified with 0 errors.
+- Observation: before the stack's bottom layer, `make test` had no complete
+  verdict on a contended host, and the cause was a timeout policy rather than
+  any defect. The `admission` group's 76 tests were serialised behind a nested
+  `cargo` build that waits in the same compile-admission pool every other
+  process on the machine uses; with hundreds of compiler requests queued ahead,
+  a cold build outlived its 600 s allowance. A single attempt logged 453
   `waiting for a compile slot` lines and 24 of 76 tests passing before the
-  allowance expired; no test in the group failed. This branch changes neither
-  that target nor `.config/nextest.toml`, and the same group passed on this
-  branch before the rebase. `make test` therefore has no complete verdict on
-  this host, which is recorded rather than reported as a pass.
+  allowance expired, with no failure. Two things were wrong: only one test
+  starts a child cargo, yet the filter selected the whole binary, and the
+  allowance treated a queue wait as a hang. The bottom layer of the stack
+  (`relax-nextest-timeouts-for-contended-builds`, PR #67) selects that one test
+  by name, gives it a 30-minute allowance that warns every minute, and raises
+  `global-timeout` to 45 minutes with the CI job at 60 so the bounds nest
+  strictly. The suite is also faster: 217 tests that previously ran one at a
+  time now run in parallel. The developers' guide records the hierarchy.
 - Observation, rebase onto `6754629`: `main` replaced Clippy's
   `cognitive_complexity` with Whitaker's macro-aware
   `macro_aware_cognitive_complexity`, configured by the new `dylint.toml` at
@@ -626,6 +633,19 @@ The estimate behind these limits is in `Context and orientation`.
   `src/ir/tests.rs` record the form, because reverting one constant to a
   byte-string literal would silently make its proof unprovable. Date/Author:
   2026-11-24, implementation agent.
+- D23. Decision: the suite's timeout policy is carried in a separate layer
+  beneath this branch, not in this plan's diff. The layer
+  (`relax-nextest-timeouts-for-contended-builds`, PR #67, stacked under PR #52)
+  selects by test name the one test that starts a child cargo, gives it a
+  30-minute allowance that warns every minute, and raises `global-timeout` to
+  45 minutes with the CI job at 60. Rationale: a gate that fails for queueing
+  is not measuring the change under test, and the plan's own gates cannot be
+  satisfied while it does. It belongs below this branch because this branch
+  needs the gate to work in order to be validated at all, and because the
+  repository-wide policy is not 2.1.1's to own. The bounds nest strictly so a
+  failure is always attributed to the narrowest applicable bound; they are
+  ceilings, so a passing run pays nothing for the headroom. Date/Author:
+  2026-11-25, implementation agent, at the sponsor's direction.
 
 ### Questions put to the user
 
