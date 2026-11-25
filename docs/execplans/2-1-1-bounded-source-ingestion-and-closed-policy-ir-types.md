@@ -285,7 +285,16 @@ The estimate behind these limits is in `Context and orientation`.
 - [x] (2026-11-24) `EP-M1` implemented: `src/profile.rs`, `src/bounded/`, and
   `src/source/`, with unit, contract, property, and BDD coverage. 58 focused
   tests pass. Seeded faults recorded under `Artefacts and notes`.
-- [ ] `EP-M2`: closed IR types, canonical encoder, and strict decoders.
+- [~] (2026-11-25) `EP-M2` partial: `Atom`, `Rule`, `Policy`, `CanonicalIr`,
+  the constructors, and the verified canonical encoder are in. `make verus`
+  reports 43 verified, 0 errors on `verus/policy_canonical.rs`. The two
+  decoders, the fixture and property tests, and the error-display snapshot
+  remain.
+- [~] (2026-11-25) `EP-M3` partial: `verus/policy_canonical_spec.rs` holds the
+  parser; `verus/policy_canonical_injective.rs` proves prefix-freeness and the
+  atom-level inversion (`parse_quoted(quoted(a) + rest) = Some((a, rest))`).
+  The body, rule-list, and envelope inductions, the negative controls, and the
+  `proofs.yml` registration remain.
 - [ ] `EP-M3`: proof tooling, then the Verus proof of the canonical encoding.
 - [ ] `EP-M4`: documentation, ADR 0008, and delivery closure.
 
@@ -632,7 +641,16 @@ The estimate behind these limits is in `Context and orientation`.
 - [x] (2026-11-24) `EP-M1` implemented: `src/profile.rs`, `src/bounded/`, and
   `src/source/`, with unit, contract, property, and BDD coverage. 58 focused
   tests pass. Seeded faults recorded under `Artefacts and notes`.
-- [ ] `EP-M2`: closed IR types, canonical encoder, and strict decoders.
+- [~] (2026-11-25) `EP-M2` partial: `Atom`, `Rule`, `Policy`, `CanonicalIr`,
+  the constructors, and the verified canonical encoder are in. `make verus`
+  reports 43 verified, 0 errors on `verus/policy_canonical.rs`. The two
+  decoders, the fixture and property tests, and the error-display snapshot
+  remain.
+- [~] (2026-11-25) `EP-M3` partial: `verus/policy_canonical_spec.rs` holds the
+  parser; `verus/policy_canonical_injective.rs` proves prefix-freeness and the
+  atom-level inversion (`parse_quoted(quoted(a) + rest) = Some((a, rest))`).
+  The body, rule-list, and envelope inductions, the negative controls, and the
+  `proofs.yml` registration remain.
 - [ ] `EP-M3`: proof tooling, then the Verus proof of the canonical encoding.
 - [ ] `EP-M4`: documentation, ADR 0008, and delivery closure.
 
