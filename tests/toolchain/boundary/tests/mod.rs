@@ -5,10 +5,9 @@
 //! five controls with two states each for `verdict`. Enumerating a finite domain
 //! is complete, so a named case cannot hide behind a sampling argument.
 //!
-//! The platform tests inject missing program paths and canary reports, so they
-//! start no job and hold on any host. The one exception is `check`, which also
-//! runs the real `systemctl --user is-system-running` when a test calls it;
-//! that test asserts only on the controls it injected.
+//! The platform tests inject an `Observation` and a canary report, so they start
+//! no process and hold on any host. The host observation lives in
+//! `platform::observe` and is exercised by the boundary probe, not here.
 
 mod canary;
 mod hostile;

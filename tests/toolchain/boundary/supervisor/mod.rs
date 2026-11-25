@@ -230,7 +230,7 @@ impl Supervisor<'_> {
         let (stdout, stderr, mut bounds) =
             finish_readers(readers, waiting.bounds, &mut diagnostics);
         let result = read_result(&scope, &mut diagnostics);
-        reset_failed_unit(&scope, result.as_deref());
+        reset_failed_unit(&scope, result.as_deref(), &mut diagnostics);
         tool_evidence(job, cgroup.as_deref(), result.as_deref(), &mut diagnostics);
         record_result(result.as_deref(), &mut bounds);
         let exit = exit_form(status);

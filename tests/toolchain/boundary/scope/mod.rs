@@ -201,13 +201,19 @@ impl Scope<'_> {
     /// reset failure leaves a failed unit that the next run's per-run nonce
     /// cannot collide with. Only the exact unit name this run created is named,
     /// never a pattern.
-    pub fn reset_failed(&self) {
-        drop(process::run(
+    /// # Errors
+    ///
+    /// Returns a diagnostic when `systemctl reset-failed` cannot be run, so the
+    /// caller can record it rather than losing it.
+    pub fn reset_failed(&self) -> Result<(), String> {
+        process::run(
             self.programs.systemctl.as_path(),
             &["--user", "reset-failed", &self.systemd_unit()],
             &[("XDG_RUNTIME_DIR", self.runtime_dir)],
             process::CONTROL_BOUND,
-        ));
+        )
+        .map(drop)
+        .map_err(|error| format!("cannot reset {}: {error}", self.systemd_unit()))
     }
 
     /// Kill every process in the scope through systemd.
