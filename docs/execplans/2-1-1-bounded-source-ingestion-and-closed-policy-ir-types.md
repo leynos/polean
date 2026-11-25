@@ -295,7 +295,6 @@ The estimate behind these limits is in `Context and orientation`.
   atom-level inversion (`parse_quoted(quoted(a) + rest) = Some((a, rest))`).
   The body, rule-list, and envelope inductions, the negative controls, and the
   `proofs.yml` registration remain.
-- [ ] `EP-M3`: proof tooling, then the Verus proof of the canonical encoding.
 - [ ] `EP-M4`: documentation, ADR 0008, and delivery closure.
 
 ## Surprises & discoveries
@@ -333,20 +332,31 @@ The estimate behind these limits is in `Context and orientation`.
 - Observation: `docs/references.md`, named in the task's required reading,
   does not exist. The technical design's `References` section (R1–R18) serves
   that role. Impact: none; signposted below.
+- Observation, EP-M2: a `mod` declared _inside_ `verus!` fails Whitaker's
+  `module_must_have_inner_docs` however its `//!` is written, because the macro
+  rewrites the block before the lint sees it, and `#[expect]` cannot be hoisted
+  out of the macro to suppress it. A **file** module (`pub mod tokens;` beside
+  `tokens.rs`) has no such problem. Evidence: the lint's own
+  `pass_inline_module` fixture passes, while the inline module failed after the
+  doc was moved, reordered, and wrapped in `cfg_attr`. Impact: the constants
+  live in `src/ir/model/tokens.rs`, the specification in `bytes.rs`, and the
+  public surface in `interface.rs`, which also brings `mod.rs` under the
+  400-line limit. Glob re-exports that feed only `verus!` items must be gated on
+  `#[cfg(verus_keep_ghost)]`, or plain `rustc` reports them unused.
 - Observation: technical design §6 names `src/frontend.rs`, not
   `src/source/`. Impact: D1 records the departure, and EP-M4 updates §6.
 - Observation, EP-M2 feasibility: Verus 0.2026.09.06 cannot relate a
   `const [u8; N]`'s view to the literal `seq![...]` of the same bytes. Pushing
   `b'"'` and then asserting `out@ == old(out)@ + QUOTE@` fails, and so does
-  `assert(QUOTE@ == seq![b'"'])`, while pushing `QUOTE[0]` establishes the
-  same fact. Evidence: isolated probes against the pinned release, each
-  reproduced alone. Impact: the encoder pushes **every** byte through
-  `push_bytes` from a named constant, and every specification expression is
-  built from those constants rather than from `seq![b'x']` literals. D20
-  records the rule. This is the single fact that made the refinement proof
-  reach `30 verified, 0 errors`.
+  `assert(QUOTE@ == seq![b'"'])`, while pushing `QUOTE[0]` establishes the same
+  fact. Evidence: isolated probes against the pinned release, each reproduced
+  alone. Impact: the encoder pushes **every** byte through `push_bytes` from a
+  named constant, and every specification expression is built from those
+  constants rather than from `seq![b'x']` literals. D20 records the rule. This
+  is the single fact that made the refinement proof reach
+  `30 verified, 0 errors`.
 - Observation, EP-M2 feasibility: Verus treats a struct with a private field as
-  an *opaque datatype*, so a `pub open spec fn` may not read that field: it
+  an _opaque datatype_, so a `pub open spec fn` may not read that field: it
   must be well formed outside the module, where the field is invisible. The
   accessors are therefore `pub closed spec fn`, and proofs call
   `reveal(Rule::body)` and `reveal(Policy::rules_spec)` where they need the
@@ -376,364 +386,6 @@ The estimate behind these limits is in `Context and orientation`.
   D22 draft) is therefore unnecessary. D22 records the final rule, and the
   constants carry a comment saying why the form matters, because rewriting one
   back to `*b"..."` would silently make the proof unprovable.
- the
-evidence bundle, and every later roadmap item consume the IR rather than Rego.
-
-Today the crate under `src/` is a scaffold. No production code reads a policy,
-bounds its size, checks its encoding, or represents the IR. The 1.2.2 admission
-spike under `tests/admission/` used a throwaway `Vec<Vec<String>>` and read
-sources without a cap, and its design record says that type must not be
-promoted. The committed IR fixtures, such as
-`examples/tenant-write/policy.json`, are pretty-printed JSON. Nothing produces
-the compact _canonical bytes_ that technical design §7 says evidence must bind.
-
-After this work, a library caller can do four things, each with a closed, typed
-failure:
-
-1. Ingest a policy source from any `std::io::Read` or byte vector. Ingestion
-   reads at most 65,537 bytes and rejects anything longer than 65,536 bytes
-   without consuming the rest of the stream. It rejects malformed UTF-8 with
-   the offset of the first bad byte, and a NUL byte with its offset. Otherwise
-   it returns the exact bytes, unchanged, as a `PolicySource`.
-2. Build a `Policy` from atoms. The constructors make an empty rule body, a
-   17th rule, or a 17th atom unrepresentable, and an atom can only be one of
-   six enum values.
-3. Decode a `Policy` from JSON. The decoder accepts the committed
-   pretty-printed fixtures. It rejects duplicate keys, unknown fields, missing
-   fields, values of the wrong JSON type, escaped spellings, a different
-   profile, unknown atoms, empty bodies, and every bound violation, each with
-   its own error variant.
-4. Encode a `Policy` to canonical bytes,
-   `{"profile":"polean.tenant-write.v0","rules":[...]}` followed by one line
-   feed. The bytes contain no other whitespace and preserve rule and atom
-   order; zero rules encode as `"rules":[]`. A strict reader accepts exactly
-   those bytes and nothing else. A Verus proof establishes two facts: the
-   shipped encoder produces exactly the specified bytes, and distinct policies
-   never share canonical bytes. Hashing canonical bytes, which roadmap 4.1.1
-   will do, therefore identifies exactly one policy.
-
-For example, the baseline fixture's canonical bytes are:
-
-```plaintext
-{"profile":"polean.tenant-write.v0","rules":[["same_tenant","write_action","admin_role"],["same_tenant","write_action","owns_resource","unlocked"]]}
-```
-
-followed by a single line feed.
-
-None of this admits Rego. Turning source into IR is roadmap 2.1.2, which will
-consume `PolicySource` and produce `Policy`. Nothing here proves any of the
-following: that a source belongs to the profile, that a model claim holds, that
-translation is correct, or that a runtime agrees with the model. The Verus
-theorem concerns the byte encoding of IR values only.
-
-### Terms used in this plan
-
-- _Kernel_: a small module of executable Rust written inside a `verus! { ... }`
-  block. Cargo compiles it normally; Verus verifies the same file.
-- _Ghost code_: specifications, proof functions, `requires`, `ensures`, and
-  loop invariants. Verus checks them and plain `rustc` erases them, so they
-  cost nothing at run time.
-- _Refinement_: the property that an executable function returns exactly what
-  its specification says.
-- _Injective_: a function is injective when distinct inputs always give
-  distinct outputs.
-- _Prefix-free_: a set of byte strings is prefix-free when no member is the
-  beginning of another member.
-- _Left inverse_: a function `parse` is a left inverse of `render` when
-  `parse(render(x)) = x` for every `x`.
-- _Witness_: a concrete value that satisfies a precondition. It shows the
-  precondition is not impossible to meet, so a proof under that precondition is
-  not vacuous.
-- _Negative control_: a deliberately broken copy of the code or specification
-  that the verifier or test must reject. Its rejection shows the check can fail.
-- _Plateau_: a milestone end state that is coherent, passes every gate, and is
-  safe to stop at.
-
-## Constraints
-
-- Keep the four claims in `AGENTS.md` separate. No type name, error message,
-  test name, or document may describe ingestion, decoding, or canonical
-  encoding as admission, proof of a policy, translation, or runtime agreement.
-  The Verus theorem is stated as a property of the canonical byte encoding.
-- Production code lives in one Rust package under `src/`, in the modules named
-  in `Interfaces and dependencies`. `self_named_module_files` is denied, so
-  directories use `mod.rs`.
-- The IR holds only the six atoms in rule order. No byte spans, source text,
-  comments, or Regorus types may enter it (technical design §6.1); 2.1.2 owns
-  the diagnostic sidecar.
-- `Atom`, `Rule`, `Policy`, and `CanonicalIr` must not implement serde's
-  `Serialize` or `Deserialize`. The only ways to obtain a `Policy` are its
-  constructors and the two decoders, so no derive can bypass the bounds. A
-  `compile_fail` doctest guards this.
-- Unsupported or malformed data fails closed. There is no lenient mode, no
-  coercion, no last-key-wins, no truncation, and no ignored field.
-- Library code must not print, exit, read environment variables, touch the
-  filesystem, or depend on OrthoConfig (technical design §8; Whitaker's
-  `no_std_fs_operations`; `clippy.toml` `disallowed-methods`). Ingestion takes
-  `impl Read`; opening files is the CLI's job in 2.1.4.
-- No diagnostic may carry attacker-chosen text. `DecodeError` holds no
-  `serde_json::Error`, message, key, or value, and has no `source()`.
-- Do not change `contracts/`, `examples/`, `validation/`, or `lean/`. The
-  pretty-printed fixtures remain the decoder's inputs; this plan does not
-  rewrite them into canonical form.
-- Do not change the admission spike in `tests/admission/`. Its throwaway IR
-  remains test-only, and 2.1.2 retires it.
-- Authorized dependency changes are exactly these, all at the versions already
-  in `Cargo.lock`: move `serde` (`=1.0.229`, feature `derive`) and `serde_json`
-  (`=1.0.154`) to `[dependencies]`; and, as the user decided in Q1 (D17), move
-  `vstd` (`=0.0.0-2026-09-06-0133`) to `[dependencies]`. Each stays in
-  `[dev-dependencies]` only if still needed there. Regorus stays a
-  dev-dependency until 2.1.2.
-- Verus proofs must not use any construct the forbidden-construct scan
-  rejects, listed under `EP-M3`. That includes `assume`, `admit`,
-  `assume_specification`, `assume_new`, `external_body` and its relatives,
-  `exec_allows_no_decreases_clause`, `axiom fn`, and
-  `cfg(not(verus_keep_ghost))`. Unproved statements may live in this plan, not
-  in code. `make verus` acceptance runs with `VERUS_FLAGS` unset.
-- Follow the lint policy: no `unsafe`; no `allow` attributes (a scoped
-  `#[expect(..., reason = "...")]` is permitted); every module starts with
-  `//!`; modules stay under 400 lines and functions under 70 lines; public
-  items carry Rustdoc with an example where useful.
-- `make verus` stays outside `make all`. CI already runs it through
-  `.github/workflows/proofs.yml` (added on `main` by #55). This plan adds no
-  new CI job (D18); it only adds the new proof's inputs to that workflow's path
-  filters, so the existing job sees them.
-- Use British English with Oxford spelling. Refresh `SHA256SUMS` only for
-  covered files this plan changes (`docs/technical-design.md`, and
-  `docs/context.md`), after reviewing each change.
-- Do not bypass compile admission (`RUSTC_WRAPPER`), do not create an isolated
-  Cargo cache, and do not use `/tmp` as a build target.
-- Implementation begins only after the user approves this plan.
-
-## Tolerances (exception triggers)
-
-Exclude this ExecPlan from every count, including when it is updated in the
-same change. Exclude reviewed `insta` snapshots (`**/*.snap`), proptest
-regression files (`**/*.proptest-regressions`).
-
-Measure net lines (additions minus deletions) per category against the merge
-base with `main`. Before EP-M1 the branch is rebased onto current `main` (D19),
-so compute the base rather than hard-coding it:
-
-```bash
-BASE=$(git merge-base origin/main HEAD)
-git diff --numstat "$BASE"...HEAD -- . \
-  ':(exclude)docs/execplans/**' ':(exclude)**/*.snap' \
-  ':(exclude)**/*.proptest-regressions'
-```
-
-Classify whole files by path:
-
-- Code: `src/**`, `tests/**` (including `.feature` files), `verus/**`,
-  `scripts/**`, and `Makefile`.
-- Configuration: `Cargo.toml`, `Cargo.lock`, `.github/**`, `.config/**`, and
-  `SHA256SUMS`.
-- Documentation: `docs/**` except ExecPlans, `README.md`, and
-  `tools/verus/README.md`.
-
-Limits, each enforced independently. Record a `numstat` measurement in
-`Progress` at the end of every milestone.
-
-- Code, overall: stop and escalate above 8,000 net lines.
-- Code, per milestone: stop and escalate if EP-M1 exceeds 1,400, EP-M2
-  exceeds 3,400, EP-M3 exceeds 2,600 (including the tooling commit), or EP-M4
-  exceeds 200.
-- Configuration: stop and escalate above 100 net lines.
-- Documentation: stop and escalate above 1,300 net lines.
-- Files: stop and escalate above 55 changed non-ExecPlan files, excluding
-  snapshots.
-- Interface: stop if a public item beyond those named in
-  `Interfaces and dependencies` is needed, or if `contracts/` would have to
-  change.
-- Dependencies: stop if any dependency other than those authorized in
-  `Constraints` is needed, or if a pinned version would have to change.
-- Feasibility: stop at the end of the EP-M2 feasibility step if the kernel
-  cannot declare `Atom`, `Rule`, and `Policy` inside `verus!` and also pass
-  `make lint` as library code without an `allow`. Present the obstacle and the
-  fallback in Q1.
-- Verification: stop if a Verus theorem in `Verification plan` cannot be
-  proved without a forbidden construct, or can only be proved in a weaker form.
-  Present the open verification condition instead.
-- Design: stop and set `BLOCKED` if the decoder cannot distinguish a required
-  rejection class, or if technical design §7 turns out to require behaviour
-  this plan contradicts.
-- Iterations: stop when a gate still fails after three fix attempts on one
-  cause.
-- Ambiguity: stop on a newly found ambiguity whose readings would accept
-  different inputs.
-
-The estimate behind these limits is in `Context and orientation`.
-
-## Risks
-
-- Risk: the Verus proof of canonical uniqueness is harder than estimated,
-  because it reasons about concatenations of nested sequences. Severity:
-  medium. Likelihood: medium. Mitigation: the proof sketch reduces the problem
-  to a specification-level left-inverse parser over a prefix-free token set,
-  which is the shape Vest-style serializer proofs use. EP-M2 delivers a fully
-  tested encoder, so EP-M3 can stop without losing tested behaviour.
-- Risk: production code inside `verus!` fails the library lint policy.
-  `missing_docs`, `must_use_candidate`, and rustdoc's `-D warnings` apply to
-  exported items, which the 1.2.2 test-only kernel never had. Deriving anything
-  beyond `Clone`, `Copy`, `Debug`, `PartialEq`, and `Eq` inside `verus!` has no
-  precedent, and neither do string or byte-string literals there. Severity:
-  medium. Likelihood: medium. Mitigation: EP-M2 opens with a feasibility step
-  that lints the skeleton as library code and runs Verus on it. Atom names are
-  emitted through constant byte arrays, and the `&'static str` accessor sits
-  outside `verus!`.
-- Risk: serde_json reports type faults when it meets them, so a single typed
-  pass cannot give a stable precedence or a variant per fault. Severity:
-  medium. Likelihood: certain for a single-pass design. Mitigation: D8's
-  two-pass decoder settles syntax first. The typed pass then classifies values
-  through repository visitors that never raise serde errors.
-- Risk: the proof quietly stops covering the shipped encoder. The kernel moves
-  into production `src/`, which later items will edit, while `make verus` is
-  not a local commit gate. Severity: high. Likelihood: low, now that CI runs
-  the proofs. Mitigation: EP-M3 adds `src/ir/model/**` and the new
-  `verus/policy_canonical*` files to the path filters of
-  `.github/workflows/proofs.yml`, so any change to a proof input runs
-  `make verus` and its controls in CI. A test checks that every proof tree's
-  source directories appear in those filters, so a later proof cannot be
-  forgotten the same way.
-- Risk: canonical bytes diverge from what the Python harness and Lean will
-  use. Severity: medium. Likelihood: low. Mitigation: a test encodes every
-  committed IR fixture and compares it with an independent serde_json compact
-  rendering. An `insta` snapshot records the canonical bytes for review.
-- Risk: making `vstd` a production dependency adds pre-release crates to the
-  shipped dependency graph. Severity: medium. Likelihood: certain, since the
-  user accepted Q1 (D17). Mitigation: ADR 0008 records the decision and amends
-  ADR 0005's "dev-only" consequence. `verus!` erases ghost code under plain
-  `rustc`, and every test run already builds the crates.
-- Risk: a reader misbehaves. It may return `Ok(0)` before the true end,
-  return `Interrupted` forever, report more bytes than it was given, or fail
-  after a partial read. Severity: medium. Likelihood: low. Mitigation: a
-  failure after a partial read is a tested `Read` error, never a truncated
-  success. Rustdoc documents the other three as the caller's contract: `Ok(0)`
-  is end of stream, `Interrupted` is retried, and a lying reader makes `std`
-  panic. 2.1.4 compares the length read with the file's metadata length.
-- Risk: estimates are low again. Severity: medium. Likelihood: medium; both
-  previous plans overran their scope tolerances by two to three and a half
-  times. Mitigation: per-milestone budgets with measurements at each plateau; a
-  breach stops work.
-
-## Progress
-
-- [x] (2026-11-14) Renamed the branch to
-  `2-1-1-bounded-source-ingestion-and-closed-policy-ir-types`; the remote
-  branch does not exist yet, so tracking is set at the first push.
-- [x] (2026-11-14) Wyvern reconnaissance: admission spike and IR fixtures;
-  Verus wiring and gates; prior ExecPlans and governing documents; contracts,
-  outcomes, and downstream consumers.
-- [x] (2026-11-14) Checked serde and serde_json behaviour in the locked
-  sources, and Vest as prior art for verified serializers.
-- [x] (2026-11-14) Drafted revision 1 (commit `ec9d2ad`).
-- [x] (2026-11-14) Community-of-experts review: API and contracts, formal
-  methods and alternatives, red team and pre-mortem, and proportionality and
-  process. Verdict: revise. Revision 2 adopts the conditions; see
-  `Revision notes`.
-- [x] (2026-11-22) The user decided Q1 (`vstd` becomes a production
-  dependency) and Q2 (no new CI job in this item); recorded as D17 and D18.
-  `main` had moved to `5447c62` meanwhile, adding a CI proof job (#55); D15 is
-  withdrawn as redundant, and the ADR number moves to 0008 (D16).
-- [x] (2026-11-24) The user approved the plan and authorized implementation.
-- [x] (2026-11-24) Rebased onto `origin/main` at `13dc116` (D19); merge base is
-  `13dc116c28d147f0f7be14ec471057b0e1d410ba`.
-- [x] (2026-11-24) `EP-M1` implemented: `src/profile.rs`, `src/bounded/`, and
-  `src/source/`, with unit, contract, property, and BDD coverage. 58 focused
-  tests pass. Seeded faults recorded under `Artefacts and notes`.
-- [~] (2026-11-25) `EP-M2` partial: `Atom`, `Rule`, `Policy`, `CanonicalIr`,
-  the constructors, and the verified canonical encoder are in. `make verus`
-  reports 43 verified, 0 errors on `verus/policy_canonical.rs`. The two
-  decoders, the fixture and property tests, and the error-display snapshot
-  remain.
-- [~] (2026-11-25) `EP-M3` partial: `verus/policy_canonical_spec.rs` holds the
-  parser; `verus/policy_canonical_injective.rs` proves prefix-freeness and the
-  atom-level inversion (`parse_quoted(quoted(a) + rest) = Some((a, rest))`).
-  The body, rule-list, and envelope inductions, the negative controls, and the
-  `proofs.yml` registration remain.
-- [ ] `EP-M3`: proof tooling, then the Verus proof of the canonical encoding.
-- [ ] `EP-M4`: documentation, ADR 0008, and delivery closure.
-
-## Surprises & discoveries
-
-- Observation: the committed IR fixtures are pretty-printed, not canonical.
-  Evidence: `examples/tenant-write/policy.json` uses two-space indentation;
-  `validation/validate_design.py` writes JSON with `json.dumps(indent=2)`.
-  Impact: the general decoder must accept any JSON whitespace; canonical form
-  is a property of the encoder's output and of the strict reader (D3).
-- Observation: no code reads `source_bytes` or `input_bytes` from
-  `contracts/profile.json`, and nothing tests the 65,536-byte boundary.
-  Evidence: repository-wide search. Impact: EP-M1 adds the first enforcement
-  and a contract-drift test.
-- Observation: `scripts/check_verus_controls.py` checks that each proof
-  verifies and that each negative control is rejected, but it does not scan
-  proof sources for forbidden constructs. Its `expects` substrings are matched
-  over the whole output, so they cannot attribute a rejection to one
-  obligation. Evidence: the script's `Control` docstring
-  (`scripts/check_verus_controls.py:93-97`). Impact: EP-M3 adds a scan and
-  isolates the injectivity lemmas in their own file, so a control can name it.
-- Observation: registering a Verus entry point takes three uncoordinated
-  edits: `VERUS_PROOF_FILES` in the `Makefile`, a `ProofTree` in the script,
-  and a hard-coded list at `scripts/tests/test_verus_make_targets.py:200`.
-  Impact: EP-M3 updates all three and adds an agreement test.
-- Observation: serde_json 1.0.154 does not validate UTF-8 or surrogate escapes
-  inside values it ignores, and its ignorer does not limit nesting depth.
-  Evidence: `serde_json-1.0.154/src/read.rs:1076-1093`, `src/de.rs:1102-1214`.
-  Impact: the decoder validates the whole document as UTF-8 first (D6). Tests
-  place surrogate faults in keys, the profile, and atoms, and use a deeply
-  nested unknown value to show that nesting is bounded by the size cap.
-- Observation: serde_json stops at the first wrong-type value without reading
-  the rest of the document, so syntax and type faults surface in document
-  order. Evidence: `serde_json-1.0.154/src/de.rs:269`. Impact: D8 uses two
-  passes.
-- Observation: `docs/references.md`, named in the task's required reading,
-  does not exist. The technical design's `References` section (R1–R18) serves
-  that role. Impact: none; signposted below.
-- Observation: technical design §6 names `src/frontend.rs`, not
-  `src/source/`. Impact: D1 records the departure, and EP-M4 updates §6.
-- Observation, EP-M2 feasibility: Verus 0.2026.09.06 cannot relate a
-  `const [u8; N]`'s view to the literal `seq![...]` of the same bytes. Pushing
-  `b'"'` and then asserting `out@ == old(out)@ + QUOTE@` fails, and so does
-  `assert(QUOTE@ == seq![b'"'])`, while pushing `QUOTE[0]` establishes the
-  same fact. Evidence: isolated probes against the pinned release, each
-  reproduced alone. Impact: the encoder pushes **every** byte through
-  `push_bytes` from a named constant, and every specification expression is
-  built from those constants rather than from `seq![b'x']` literals. D20
-  records the rule. This is the single fact that made the refinement proof
-  reach `30 verified, 0 errors`.
-- Observation, EP-M2 feasibility: Verus treats a struct with a private field as
-  an *opaque datatype*, so a `pub open spec fn` may not read that field: it
-  must be well formed outside the module, where the field is invisible. The
-  accessors are therefore `pub closed spec fn`, and proofs call
-  `reveal(Rule::body)` and `reveal(Policy::rules_spec)` where they need the
-  definition. Evidence: the compiler's own diagnostic and an isolated probe
-  that verified with the closed form. Impact: D21 records it.
-- Observation, EP-M2 feasibility: a postcondition on a `&mut` parameter must
-  name the result with `final(out)@`, not `out@`, at the pinned release.
-  Evidence: the compiler's migration diagnostic. Impact: every encoder
-  postcondition is written `final(out)@ == old(out)@ + ...`.
-- Observation, EP-M2 feasibility: `#[derive(Clone)]` inside `verus!` on a
-  non-`Copy` type emits an `autoderive_clone_without_spec` warning, which would
-  fail `make verus` under `-D warnings`. Evidence: the pinned release's
-  warning. Impact: `Rule` and `Policy` carry
-  `#[verifier::allow(autoderive_clone_without_spec)]`, which the
-  forbidden-construct scan must not flag (it is not a `verifier::` escape).
-- Observation, EP-M2 feasibility, and the decisive one: Verus treats a
-  `const [u8; N]` as **wholly uninterpreted**. Not one property of its contents
-  is provable: `COMMA@[0] != LBRACKET@[0]`, `A@ != B@` for differently sized
-  arrays, and `A@ != C@` for same-sized arrays with different bytes all fail.
-  The one fact available is that `push_bytes(out, &ARRAY)` establishes
-  `out@ == old(out)@ + ARRAY@`, because that is `push_bytes`'s own
-  postcondition. Evidence: four isolated probes, each reproduced alone at the
-  pinned release. Impact: a design constraint, not a proof tactic. The
-  **specification** must be written over `open spec fn` constants, which do
-  reduce fully — `n_same()[0] != n_other()[0]` and the prefix-freeness
-  argument both verify over them — while the **encoder** appends the arrays.
-  The two are tied by an ordinary test in `src/ir/tests.rs` that compares
-  `ARRAY@` with the spec text byte for byte. That tie is tested, not proved,
-  and is the trust boundary ADR 0008 must state: the theorem is about the
-  specification, and the test shows the shipped arrays are that specification.
-  D22 records the design.
 
 ## Decision log
 
@@ -925,8 +577,8 @@ The estimate behind these limits is in `Context and orientation`.
   they need a definition. Rationale: Verus treats a datatype with a private
   field as opaque outside its module and forbids a `pub open spec fn` from
   reading it, because such a function must be well formed everywhere. A closed
-  accessor keeps the field private — which is what stops a caller constructing
-  a `Rule` outside the body bound — and `reveal` gives the proof the definition
+  accessor keeps the field private — which is what stops a caller constructing a
+  `Rule` outside the body bound — and `reveal` gives the proof the definition
   it needs. The alternative, a public field, would let any caller bypass the
   constructor. Date/Author: 2026-11-24, implementation agent.
 - D22. Decision: every kernel byte constant is written in element form,
@@ -2175,7 +1827,6 @@ type replaced by a message. What remains is genuinely named behaviour — five
 BDD scenarios, six rejection classes, and two properties — so it is recorded as
 an overrun rather than cut further. The overall 8,000-line limit has ample
 room, and no file approaches the 400-line module limit.
-
 
 ## Interfaces and dependencies
 

@@ -31,6 +31,10 @@
 
 use vstd::prelude::*;
 
+mod interface;
+
+pub use self::interface::{ATOM_NAMES, CanonicalIr, PolicyError, RuleError};
+
 // The injectivity proof and its specification exist only for the verifier.
 // `verus!` erases ghost items under plain `rustc`, so compiling these modules
 // would leave their imports unused and `-D warnings` would fail the build.
@@ -60,72 +64,11 @@ broadcast use vstd::seq::group_seq_axioms;
 // a specification: `*b"abc"@[0] == b'a'` is unprovable, while the same array
 // written `[b'a', b'b', b'c']` reduces fully. Every proof of the canonical
 // encoding rests on that, so the form is load-bearing and cannot be simplified.
-#[expect(
-    clippy::byte_char_slices,
-    reason = "element-form arrays are visible to Verus, byte-string literals are not"
-)]
-mod tokens {
-    //! The byte constants the encoder writes and the specification names.
-    //!
-    //! Element form is load-bearing; see the comment on the module.
+/// The byte constants the encoder writes and the specification names.
+pub mod tokens;
 
-    /// The profile identifier, as the encoder writes it between its quotes.
-    pub const PROFILE: [u8; 22] = [
-        b'p', b'o', b'l', b'e', b'a', b'n', b'.', b't', b'e', b'n', b'a', b'n', b't', b'-', b'w',
-        b'r', b'i', b't', b'e', b'.', b'v', b'0',
-    ];
-
-    /// The name of `same_tenant`, as the encoder writes it between its quotes.
-    pub const SAME_TENANT: [u8; 11] =
-        [b's', b'a', b'm', b'e', b'_', b't', b'e', b'n', b'a', b'n', b't'];
-
-    /// The name of `write_action`.
-    pub const WRITE_ACTION: [u8; 12] =
-        [b'w', b'r', b'i', b't', b'e', b'_', b'a', b'c', b't', b'i', b'o', b'n'];
-
-    /// The name of `admin_role`.
-    pub const ADMIN_ROLE: [u8; 10] =
-        [b'a', b'd', b'm', b'i', b'n', b'_', b'r', b'o', b'l', b'e'];
-
-    /// The name of `owns_resource`.
-    pub const OWNS_RESOURCE: [u8; 13] = [
-        b'o', b'w', b'n', b's', b'_', b'r', b'e', b's', b'o', b'u', b'r', b'c', b'e',
-    ];
-
-    /// The name of `locked`.
-    pub const LOCKED: [u8; 6] = [b'l', b'o', b'c', b'k', b'e', b'd'];
-
-    /// The name of `unlocked`.
-    pub const UNLOCKED: [u8; 8] = [b'u', b'n', b'l', b'o', b'c', b'k', b'e', b'd'];
-
-    /// The opening brace of the document object.
-    pub const LBRACE: [u8; 1] = [b'{'];
-
-    /// The closing brace of the document object.
-    pub const RBRACE: [u8; 1] = [b'}'];
-
-    /// The opening bracket of the rule list and of a rule body.
-    pub const LBRACKET: [u8; 1] = [b'['];
-
-    /// The closing bracket of the rule list and of a rule body.
-    pub const RBRACKET: [u8; 1] = [b']'];
-
-    /// The separator between two rules or two atoms.
-    pub const COMMA: [u8; 1] = [b','];
-
-    /// The quote that delimits every string the encoder writes.
-    pub const QUOTE: [u8; 1] = [b'"'];
-
-    /// The key `"profile":` including its quotes and colon.
-    pub const PROFILE_KEY: [u8; 10] =
-        [b'"', b'p', b'r', b'o', b'f', b'i', b'l', b'e', b'"', b':'];
-
-    /// The key `"rules":` including its quotes and colon.
-    pub const RULES_KEY: [u8; 8] = [b'"', b'r', b'u', b'l', b'e', b's', b'"', b':'];
-
-    /// The line feed the document ends with.
-    pub const LF: [u8; 1] = [b'\n'];
-}
+#[cfg(verus_keep_ghost)]
+use self::tokens::*;
 
 use self::tokens::{
     ADMIN_ROLE,
@@ -378,231 +321,12 @@ pub fn encode(out: &mut Vec<u8>, policy: &Policy)
     push_footer(out);
 }
 
-/// The first `count` atoms of `atoms`, each quoted, separated by commas.
-///
-/// This is written in append form, `prefix(count + 1) = prefix(count) ++ "," ++
-/// quoted(atoms[count])`, because that is the shape the encoder's loop builds.
-/// A definition written as a fold from the front would need a bridging lemma to
-/// relate the two views; writing it this way makes the loop invariant the
-/// definition itself.
-pub open spec fn prefix_atoms(atoms: Seq<Atom>, count: int) -> Seq<u8>
-    decreases count,
-{
-    if count <= 0 {
-        seq![]
-    } else if count == 1 {
-        quoted(atoms[0])
-    } else {
-        prefix_atoms(atoms, count - 1) + COMMA@ + quoted(atoms[count - 1])
-    }
-}
+/// The specification of the canonical byte form.
+pub mod bytes;
 
-/// One atom's name wrapped in quotes.
-pub open spec fn quoted(atom: Atom) -> Seq<u8> { QUOTE@ + atom.name() + QUOTE@ }
-
-/// The first `count` bodies of `rules`, each bracketed, separated by commas.
-pub open spec fn prefix_rules(rules: Seq<Rule>, count: int) -> Seq<u8>
-    decreases count,
-{
-    if count <= 0 {
-        seq![]
-    } else if count == 1 {
-        rules[0].body()
-    } else {
-        prefix_rules(rules, count - 1) + COMMA@ + rules[count - 1].body()
-    }
-}
-
-/// The canonical bytes of `policy`, exactly as the encoder must produce them.
-///
-/// The specification is total over every sequence of rules, well formed or
-/// not, so the uniqueness theorem quantifies over the whole type rather than
-/// only the values the constructors admit.
-pub open spec fn render(policy: Policy) -> Seq<u8> {
-    header() + prefix_rules(policy.rules_spec(), policy.rules_spec().len() as int) + footer()
-}
-
-/// The bytes before the rule list: the opening object, both keys, and the
-/// list's opening bracket.
-pub open spec fn header() -> Seq<u8> {
-    LBRACE@ + PROFILE_KEY@ + QUOTE@ + PROFILE@ + QUOTE@ + COMMA@ + RULES_KEY@ + LBRACKET@
-}
-
-/// The bytes after the rule list: the list's closing bracket, the object's
-/// closing brace, and the final line feed.
-pub open spec fn footer() -> Seq<u8> { RBRACKET@ + RBRACE@ + LF@ }
+// The specification items feed the encoder's postconditions, which plain
+// `rustc` erases, so the re-export is meaningful to the verifier only.
+#[cfg(verus_keep_ghost)]
+pub use self::bytes::*;
 
 } // verus!
-
-/// The atom names, in profile order.
-///
-/// This is the one place outside `verus!` that lists the atoms, and a contract
-/// test compares it with `contracts/profile.json`'s key order. The kernel's
-/// own names are separate constants; a test ties the two together.
-pub const ATOM_NAMES: [&str; 6] = [
-    "same_tenant",
-    "write_action",
-    "admin_role",
-    "owns_resource",
-    "locked",
-    "unlocked",
-];
-
-impl Atom {
-    /// Every atom, in profile order.
-    pub const ALL: [Self; 6] = [
-        Self::SameTenant,
-        Self::WriteAction,
-        Self::AdminRole,
-        Self::OwnsResource,
-        Self::Locked,
-        Self::Unlocked,
-    ];
-
-    /// The atom's name as text.
-    ///
-    /// The kernel writes the name from its own constant bytes; a test ties
-    /// this accessor to them, so the two cannot drift.
-    #[must_use]
-    pub const fn name_str(self) -> &'static str {
-        match self {
-            Self::SameTenant => "same_tenant",
-            Self::WriteAction => "write_action",
-            Self::AdminRole => "admin_role",
-            Self::OwnsResource => "owns_resource",
-            Self::Locked => "locked",
-            Self::Unlocked => "unlocked",
-        }
-    }
-}
-
-/// One rule body that is not a valid [`Rule`].
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RuleError {
-    /// The body held no atoms. A rule is a conjunction, and the empty
-    /// conjunction is not a rule of this profile.
-    Empty,
-    /// The body held more atoms than the profile allows.
-    TooManyAtoms {
-        /// The number of atoms supplied.
-        count: usize,
-    },
-}
-
-impl std::fmt::Display for RuleError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Empty => write!(
-                formatter,
-                "a rule body must hold at least {BODY_ATOMS_MIN} atom"
-            ),
-            Self::TooManyAtoms { count } => write!(
-                formatter,
-                "a rule body holds {count} atoms, over the {BODY_ATOMS_MAX} the profile allows"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for RuleError {}
-
-/// A policy that holds more rules than the profile allows.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PolicyError {
-    /// The policy held more rules than the profile allows.
-    TooManyRules {
-        /// The number of rules supplied.
-        count: usize,
-    },
-}
-
-impl std::fmt::Display for PolicyError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TooManyRules { count } => write!(
-                formatter,
-                "the policy holds {count} rules, over the {RULES_MAX} the profile allows"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for PolicyError {}
-
-/// The canonical bytes of one policy.
-///
-/// A distinct type from the source bytes roadmap 4.1 binds, so a caller cannot
-/// pass one where the other is meant.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanonicalIr(Vec<u8>);
-
-impl CanonicalIr {
-    /// The bytes.
-    #[must_use]
-    pub fn as_bytes(&self) -> &[u8] { &self.0 }
-
-    /// The bytes, owned.
-    #[must_use]
-    pub fn into_bytes(self) -> Vec<u8> { self.0 }
-}
-
-impl Rule {
-    /// Build a rule body from `atoms`, preserving their order.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`RuleError::Empty`] when `atoms` is empty, and
-    /// [`RuleError::TooManyAtoms`] when it holds more than the profile's body
-    /// maximum.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use polean::ir::{Atom, Rule, RuleError};
-    ///
-    /// assert_eq!(Rule::new(Vec::new()), Err(RuleError::Empty));
-    /// assert!(Rule::new(vec![Atom::Locked]).is_ok());
-    /// ```
-    pub fn new(atoms: Vec<Atom>) -> Result<Self, RuleError> {
-        if atoms.len() > BODY_ATOMS_MAX {
-            return Err(RuleError::TooManyAtoms { count: atoms.len() });
-        }
-        Self::from_atoms(atoms).ok_or(RuleError::Empty)
-    }
-
-    /// The atoms, in order.
-    #[must_use]
-    pub fn atoms(&self) -> &[Atom] { self.atoms_slice() }
-}
-
-impl Policy {
-    /// Build a policy from `rules`, preserving their order.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PolicyError::TooManyRules`] when `rules` holds more than the
-    /// profile's rule maximum.
-    pub fn new(rules: Vec<Rule>) -> Result<Self, PolicyError> {
-        if rules.len() > RULES_MAX {
-            return Err(PolicyError::TooManyRules { count: rules.len() });
-        }
-        Ok(Self::from_rules(rules))
-    }
-
-    /// The rules, in order.
-    #[must_use]
-    pub fn rules(&self) -> &[Rule] { &self.rules }
-
-    /// The canonical bytes of this policy.
-    ///
-    /// The bytes are `{"profile":"<id>","rules":[...]}` plus one line feed,
-    /// with no other whitespace, preserving rule and atom order. Distinct
-    /// policies have distinct canonical bytes; the proof is in
-    /// `verus/policy_canonical.rs`.
-    #[must_use]
-    pub fn to_canonical_bytes(&self) -> CanonicalIr {
-        let mut bytes = Vec::new();
-        encode(&mut bytes, self);
-        CanonicalIr(bytes)
-    }
-}
