@@ -343,6 +343,24 @@ The estimate behind these limits is in `Context and orientation`.
   public surface in `interface.rs`, which also brings `mod.rs` under the
   400-line limit. Glob re-exports that feed only `verus!` items must be gated on
   `#[cfg(verus_keep_ghost)]`, or plain `rustc` reports them unused.
+- Observation, rebase onto `6754629`: `main` replaced Clippy's
+  `cognitive_complexity` with Whitaker's macro-aware
+  `macro_aware_cognitive_complexity`, configured by the new `dylint.toml` at
+  `max_complexity = 9`. This matters here because the kernel's spec functions
+  and the six-atom case analysis are match-heavy, and the macro-aware lint
+  skips branching a macro generated, which is the right rule for code inside
+  `verus!`. The nine branch commits replayed with no conflicts, so the
+  configuration arrived unchanged with the target. _Environment finding, not a
+  branch defect:_ on this host the installed Whitaker suite registers only the
+  aggregate `whitaker_suite` library; `whitaker list` does not report the
+  experimental lint separately, so the gate is currently inactive. `make lint`
+  therefore passes without exercising it. `docs/developers-guide.md` records
+  this exact trap and its remedy — rerun `whitaker-installer --cranelift` to
+  refresh a stale suite — which is a host operation outside this branch. A
+  positive control (a nested-`if` function at complexity well over 9, exported
+  so `dead_code` would not fire first) produced no finding, confirming the gate
+  is inactive rather than that the kernel is compliant. The control was
+  removed; nothing about it remains in the tree.
 - Observation: technical design §6 names `src/frontend.rs`, not
   `src/source/`. Impact: D1 records the departure, and EP-M4 updates §6.
 - Observation, EP-M2 feasibility: Verus 0.2026.09.06 cannot relate a
