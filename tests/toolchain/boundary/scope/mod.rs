@@ -203,17 +203,25 @@ impl Scope<'_> {
     /// never a pattern.
     /// # Errors
     ///
-    /// Returns a diagnostic when `systemctl reset-failed` cannot be run, so the
-    /// caller can record it rather than losing it.
+    /// Returns a diagnostic when `systemctl reset-failed` cannot be run or exits
+    /// unsuccessfully, so the caller can record it rather than losing it.
     pub fn reset_failed(&self) -> Result<(), String> {
-        process::run(
+        let output = process::run(
             self.programs.systemctl.as_path(),
             &["--user", "reset-failed", &self.systemd_unit()],
             &[("XDG_RUNTIME_DIR", self.runtime_dir)],
             process::CONTROL_BOUND,
         )
-        .map(drop)
-        .map_err(|error| format!("cannot reset {}: {error}", self.systemd_unit()))
+        .map_err(|error| format!("cannot reset {}: {error}", self.systemd_unit()))?;
+        if output.success() {
+            return Ok(());
+        }
+        let stderr = output.stderr_text();
+        Err(format!(
+            "cannot reset {}: systemctl reset-failed exited {:?}: {stderr}",
+            self.systemd_unit(),
+            output.status.code()
+        ))
     }
 
     /// Kill every process in the scope through systemd.

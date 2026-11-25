@@ -16,6 +16,7 @@ mod platform;
 mod probe;
 mod reader;
 mod readiness;
+mod reset;
 mod submit;
 mod support;
 mod wait;

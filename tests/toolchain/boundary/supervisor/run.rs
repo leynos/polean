@@ -172,7 +172,7 @@ pub(super) fn read_result(scope: &Scope<'_>, diagnostics: &mut Vec<String>) -> O
 /// in systemd's failed list, and the next run uses a fresh nonce, but leaving
 /// failures behind would accumulate state on the host. Only the exact unit name
 /// is named, never a pattern.
-pub(super) fn reset_failed_unit(
+pub(crate) fn reset_failed_unit(
     scope: &Scope<'_>,
     result: Option<&str>,
     diagnostics: &mut Vec<String>,
