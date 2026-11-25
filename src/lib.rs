@@ -5,15 +5,16 @@
 //! - [`profile`] restates the profile contract's constants;
 //! - [`bounded`] reads at most a fixed number of bytes from any [`std::io::Read`];
 //! - [`source`] ingests a policy source, checking only the ingestion bounds, so the bytes it hands
-//!   on are exactly the bytes read.
+//!   on are exactly the bytes read;
+//! - [`ir`] holds the closed policy representation and its canonical encoding.
 //!
-//! The IR types, the canonical encoder, and the decoders arrive with the same
-//! roadmap item; admission of Rego, the Lean model, the evidence bundle, and the
-//! runtime oracles are later items. Nothing here proves that a source belongs to
+//! The decoders and admission of Rego, the Lean model, the evidence bundle, and
+//! the runtime oracles are later items. Nothing here proves that a source belongs to
 //! the profile, that a model claim holds, that translation is correct, or that a
 //! runtime agrees with the model.
 
 pub mod bounded;
+pub mod ir;
 pub mod profile;
 pub mod source;
 
