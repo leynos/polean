@@ -1,5 +1,6 @@
-# Align with the estate's normal CodeScene ceiling.
-cognitive-complexity-threshold = 9
+# Cognitive complexity is not gated by Clippy: it scores code after macro
+# expansion, so it counts branching a macro generated. Whitaker's
+# `macro_aware_cognitive_complexity` gates it at 9 (see `dylint.toml`).
 too-many-arguments-threshold = 4
 too-many-lines-threshold = 70
 excessive-nesting-threshold = 4
