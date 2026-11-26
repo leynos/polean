@@ -131,9 +131,23 @@ fn value_arity(option: &str) -> usize {
 
 /// The launcher options before the command separator.
 fn launcher_prefix(argv: &[String]) -> &[String] {
-    argv.iter()
-        .position(|argument| argument.as_str() == "--")
-        .map_or(argv, |separator| argv.get(..separator).unwrap_or(&[]))
+    separator_index(argv).map_or(argv, |separator| argv.get(..separator).unwrap_or(&[]))
+}
+
+/// The index of the command separator, found after consuming option values.
+///
+/// A plain search for the first `--` is wrong: an environment value may itself
+/// be `--`, so `--setenv TOKEN --` would be mistaken for the separator. Walking
+/// the vector with each option's arity skips those values.
+fn separator_index(argv: &[String]) -> Option<usize> {
+    let mut index = 0;
+    while let Some(argument) = argv.get(index) {
+        if argument == "--" {
+            return Some(index);
+        }
+        index += 1 + value_arity(argument);
+    }
+    None
 }
 
 /// The launcher's options and their values.
@@ -217,7 +231,7 @@ fn check_remounts(options: &[LauncherOption], faults: &mut Vec<String>) {
 
 /// The command separator must be preceded by `--remount-ro /`.
 fn check_separator(argv: &[String], faults: &mut Vec<String>) {
-    let Some(separator) = argv.iter().position(|argument| argument.as_str() == "--") else {
+    let Some(separator) = separator_index(argv) else {
         faults.push("the vector has no command separator".to_owned());
         return;
     };

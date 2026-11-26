@@ -720,12 +720,13 @@ allowlisted, read-only filesystem view. The scope is created with
 `systemd-run --user --scope` and the properties `MemoryMax=`, `MemorySwapMax=0`,
 `TasksMax=`, `OOMPolicy=kill`, `KillSignal=SIGKILL`, and `RuntimeMaxSec=`;
 bubblewrap binds `/usr`, the program, and the input snapshot read-only, mounts
-`/proc` and `/dev` fresh with both remounted read-only, gives the job a private
-`--size`-bounded tmpfs scratch area, and remounts the root read-only before
-executing. Teardown kills the process group, records any survivor, writes
-`cgroup.kill`, reaps, and confirms the cgroup empty. Standard output is capped
-at 1 MiB and standard error at a probe-chosen 64 KiB, each stream captured by
-the same bounded kernel.
+`/proc` and `/dev` fresh and remounts `/dev` read-only (`/proc` is a fresh
+procfs mount, not a host path, but it is not remounted read-only), gives the
+job a private `--size`-bounded tmpfs scratch area, and remounts the root
+read-only before executing. Teardown kills the process group, records any
+survivor, writes `cgroup.kill`, reaps, and confirms the cgroup empty. Standard
+output is capped at 1 MiB and standard error at a probe-chosen 64 KiB, each
+stream captured by the same bounded kernel.
 
 The mechanism has enforcement prerequisites, not a supported platform: Linux
 with cgroup v2; a systemd user manager reachable through `XDG_RUNTIME_DIR` that

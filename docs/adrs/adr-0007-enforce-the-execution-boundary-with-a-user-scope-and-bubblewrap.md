@@ -206,9 +206,10 @@ connecting to one. It is kept out of the code for that reason. Reproducing it
 needs `unshare`, `setpriv`, and a Landlock rule set expressed through a helper;
 the record keeps the observation, not a launcher.
 
-**Landlock alone.** Filesystem rules only: no network, PID, or cgroup control,
-and no way to hide a socket file from a connect. It is useful as a second
-layer, not as the boundary.
+**Landlock alone.** On the recorded Linux 6.12 host, ABI 6 can restrict
+filesystem access and also TCP connections, abstract Unix sockets, and signals,
+but it still has no PID or cgroup control and no way to hide a pathname socket
+file from a connect; it is useful as a second layer, not as the boundary.
 
 **`RLIMIT_AS`.** Limits address space, not memory used. The Go runtime reserves
 address space at start-up and the Go maintainers describe the limit as outdated
@@ -284,8 +285,10 @@ does not hide socket files; the allowlisted filesystem view does.
   standard streams. Rust opens its own descriptors close-on-exec, and neither
   `systemd-run` nor `bubblewrap` closes foreign ones; a leaked descriptor would
   be reported by that observation, or by the canary on a host where the
-  observation is unavailable. The observation cannot see a descriptor opened
-  and closed between two polls, which is also true of the job's own work.
+  observation is unavailable. The intersection reports descriptors present in
+  every sample, not every descriptor inherited at launch: a descriptor opened
+  and closed between two polls is invisible, and so is an inherited descriptor
+  the job closes before the first sample.
 - **Kernel resources outside cgroup accounting.** Inotify instances, session
   keyrings, seccomp filters, and `AF_VSOCK` are not bounded here; roadmap 4.3.1
   decides them.

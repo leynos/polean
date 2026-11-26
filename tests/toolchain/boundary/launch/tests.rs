@@ -279,6 +279,20 @@ fn a_broken_vector_is_reported(
     Ok(())
 }
 
+/// An environment value of `--` is a value, not the command separator.
+#[test]
+fn a_double_dash_environment_value_is_not_the_separator() -> Result<(), String> {
+    let mut spec = canonical_spec();
+    spec.env = vec![("TOKEN".to_owned(), "--".to_owned())];
+    let faults = isolation_faults(&bubblewrap_argv(&spec), Path::new("/home/probe"));
+    check_eq!(
+        faults,
+        Vec::<String>::new(),
+        "a `--` environment value must not be read as the separator"
+    );
+    Ok(())
+}
+
 /// A zero scratch area is refused; one above the memory limit is allowed.
 #[test]
 fn the_scratch_area_must_be_non_empty_and_may_exceed_the_memory_limit() -> Result<(), String> {

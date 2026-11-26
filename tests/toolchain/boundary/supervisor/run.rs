@@ -68,6 +68,7 @@ pub(super) fn abandon(
         kill: programs.kill.as_path(),
         running: true,
         status: None,
+        scope: target.scope,
     });
     let mut drain = Vec::new();
     drain_readers(readers, &mut drain);
@@ -89,6 +90,8 @@ pub(super) struct Target<'a> {
     pub(super) clock: Clock,
     /// The cancellation request, when the caller supplied one.
     pub(super) cancel: Option<&'a std::sync::atomic::AtomicBool>,
+    /// The job's scope, used for a unit kill when no cgroup was observed.
+    pub(super) scope: &'a super::Scope<'a>,
 }
 
 /// The parts of a running job the wait needs.
@@ -107,6 +110,8 @@ pub(super) struct Awaiting<'a> {
     pub(super) readers: &'a Readers,
     /// The cancellation request, when the caller supplied one.
     pub(super) cancel: Option<&'a std::sync::atomic::AtomicBool>,
+    /// The job's scope.
+    pub(super) scope: &'a super::Scope<'a>,
 }
 
 impl Supervisor<'_> {
@@ -122,6 +127,7 @@ impl Supervisor<'_> {
             clock,
             readers,
             cancel,
+            scope,
         } = awaiting;
         let mut snapshot = || snapshot_job(job, pgid, cgroup);
         let mut target = Target {
@@ -130,6 +136,7 @@ impl Supervisor<'_> {
             cgroup,
             clock,
             cancel,
+            scope,
         };
         self.wait_for_job(&mut target, readers, &mut snapshot)
     }

@@ -187,6 +187,9 @@ impl Watchers {
 
     /// Stop and join every watcher and remove the socket file, ignoring errors.
     fn shutdown(&mut self) {
+        // Ask the watchers to stop before joining: otherwise an idle watcher
+        // runs to its 30 s bound and cleanup blocks on the join.
+        self.stop.store(true, Ordering::Relaxed);
         for (handle, _name) in self.started.drain(..) {
             drop(handle.join());
         }
@@ -231,13 +234,17 @@ fn watch(
     thread::spawn(move || {
         let started = Instant::now();
         loop {
+            // The stop flag is read before the accept, so a connection that
+            // arrives before the flag is stored cannot be missed: either this
+            // accept sees it, or the next loop iteration does after the stop.
+            let stopping = stop.load(Ordering::Relaxed);
             match accept() {
                 Ok(()) => return Ok(true),
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => (),
                 Err(error) => return Err(format!("the listener failed: {error}")),
             }
-            if stop.load(Ordering::Relaxed) {
-                // The final accept above found nothing; silence is observed.
+            if stopping {
+                // The accept above, after the flag was read, found nothing.
                 return Ok(false);
             }
             if started.elapsed() >= WATCH_BOUND {

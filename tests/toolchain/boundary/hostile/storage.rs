@@ -42,18 +42,22 @@ pub fn run(targets: &Targets) -> Result<(), String> {
         || "/dev/shm/polean-probe".to_owned(),
         |marker| format!("/dev/shm/polean-{marker}"),
     );
-    for (name, path) in [
-        ("scratch", SCRATCH.to_owned()),
-        ("root", "/marker".to_owned()),
-        ("dev-shm", device_marker),
-        ("inputs", "/job/in/marker".to_owned()),
-    ] {
-        attempt(name, &write_marker(Path::new(&path)));
+    if targets.fixed_paths {
+        for (name, path) in [
+            ("scratch", SCRATCH.to_owned()),
+            ("root", "/marker".to_owned()),
+            ("dev-shm", device_marker),
+            ("inputs", "/job/in/marker".to_owned()),
+        ] {
+            attempt(name, &write_marker(Path::new(&path)));
+        }
     }
     if let Some(host) = &targets.host {
         attempt("host", &write_marker(host));
     }
-    fill_beyond_scratch();
+    if targets.fixed_paths {
+        fill_beyond_scratch();
+    }
     Ok(())
 }
 

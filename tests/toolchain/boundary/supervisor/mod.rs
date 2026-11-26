@@ -217,6 +217,7 @@ impl Supervisor<'_> {
             clock,
             readers: &readers,
             cancel: job.cancel.as_ref().map(|cancel| cancel.request.as_ref()),
+            scope: &scope,
         })?;
         let (report, status, errors) = tear_down(Inputs {
             child: &mut child,
@@ -225,6 +226,7 @@ impl Supervisor<'_> {
             kill: self.programs.kill.as_path(),
             running: waiting.running,
             status: waiting.status,
+            scope: &scope,
         });
         diagnostics.extend(errors);
         let (stdout, stderr, mut bounds) =

@@ -60,6 +60,8 @@ pub struct Inputs<'a> {
     pub running: bool,
     /// The status already observed by `try_wait`, if any.
     pub status: Option<ExitStatus>,
+    /// The job's scope, used for a unit kill when no cgroup was observed.
+    pub scope: &'a super::Scope<'a>,
 }
 
 /// Tear one job down and report what was observed.
@@ -81,6 +83,11 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
         .map_or_else(Vec::new, |cgroup| survivors(cgroup, &mut errors));
     if let Some(cgroup) = inputs.cgroup {
         super::note(kill_cgroup(cgroup), &mut errors);
+    } else {
+        // Without a cgroup the unit is the only whole-tree handle. Kill it
+        // again here: a scope created after the discovery failure's earlier
+        // kill would otherwise keep running past the probe's return.
+        super::note(inputs.scope.kill_unit(), &mut errors);
     }
     let status = reap(inputs.status, inputs.running, inputs.child, &mut errors);
     let emptiness = inputs

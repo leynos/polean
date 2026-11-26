@@ -73,7 +73,8 @@ impl Scope<'_> {
     ///
     /// # Errors
     ///
-    /// Returns a diagnostic when `systemctl` cannot be run.
+    /// Returns a diagnostic when `systemctl` cannot be run or fails for a reason
+    /// other than the unit being absent.
     pub fn show(&self, property: &str) -> Result<Option<String>, String> {
         self.show_within(property, process::CONTROL_BOUND)
     }
@@ -94,7 +95,18 @@ impl Scope<'_> {
         )
         .map_err(|error| format!("cannot query {unit}: {error}"))?;
         if !output.success() {
-            return Ok(None);
+            // A unit systemd has already garbage-collected is a legitimate
+            // absence. Any other non-zero exit is a query failure: treating it
+            // as absence would lose the reason and misreport the job.
+            return if names_absent(&output.stderr_text(), &unit) {
+                Ok(None)
+            } else {
+                Err(format!(
+                    "cannot query {unit}: systemctl show exited {:?}: {}",
+                    output.status.code(),
+                    output.stderr_text()
+                ))
+            };
         }
         let value = output.stdout_text();
         Ok(if value.is_empty() { None } else { Some(value) })
@@ -256,6 +268,11 @@ impl Scope<'_> {
             Err(format!("systemctl kill {unit} reported: {detail}"))
         }
     }
+}
+
+/// Whether `systemctl`'s stderr says the unit is not loaded.
+fn names_absent(stderr: &str, unit: &str) -> bool {
+    stderr.contains("could not be found") || stderr.contains(&format!("Unit {unit} not found"))
 }
 
 mod cgroup;

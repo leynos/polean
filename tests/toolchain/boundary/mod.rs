@@ -10,8 +10,9 @@
 //! The pieces are:
 //!
 //! - [`capture`]: the bounded stream reader both pipes go through, and the one limit the supervisor
-//!   enforces itself. Verus proves it over every finite chunk sequence
-//!   (`verus/boundary_capture.rs`).
+//!   enforces itself. Verus checks the per-`feed` contract and the model theorem over every finite
+//!   chunk sequence separately; composing repeated executable calls into the model fold is a manual
+//!   argument, not a verified trace.
 //! - [`outcome`]: the probe's outcome categories and the fail-closed platform verdict, each decided
 //!   by enumerating a finite domain.
 //! - [`platform`]: the five enforcement controls, each an observation rather than a presence check.

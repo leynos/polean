@@ -181,13 +181,19 @@ pub(super) fn the_job_writes_into_a_host_directory_without_the_boundary() -> Res
             "polean-target=host:{}",
             host.join("marker").display()
         ))
-        .target(format!("polean-target=marker:{}", probe.nonce()));
-    let run = probe.run(Behaviour::Storage, &options)?;
+        .target(format!("polean-target=marker:{}", probe.nonce()))
+        // The unconfined job writes on the real host, so the fixed sandbox
+        // paths (`/marker`, `/job/work`, the fill) are refused: only the
+        // probe-owned host directory and the nonce marker are attempted.
+        .target("polean-target=fixed:no".to_owned());
+    let attempted = probe.run(Behaviour::Storage, &options);
+    // Remove the nonce marker even when the run or its parsing fails, so the
+    // shared host is left as it was found. A missing marker is success.
+    let cleanup = remove_marker(std::path::Path::new(&device_marker));
+    let run = attempted?;
     let stdout = started(&run, &probe)?;
     let outcome = attempt(&stdout, "host");
-    // Remove the device marker the negative control necessarily created, so the
-    // shared host is left as it was found.
-    drop(ambient::remove_file(std::path::Path::new(&device_marker)));
+    cleanup?;
     check_eq!(
         outcome?,
         "wrote",
@@ -198,6 +204,15 @@ pub(super) fn the_job_writes_into_a_host_directory_without_the_boundary() -> Res
         "the marker must be present in the host directory"
     );
     require_outcome(&run, &Outcome::Completed)
+}
+
+/// Remove the marker, treating absence as success.
+fn remove_marker(path: &std::path::Path) -> Result<(), String> {
+    match ambient::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("cannot remove {}: {error}", path.display())),
+    }
 }
 
 /// A grandchild that left the process group outlives a group kill.

@@ -213,7 +213,7 @@ pub const TARGET_PREFIX: &str = "polean-target=";
 pub const OBSERVATION_WINDOW: Duration = Duration::from_millis(250);
 
 /// Host inputs a behaviour may need, supplied by the probe as arguments.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Targets {
     /// A loopback TCP address on the host to try to reach.
     pub tcp: Option<String>,
@@ -227,6 +227,23 @@ pub struct Targets {
     pub memory: Option<String>,
     /// The run's nonce, used to name a marker the host must not keep.
     pub marker: Option<String>,
+    /// Whether the storage behaviour may use the fixed sandbox paths. The
+    /// unconfined control sets this false so it writes only probe-owned paths.
+    pub fixed_paths: bool,
+}
+
+impl Default for Targets {
+    fn default() -> Self {
+        Self {
+            tcp: None,
+            abstract_name: None,
+            socket: None,
+            host: None,
+            memory: None,
+            marker: None,
+            fixed_paths: true,
+        }
+    }
 }
 
 /// Parse every target token from an argument list.
@@ -255,6 +272,7 @@ pub fn targets(args: &[String]) -> Result<Targets, String> {
             "host" => targets.host = Some(PathBuf::from(value)),
             "memory" => targets.memory = Some(value.to_owned()),
             "marker" => targets.marker = Some(value.to_owned()),
+            "fixed" => targets.fixed_paths = value == "yes",
             other => {
                 return Err(format!(
                     "the target kind {other:?} is not one of tcp, abstract, socket, host, memory, \
