@@ -226,19 +226,17 @@ fn module(fields: Fields<'_>, source: &str) -> Result<Module, Fault> {
 /// The frontend omits `target` when the module sets none, so a present but
 /// empty target is rejected rather than accepted as "no target" (O2).
 fn target(fields: Fields<'_>) -> Result<Option<String>, Fault> {
-    match fields.optional("target") {
-        None => Ok(None),
-        Some(value) => {
-            let target = as_string(value)?;
-            if target.is_empty() {
-                return Err(Fault::new(
-                    ReasonCode::AstType,
-                    "`target` is present but empty",
-                ));
-            }
-            Ok(Some(target.to_owned()))
-        }
+    let Some(value) = fields.optional("target") else {
+        return Ok(None);
+    };
+    let target = as_string(value)?;
+    if target.is_empty() {
+        return Err(Fault::new(
+            ReasonCode::AstType,
+            "`target` is present but empty",
+        ));
     }
+    Ok(Some(target.to_owned()))
 }
 
 /// Decode a package declaration.

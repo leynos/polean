@@ -12,6 +12,8 @@ The module split proposed by the technical design is not yet implemented.
 | `src/lib.rs`                      | Current Rust crate root and disposable scaffold identity.                                                                                              |
 | `tests/`                          | Rust integration tests for implemented public behaviour, including the test-only 1.2.2 admission spike.                                                |
 | `tests/toolchain/`                | Observations of the pinned Rust, Regorus, Lean, and OPA tuple, including the audit wire adapter, settlement, and end-to-end corpus.                    |
+| `tests/toolchain/boundary/`       | The test-only 1.2.4 execution-boundary probe: capture kernel, supervisor, scope, launcher, platform check, and the hostile behaviours and probes.      |
+| `tests/features/`                 | Behaviour specifications bound by `rstest-bdd`, including the execution boundary's.                                                                    |
 | `tests/admission/`                | The 1.2.2 admission spike: closed decoder, profile walk, recognizer, properties, feature scenarios, and a compile-fail guard for the exhaustive walks. |
 | `examples/admission/`             | Admission corpus fixtures and their JSON Lines manifest; separate from the tenant-write example.                                                       |
 | `examples/audit/`                 | Audit corpus: Lean fixtures, their JSON Lines manifest, and sample request and report documents.                                                       |
@@ -83,6 +85,12 @@ production admission. They are not part of the E0 toolchain tuple in
 The admission spike in `tests/admission/` is test-only: its IR is a throwaway
 type, and production ingestion and admission remain roadmap 2.1.1 and 2.1.2
 work.
+
+`tests/toolchain/boundary/` is the 1.2.4 execution-boundary probe, not the
+product's supervisor. It is test-only, it starts real systemd scopes and
+bubblewrap sandboxes only when `make boundary-probe` runs, and roadmap 4.3.1
+promotes it. Its decision is recorded in
+[ADR 0007](adrs/adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md).
 
 `examples/audit/` and the audit modules under `tests/toolchain/` are the 1.2.3
 feasibility demonstration, not a production checker. The worker observes and

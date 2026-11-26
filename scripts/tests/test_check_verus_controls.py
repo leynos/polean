@@ -333,6 +333,12 @@ def test_every_tree_has_body_and_specification_controls() -> None:
             "audit_settlement_spec.rs",
             id="settlement",
         ),
+        pytest.param(
+            controls.CAPTURE,
+            controls.CAPTURE_DIR,
+            "boundary_capture_spec.rs",
+            id="capture",
+        ),
     ],
 )
 def test_stage_preserves_the_relative_paths(

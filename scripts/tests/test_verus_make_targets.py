@@ -178,7 +178,7 @@ def test_verus_proof_forwards_the_binary_and_solver(layout: Layout) -> None:
     result = layout.make("verus-proof", VERUS_FLAGS='-q --triggers "--cfg a b"')
 
     assert result.returncode == 0, result.stderr
-    assert [call["program"] for call in layout.calls()] == ["uv", "uv"], (
+    assert [call["program"] for call in layout.calls()] == ["uv", "uv", "uv"], (
         "the pinned tool is the runner, once per proof entry point"
     )
     assert [call["argv"] for call in layout.calls()] == [
@@ -197,7 +197,11 @@ def test_verus_proof_forwards_the_binary_and_solver(layout: Layout) -> None:
             "--extra-arg=--triggers",
             "--extra-arg=--cfg a b",
         ]
-        for proof in ("verus/admission_recognizer.rs", "verus/audit_settlement.rs")
+        for proof in (
+            "verus/admission_recognizer.rs",
+            "verus/audit_settlement.rs",
+            "verus/boundary_capture.rs",
+        )
     ], "every proof file reaches the installed verifier, each Verus flag as an extra argument"
     assert all(call["z3"] == str(layout.root / Z3_BIN) for call in layout.calls()), (
         "VERUS_Z3_PATH names the pinned solver for every run"
@@ -312,7 +316,7 @@ def test_verus_runs_the_proof_before_the_controls(layout: Layout) -> None:
 
     assert result.returncode == 0, result.stderr
     programs = [call["program"] for call in layout.calls()]
-    assert programs == ["uv", "uv", "fake-python"], (
+    assert programs == ["uv", "uv", "uv", "fake-python"], (
         "both proofs run through the pinned tool, before the controls"
     )
     assert layout.calls()[-1]["argv"][0] == "scripts/check_verus_controls.py", (

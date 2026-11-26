@@ -6,7 +6,7 @@ CARGO ?= cargo
 WHITAKER ?= whitaker
 PYTHON ?= python3
 
-.PHONY: help all build clean test typecheck lint interrogate lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke install-verus verus verus-installed verus-proof verus-controls
+.PHONY: help all build clean test typecheck lint interrogate lint-whitaker fmt check-fmt markdownlint design-check design-properties design-boundary audit tools test-scripts toolchain-smoke boundary-probe install-verus verus verus-installed verus-proof verus-controls
 
 SHELL := bash
 
@@ -110,6 +110,12 @@ test-scripts: ## Test the provisioning script with pytest
 toolchain-smoke: tools ## Provision the pinned tools, then run the ignored smoke tests
 	$(CARGO) test --locked --all-features --test toolchain -- --ignored smoke::
 
+# The probes start hostile children and create one scope each, so they run on a
+# single test thread: the host is shared with other work and the unit names and
+# cgroups are per-run state.
+boundary-probe: tools ## Run the execution-boundary probes on one test thread
+	$(CARGO) test --locked --all-features --test toolchain -- --ignored --test-threads=1 boundary::probe::
+
 # The Verus pins are read through $(shell ...), so the path and the pins are
 # fixed with `override :=` and validated before either can be interpolated.
 override PROVER_TOOLS_REF_FILE := tools/rust-prover-tools/REF
@@ -119,7 +125,7 @@ $(error PROVER_TOOLS_REF missing or malformed; expected "ref: <40-hex>" in $(PRO
 endif
 override PROVER_TOOLS_SOURCE := git+https://github.com/leynos/rust-prover-tools.git@$(PROVER_TOOLS_REF)
 override PROVER_TOOLS := uv tool run --from "$(PROVER_TOOLS_SOURCE)" prover-tools
-VERUS_PROOF_FILES ?= verus/admission_recognizer.rs verus/audit_settlement.rs
+VERUS_PROOF_FILES ?= verus/admission_recognizer.rs verus/audit_settlement.rs verus/boundary_capture.rs
 VERUS_FLAGS ?=
 VERUS_Z3_PATH := $(CURDIR)/.verus/z3/z3
 override VERUS_VERSION := $(shell awk 'NR == 1 && /^[0-9A-Za-z.]+$$/ { print; exit }' tools/verus/VERSION 2>/dev/null)

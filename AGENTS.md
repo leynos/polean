@@ -55,6 +55,7 @@ make lint-whitaker
 make test
 make test-scripts
 make toolchain-smoke
+make boundary-probe
 make design-check
 make markdownlint
 ```
@@ -71,6 +72,13 @@ a machine builds the Dylint driver and needs the network.
 `make toolchain-smoke` needs Python 3.14 with `compression.zstd`, and the first
 run needs network access; see the [developer guide](docs/developers-guide.md).
 Run it when a change touches a pin, `scripts/`, `lean/`, or `tests/toolchain/`.
+
+`make boundary-probe` starts real systemd scopes and bubblewrap sandboxes, so
+it needs bubblewrap 0.10.0 or later and a systemd user manager that delegates
+`memory` and `pids`. Run it when a change touches `tests/toolchain/boundary/`,
+the execution-boundary feature file, or the supervisor's dependencies. It is
+not part of `make all` or CI, because a host that lacks the prerequisites fails
+closed rather than passing.
 
 Add regression tests at the boundary where a fault could recur. A new policy
 atom or input distinction requires model semantics, abstraction analysis,

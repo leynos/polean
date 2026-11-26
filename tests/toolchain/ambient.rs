@@ -55,6 +55,43 @@ fn beneath_root(path: &Path) -> io::Result<PathBuf> {
 /// Returns the underlying error, with its kind intact.
 pub fn metadata(path: &Path) -> io::Result<Metadata> { root()?.metadata(beneath_root(path)?) }
 
+/// Make `path` executable by its owner, for a controlled test program.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn make_executable(path: &Path) -> io::Result<()> {
+    let mut permissions = metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    root()?.set_permissions(beneath_root(path)?, permissions)
+}
+
+/// The target of the symbolic link at `path`, for comparing namespace
+/// identities.
+///
+/// `/proc/<pid>/ns/*` entries are magic links whose targets name the namespace,
+/// so comparing targets identifies a shared namespace. Reading the link is used
+/// rather than `metadata`, which a capability refuses to apply to a magic link.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn link_target(path: &Path) -> io::Result<std::path::PathBuf> {
+    root()?.read_link(beneath_root(path)?)
+}
+
+/// Read `path` as bytes.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn read(path: &Path) -> io::Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    let mut file = root()?.open(beneath_root(path)?)?;
+    std::io::Read::read_to_end(&mut file, &mut buffer)?;
+    Ok(buffer)
+}
+
 /// Read `path` as UTF-8 text.
 ///
 /// # Errors
@@ -95,6 +132,58 @@ pub fn write(path: &Path, contents: &[u8]) -> io::Result<()> {
 pub fn set_mode(path: &Path, mode: u32) -> io::Result<()> {
     root()?.set_permissions(beneath_root(path)?, Permissions::from_mode(mode))
 }
+
+/// List the entry names in the directory `path`.
+///
+/// The names are returned as text because the caller is a `/proc` listing whose
+/// entries are numbers. A name that is not valid UTF-8 is rendered lossily
+/// rather than failing the listing.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn read_dir_names(path: &Path) -> io::Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in root()?.read_dir(beneath_root(path)?)? {
+        names.push(entry?.file_name().to_string_lossy().into_owned());
+    }
+    Ok(names)
+}
+
+/// Open `path` for writing, creating or truncating it.
+///
+/// The handle is a capability file, so a hostile child that uses it still goes
+/// through the same authority as every other filesystem access here.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn create(path: &Path) -> io::Result<cap_std::fs::File> { root()?.create(beneath_root(path)?) }
+
+/// The open descriptor numbers of the process `pid`.
+///
+/// The listing is of that process's descriptor directory, so the descriptors
+/// this call opens in the *caller* are not part of the result.
+///
+/// # Errors
+///
+/// Returns the underlying error, `NotFound` included when the process has gone.
+pub fn open_fds(pid: u32) -> io::Result<Vec<i32>> {
+    let path = PathBuf::from("/proc").join(pid.to_string()).join("fd");
+    let mut fds: Vec<i32> = read_dir_names(&path)?
+        .iter()
+        .filter_map(|name| name.parse().ok())
+        .collect();
+    fds.sort_unstable();
+    Ok(fds)
+}
+
+/// Remove the file `path`.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn remove_file(path: &Path) -> io::Result<()> { root()?.remove_file(beneath_root(path)?) }
 
 /// Remove the empty directory `path`.
 ///

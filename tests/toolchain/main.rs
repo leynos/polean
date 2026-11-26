@@ -11,6 +11,7 @@
 mod ambient;
 mod audit;
 mod bdd;
+mod boundary;
 mod engine;
 mod json;
 mod regorus;
