@@ -114,6 +114,16 @@ fn a_known_cgroup_uses_the_cgroup_kill() -> Result<(), String> {
     let cgroup = scratch.path().join("cgroup");
     ambient::create_dir(&cgroup)
         .map_err(|error| format!("cannot create the cgroup dir: {error}"))?;
+    // An observed cgroup reports who is left and whether it is populated; a
+    // late-discovered cgroup is cleaned through the same path.
+    let own_pid = std::process::id();
+    ambient::write(
+        &cgroup.join("cgroup.procs"),
+        format!("{own_pid}\n").as_bytes(),
+    )
+    .map_err(|error| format!("cannot write cgroup.procs: {error}"))?;
+    ambient::write(&cgroup.join("cgroup.events"), b"populated 0\n")
+        .map_err(|error| format!("cannot write cgroup.events: {error}"))?;
     let kill = script(&scratch, "kill", "#!/bin/sh\nexit 0\n")?;
     let mut child = Command::new("/usr/bin/true")
         .stdin(Stdio::null())
@@ -122,7 +132,7 @@ fn a_known_cgroup_uses_the_cgroup_kill() -> Result<(), String> {
         .spawn()
         .map_err(|error| format!("cannot start the child: {error}"))?;
     let pgid = child.id();
-    let (_report, _status, _errors) = tear_down_for_test(TestInputs {
+    let (report, _status, _errors) = tear_down_for_test(TestInputs {
         child: &mut child,
         pgid,
         cgroup: Some(&cgroup),
@@ -140,6 +150,15 @@ fn a_known_cgroup_uses_the_cgroup_kill() -> Result<(), String> {
     check!(
         !calls.contains("--user kill"),
         "a known cgroup must not fall back to the unit kill, got {calls:?}"
+    );
+    check!(
+        report.survivors.contains(&own_pid),
+        "an observed cgroup's survivors must be read, got {:?}",
+        report.survivors
+    );
+    check!(
+        report.cgroup_empty,
+        "an observed empty cgroup must report emptiness"
     );
     Ok(())
 }

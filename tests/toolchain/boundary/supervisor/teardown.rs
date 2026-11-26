@@ -19,7 +19,7 @@
 //! reported, not retried.
 
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, ExitStatus},
 };
 
@@ -81,32 +81,31 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
     if inputs.running {
         super::note(kill_process_group(inputs.kill, inputs.pgid), &mut errors);
     }
-    let survivors = inputs
-        .cgroup
-        .map_or_else(Vec::new, |cgroup| survivors(cgroup, &mut errors));
-    if let Some(cgroup) = inputs.cgroup {
-        super::note(kill_cgroup(cgroup), &mut errors);
+    let (survivors, emptiness) = if let Some(cgroup) = inputs.cgroup {
+        clean_cgroup(cgroup, &mut errors)
     } else if inputs.require_scope {
         // Without a cgroup the unit is the only whole-tree handle. A scope can
         // still be created after the discovery failure's earlier kill, so wait
-        // briefly for it, kill it, and record a scope that never appears: the
-        // fallback direct-child kill then cannot be described as a whole-tree
-        // kill.
-        super::note(
-            kill_late_scope(inputs.scope, inputs.pgid, &mut errors),
-            &mut errors,
-        );
+        // briefly for it and clean it like any observed cgroup; a scope that
+        // never appears is reported, because the fallback direct-child kill
+        // cannot be described as a whole-tree kill.
+        match kill_late_scope(inputs.scope, inputs.pgid, &mut errors) {
+            Ok(Some(cgroup)) => clean_cgroup(&cgroup, &mut errors),
+            Ok(None) => (Vec::new(), Emptiness::default()),
+            Err(reason) => {
+                errors.push(reason);
+                (Vec::new(), Emptiness::default())
+            }
+        }
     } else {
         // A tool job may finish before its scope is created. Its containment
         // evidence is the unit's recorded success and the canary (D21), so the
         // unit kill is attempted without waiting for a scope that may never
         // exist.
         super::note(inputs.scope.kill_unit(), &mut errors);
-    }
+        (Vec::new(), Emptiness::default())
+    };
     let status = reap(inputs.status, inputs.running, inputs.child, &mut errors);
-    let emptiness = inputs
-        .cgroup
-        .map_or_else(Emptiness::default, |cgroup| emptiness(cgroup, &mut errors));
     (
         Report {
             survivors,
@@ -128,20 +127,25 @@ fn kill_late_scope(
     scope: &super::Scope<'_>,
     pgid: u32,
     errors: &mut Vec<String>,
-) -> Result<(), String> {
+) -> Result<Option<PathBuf>, String> {
     // Kill the unit first: `systemctl kill` succeeds for a unit that is not
     // loaded, and catches a scope the manager has already created.
     super::note(scope.kill_unit(), errors);
     match scope.wait_until_joined_within(pgid, super::super::scope::JOIN_BOUND) {
-        Ok(cgroup) => {
-            super::note(kill_cgroup(&cgroup), errors);
-            scope.kill_unit()
-        }
+        Ok(cgroup) => Ok(Some(cgroup)),
         Err(reason) => Err(format!(
-            "no cgroup was observed and no scope appeared, so the whole-tree kill is unconfirmed: \
-             {reason}"
-        )),
+                "no cgroup was observed and no scope appeared, so the whole-tree kill is \
+                 unconfirmed:              {reason}"
+            )),
     }
+}
+
+/// Record who survived, kill the cgroup, and confirm it empty.
+fn clean_cgroup(cgroup: &Path, errors: &mut Vec<String>) -> (Vec<u32>, Emptiness) {
+    let survivors = survivors(cgroup, errors);
+    super::note(kill_cgroup(cgroup), errors);
+    let emptiness = emptiness(cgroup, errors);
+    (survivors, emptiness)
 }
 
 /// Observe who outlived the process-group kill.
