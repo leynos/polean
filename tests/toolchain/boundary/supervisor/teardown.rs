@@ -62,6 +62,9 @@ pub struct Inputs<'a> {
     pub status: Option<ExitStatus>,
     /// The job's scope, used for a unit kill when no cgroup was observed.
     pub scope: &'a super::Scope<'a>,
+    /// Whether the job required the scope observation. A tool job may finish
+    /// before its scope appears, so it does not wait for one in teardown.
+    pub require_scope: bool,
 }
 
 /// Tear one job down and report what was observed.
@@ -83,7 +86,7 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
         .map_or_else(Vec::new, |cgroup| survivors(cgroup, &mut errors));
     if let Some(cgroup) = inputs.cgroup {
         super::note(kill_cgroup(cgroup), &mut errors);
-    } else {
+    } else if inputs.require_scope {
         // Without a cgroup the unit is the only whole-tree handle. A scope can
         // still be created after the discovery failure's earlier kill, so wait
         // briefly for it, kill it, and record a scope that never appears: the
@@ -93,6 +96,12 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
             kill_late_scope(inputs.scope, inputs.pgid, &mut errors),
             &mut errors,
         );
+    } else {
+        // A tool job may finish before its scope is created. Its containment
+        // evidence is the unit's recorded success and the canary (D21), so the
+        // unit kill is attempted without waiting for a scope that may never
+        // exist.
+        super::note(inputs.scope.kill_unit(), &mut errors);
     }
     let status = reap(inputs.status, inputs.running, inputs.child, &mut errors);
     let emptiness = inputs

@@ -69,6 +69,7 @@ pub(super) fn abandon(
         running: true,
         status: None,
         scope: target.scope,
+        require_scope: true,
     });
     let mut drain = Vec::new();
     drain_readers(readers, &mut drain);

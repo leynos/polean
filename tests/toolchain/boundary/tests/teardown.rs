@@ -65,6 +65,7 @@ fn a_failed_group_kill_still_kills_the_unit() -> Result<(), String> {
         running: true,
         status: None,
         scope: &scope,
+        require_scope: true,
     });
     let calls = ambient::read_to_string(&record).unwrap_or_default();
     let outcome = scratch
@@ -129,6 +130,7 @@ fn a_known_cgroup_uses_the_cgroup_kill() -> Result<(), String> {
         running: true,
         status: None,
         scope: &scope,
+        require_scope: true,
     });
     let calls = ambient::read_to_string(&record).unwrap_or_default();
     let outcome = scratch

@@ -232,6 +232,7 @@ impl Supervisor<'_> {
             running: waiting.running,
             status: waiting.status,
             scope: &scope,
+            require_scope: job.require_scope,
         });
         diagnostics.extend(errors);
         let (stdout, stderr, mut bounds) =
