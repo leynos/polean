@@ -102,7 +102,7 @@ impl Scope<'_> {
                 Ok(None)
             } else {
                 Err(format!(
-                    "cannot query {unit}: systemctl show exited {:?}: {}",
+                    "cannot query {property} of {unit}: systemctl show exited {:?}: {}",
                     output.status.code(),
                     output.stderr_text()
                 ))
@@ -270,9 +270,14 @@ impl Scope<'_> {
     }
 }
 
-/// Whether `systemctl`'s stderr says the unit is not loaded.
+/// Whether `systemctl`'s stderr says this exact unit is not loaded.
+///
+/// The message must name the unit as well as the absence, so an unrelated
+/// failure that happens to contain the phrase is still an error.
 fn names_absent(stderr: &str, unit: &str) -> bool {
-    stderr.contains("could not be found") || stderr.contains(&format!("Unit {unit} not found"))
+    let names = stderr.contains(&format!("Unit {unit}")) || stderr.contains(unit);
+    let absent = stderr.contains("could not be found") || stderr.contains("not found");
+    names && absent
 }
 
 mod cgroup;

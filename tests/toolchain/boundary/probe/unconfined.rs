@@ -174,26 +174,20 @@ pub(super) fn the_job_writes_into_a_host_directory_without_the_boundary() -> Res
     let host = probe.scratch_path().join("hostdir");
     ambient::create_dir(&host)
         .map_err(|error| format!("cannot create {}: {error}", host.display()))?;
-    let device_marker = format!("/dev/shm/polean-{}", probe.nonce());
     let options = Options::new(Boundary::Unconfined)
         .deadline(Duration::from_secs(10))
         .target(format!(
             "polean-target=host:{}",
             host.join("marker").display()
         ))
-        .target(format!("polean-target=marker:{}", probe.nonce()))
         // The unconfined job writes on the real host, so the fixed sandbox
-        // paths (`/marker`, `/job/work`, the fill) are refused: only the
-        // probe-owned host directory and the nonce marker are attempted.
+        // paths (`/marker`, `/job/work`, the fill, `/dev/shm`) are refused:
+        // only the probe-owned host directory is attempted, and no cleanup of
+        // a path the control never creates is needed.
         .target("polean-target=fixed:no".to_owned());
-    let attempted = probe.run(Behaviour::Storage, &options);
-    // Remove the nonce marker even when the run or its parsing fails, so the
-    // shared host is left as it was found. A missing marker is success.
-    let cleanup = remove_marker(std::path::Path::new(&device_marker));
-    let run = attempted?;
+    let run = probe.run(Behaviour::Storage, &options)?;
     let stdout = started(&run, &probe)?;
     let outcome = attempt(&stdout, "host");
-    cleanup?;
     check_eq!(
         outcome?,
         "wrote",
@@ -204,15 +198,6 @@ pub(super) fn the_job_writes_into_a_host_directory_without_the_boundary() -> Res
         "the marker must be present in the host directory"
     );
     require_outcome(&run, &Outcome::Completed)
-}
-
-/// Remove the marker, treating absence as success.
-fn remove_marker(path: &std::path::Path) -> Result<(), String> {
-    match ambient::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("cannot remove {}: {error}", path.display())),
-    }
 }
 
 /// A grandchild that left the process group outlives a group kill.

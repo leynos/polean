@@ -160,13 +160,21 @@ pub fn kill_process_group(kill: &Path, pgid: u32) -> Result<(), String> {
     let target = format!("-{pgid}");
     // A stalled signaller must not hold teardown past the authoritative cgroup
     // kill, so it runs under the control bound and a timeout is reported.
-    drop(super::process::run(
+    let output = super::process::run(
         kill,
         &["-s", "KILL", "--", &target],
         &[],
         super::process::CONTROL_BOUND,
-    )?);
-    Ok(())
+    )?;
+    if output.success() {
+        return Ok(());
+    }
+    let detail = output.stderr_text();
+    if detail.contains("No such process") {
+        // The process already exited; there is nothing left to signal.
+        return Ok(());
+    }
+    Err(format!("kill {target} reported: {detail}"))
 }
 
 /// What one emptiness wait observed.

@@ -57,7 +57,12 @@ mod run;
 mod teardown;
 mod wait;
 pub use self::job::{Cancel, Job, Run};
-pub(crate) use self::{reader::contains_marker, run::reset_failed_unit, wait::retain_seen};
+pub(crate) use self::{
+    reader::contains_marker,
+    run::reset_failed_unit,
+    teardown::{Inputs as TestInputs, tear_down as tear_down_for_test},
+    wait::retain_seen,
+};
 use self::{
     reader::{Readers, drain_readers, finish_readers, readers},
     run::{Awaiting, note, read_limits, read_result},

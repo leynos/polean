@@ -1497,12 +1497,12 @@ section and in each ADR.
   sample, instead of taking one snapshot. A single snapshot taken while the
   canary was reading `/proc/self/status` or opening its outbound socket caught
   that transient descriptor and reported `CanaryIsolation` unavailable, which
-  failed one probe run after the rebase. An inherited descriptor persists for
-  the job's whole life, so it survives every sample; a self-opened one does
-  not. A job that opened a descriptor and never closed it would still be
-  reported, so the check keeps its power. The intersection reports descriptors
-  present in every sample, not every descriptor inherited at launch: an
-  inherited descriptor the job closes before the first sample is invisible.
+  failed one probe run after the rebase. A descriptor the job keeps open
+  persists across samples; a self-opened transient one does not, and a job that
+  opened a descriptor and never closed it is still reported. The intersection
+  reports descriptors present in every sample, not every descriptor inherited
+  at launch: an inherited descriptor the job closes before the first sample is
+  invisible, and so is one opened and closed between two polls.
   `tests/toolchain/boundary/tests/wait.rs` pins the intersection, and five
   consecutive probe runs pass.
 - **D20, 2026-11-22 (tolerance breach, recorded for ratification):** the code

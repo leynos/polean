@@ -283,12 +283,12 @@ does not hide socket files; the allowlisted filesystem view does.
   in every sample, so a handle the job opens for its own work cannot be
   mistaken for an inherited one; the hostile probe requires exactly its
   standard streams. Rust opens its own descriptors close-on-exec, and neither
-  `systemd-run` nor `bubblewrap` closes foreign ones; a leaked descriptor would
-  be reported by that observation, or by the canary on a host where the
-  observation is unavailable. The intersection reports descriptors present in
-  every sample, not every descriptor inherited at launch: a descriptor opened
+  `systemd-run` nor `bubblewrap` closes foreign ones. The intersection reports
+  descriptors present in every sample, not every descriptor inherited at
+  launch: a leaked descriptor the job keeps open is reported, but one opened
   and closed between two polls is invisible, and so is an inherited descriptor
-  the job closes before the first sample.
+  the job closes before the first sample. The canary does not establish what a
+  later job inherited, so it is not a substitute for that observation.
 - **Kernel resources outside cgroup accounting.** Inotify instances, session
   keyrings, seccomp filters, and `AF_VSOCK` are not bounded here; roadmap 4.3.1
   decides them.
