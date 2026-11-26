@@ -137,5 +137,12 @@ fn only_the_exact_absence_message_is_accepted() -> Result<(), String> {
         !names_absent("Unit other.scope could not be found.", "polean-x.scope"),
         "another unit's absence must not be accepted"
     );
+    check!(
+        !names_absent(
+            "previous error: Unit polean-x.scope could not be found.",
+            "polean-x.scope"
+        ),
+        "a prefixed failure must not be accepted as absence"
+    );
     Ok(())
 }

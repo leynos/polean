@@ -276,10 +276,8 @@ impl Scope<'_> {
 /// `Unit <unit> could not be found.` A D-Bus or socket failure that happens to
 /// mention both the unit and "could not be found" is still a query failure.
 pub(crate) fn names_absent(stderr: &str, unit: &str) -> bool {
-    stderr
-        .trim()
-        .trim_end_matches('.')
-        .ends_with(&format!("Unit {unit} could not be found"))
+    let message = format!("Unit {unit} could not be found");
+    stderr.trim().trim_end_matches('.') == message
 }
 
 mod cgroup;
