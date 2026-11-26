@@ -15,7 +15,7 @@ use std::{
 use super::super::supervisor::{TestInputs, TestLateScope, tear_down_for_test};
 use crate::{
     ambient,
-    scratch::{Scratch, check},
+    scratch::{Scratch, check, check_eq},
 };
 
 /// A whole-tree handle whose scope may or may not appear.
@@ -47,8 +47,8 @@ fn script(scratch: &Scratch, name: &str, body: &str) -> Result<std::path::PathBu
     Ok(path)
 }
 
-/// A scratch cgroup holding one surviving pid and reporting populated 0.
-fn scratch_cgroup(scratch: &Scratch) -> Result<PathBuf, String> {
+/// A scratch cgroup holding one surviving pid and the given populated state.
+fn scratch_cgroup(scratch: &Scratch, populated: &str) -> Result<PathBuf, String> {
     let cgroup = scratch.path().join("cgroup");
     ambient::create_dir(&cgroup)
         .map_err(|error| format!("cannot create the cgroup dir: {error}"))?;
@@ -59,16 +59,30 @@ fn scratch_cgroup(scratch: &Scratch) -> Result<PathBuf, String> {
         format!("{survivor}\n").as_bytes(),
     )
     .map_err(|error| format!("cannot write cgroup.procs: {error}"))?;
-    ambient::write(&cgroup.join("cgroup.events"), b"populated 0\n")
-        .map_err(|error| format!("cannot write cgroup.events: {error}"))?;
+    ambient::write(
+        &cgroup.join("cgroup.events"),
+        format!("populated {populated}\n").as_bytes(),
+    )
+    .map_err(|error| format!("cannot write cgroup.events: {error}"))?;
     Ok(cgroup)
 }
 
+/// One teardown's observable report and diagnostics.
+struct Observed {
+    /// Processes reported as survivors.
+    survivors: Vec<u32>,
+    /// Whether the cgroup was confirmed empty.
+    empty: bool,
+    /// Processes still in the cgroup when the bound expired.
+    residual: Vec<u32>,
+    /// The last `cgroup.events` text.
+    events: Option<String>,
+    /// Cleanup diagnostics.
+    errors: Vec<String>,
+}
+
 /// Tear one job down with the given late-scope handle.
-fn run_teardown(
-    scratch: &Scratch,
-    late: &dyn TestLateScope,
-) -> Result<(Vec<u32>, bool, Vec<String>), String> {
+fn run_teardown(scratch: &Scratch, late: &dyn TestLateScope) -> Result<Observed, String> {
     let kill = script(scratch, "kill", "#!/bin/sh\nexit 1\n")?;
     let mut child = Command::new("/usr/bin/true")
         .stdin(Stdio::null())
@@ -87,7 +101,13 @@ fn run_teardown(
         late,
         require_scope: true,
     });
-    Ok((report.survivors, report.cgroup_empty, errors))
+    Ok(Observed {
+        survivors: report.survivors,
+        empty: report.cgroup_empty,
+        residual: report.residual,
+        events: report.events,
+        errors,
+    })
 }
 
 /// A late scope with the original child gone is found, killed, and checked
@@ -96,17 +116,31 @@ fn run_teardown(
 fn a_late_scope_is_found_and_checked_for_emptiness() -> Result<(), String> {
     let mut scratch = Scratch::try_new("boundary-teardown-late")
         .map_err(|error| format!("cannot create scratch: {error}"))?;
-    let cgroup = scratch_cgroup(&scratch)?;
+    let cgroup = scratch_cgroup(&scratch, "0")?;
+    let kill_file = cgroup.join("cgroup.kill");
     let fake = FakeScope {
         cgroup: Some(cgroup),
         killed: Cell::new(false),
     };
     let result = run_teardown(&scratch, &fake);
+    // Read the kill request before the scratch cgroup is removed.
+    let killed = ambient::read_to_string(&kill_file);
     let outcome = scratch
         .cleanup()
         .map_err(|error| format!("cannot clean scratch: {error}"));
-    let (survivors, empty, errors) = result?;
+    let observed = result?;
     outcome?;
+    let Observed {
+        survivors,
+        empty,
+        errors,
+        ..
+    } = observed;
+    check_eq!(
+        killed.map_err(|error| format!("cannot read cgroup.kill: {error}"))?,
+        "1",
+        "teardown must write 1 to cgroup.kill"
+    );
     check!(fake.killed.get(), "the unit kill must be attempted");
     check!(
         errors.iter().any(|error| error.contains("kill")),
@@ -124,6 +158,42 @@ fn a_late_scope_is_found_and_checked_for_emptiness() -> Result<(), String> {
     Ok(())
 }
 
+/// A populated late cgroup reports non-empty with its residual pids.
+#[test]
+fn a_populated_late_scope_is_not_reported_empty() -> Result<(), String> {
+    let mut scratch = Scratch::try_new("boundary-teardown-populated")
+        .map_err(|error| format!("cannot create scratch: {error}"))?;
+    let cgroup = scratch_cgroup(&scratch, "1")?;
+    let fake = FakeScope {
+        cgroup: Some(cgroup),
+        killed: Cell::new(false),
+    };
+    let result = run_teardown(&scratch, &fake);
+    let outcome = scratch
+        .cleanup()
+        .map_err(|error| format!("cannot clean scratch: {error}"));
+    let observed = result?;
+    outcome?;
+    let Observed {
+        empty,
+        residual,
+        events,
+        ..
+    } = observed;
+    check!(!empty, "a populated cgroup must not report emptiness");
+    check!(
+        residual.contains(&std::process::id()),
+        "the residual pids must be reported, got {residual:?}"
+    );
+    check!(
+        events
+            .as_deref()
+            .is_some_and(|text| text.contains("populated 1")),
+        "the events text must be retained, got {events:?}"
+    );
+    Ok(())
+}
+
 /// A scope that never appears is reported as an unconfirmed whole-tree kill.
 #[test]
 fn a_missing_late_scope_is_unconfirmed() -> Result<(), String> {
@@ -137,8 +207,9 @@ fn a_missing_late_scope_is_unconfirmed() -> Result<(), String> {
     let outcome = scratch
         .cleanup()
         .map_err(|error| format!("cannot clean scratch: {error}"));
-    let (_survivors, empty, errors) = result?;
+    let observed = result?;
     outcome?;
+    let Observed { empty, errors, .. } = observed;
     check!(fake.killed.get(), "the unit kill must be attempted");
     check!(
         errors.iter().any(|error| error.contains("unconfirmed")),
