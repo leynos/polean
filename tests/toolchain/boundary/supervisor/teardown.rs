@@ -84,10 +84,15 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
     if let Some(cgroup) = inputs.cgroup {
         super::note(kill_cgroup(cgroup), &mut errors);
     } else {
-        // Without a cgroup the unit is the only whole-tree handle. Kill it
-        // again here: a scope created after the discovery failure's earlier
-        // kill would otherwise keep running past the probe's return.
-        super::note(inputs.scope.kill_unit(), &mut errors);
+        // Without a cgroup the unit is the only whole-tree handle. A scope can
+        // still be created after the discovery failure's earlier kill, so wait
+        // briefly for it, kill it, and record a scope that never appears: the
+        // fallback direct-child kill then cannot be described as a whole-tree
+        // kill.
+        super::note(
+            kill_late_scope(inputs.scope, inputs.pgid, &mut errors),
+            &mut errors,
+        );
     }
     let status = reap(inputs.status, inputs.running, inputs.child, &mut errors);
     let emptiness = inputs
@@ -103,6 +108,31 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
         status,
         errors,
     )
+}
+
+/// Kill a scope that may have appeared after the discovery failure.
+///
+/// The wait is bounded by [`super::super::scope::JOIN_BOUND`]: a scope that
+/// appears is killed and confirmed empty; one that never appears is reported,
+/// so the run cannot claim a whole-tree kill it did not perform.
+fn kill_late_scope(
+    scope: &super::Scope<'_>,
+    pgid: u32,
+    errors: &mut Vec<String>,
+) -> Result<(), String> {
+    // Kill the unit first: `systemctl kill` succeeds for a unit that is not
+    // loaded, and catches a scope the manager has already created.
+    super::note(scope.kill_unit(), errors);
+    match scope.wait_until_joined_within(pgid, super::super::scope::JOIN_BOUND) {
+        Ok(cgroup) => {
+            super::note(kill_cgroup(&cgroup), errors);
+            scope.kill_unit()
+        }
+        Err(reason) => Err(format!(
+            "no cgroup was observed and no scope appeared, so the whole-tree kill is unconfirmed: \
+             {reason}"
+        )),
+    }
 }
 
 /// Observe who outlived the process-group kill.

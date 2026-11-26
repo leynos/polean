@@ -270,14 +270,16 @@ impl Scope<'_> {
     }
 }
 
-/// Whether `systemctl`'s stderr says this exact unit is not loaded.
+/// Whether `systemctl`'s stderr is systemd's own "unit is not loaded" message.
 ///
-/// The message must name the unit as well as the absence, so an unrelated
-/// failure that happens to contain the phrase is still an error.
-fn names_absent(stderr: &str, unit: &str) -> bool {
-    let names = stderr.contains(&format!("Unit {unit}")) || stderr.contains(unit);
-    let absent = stderr.contains("could not be found") || stderr.contains("not found");
-    names && absent
+/// The message must be exactly the one systemd prints for this unit:
+/// `Unit <unit> could not be found.` A D-Bus or socket failure that happens to
+/// mention both the unit and "could not be found" is still a query failure.
+pub(crate) fn names_absent(stderr: &str, unit: &str) -> bool {
+    stderr
+        .trim()
+        .trim_end_matches('.')
+        .ends_with(&format!("Unit {unit} could not be found"))
 }
 
 mod cgroup;

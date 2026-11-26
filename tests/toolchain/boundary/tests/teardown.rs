@@ -83,6 +83,10 @@ fn a_failed_group_kill_still_kills_the_unit() -> Result<(), String> {
         !report.cgroup_empty,
         "an unobserved cgroup is not evidence of emptiness"
     );
+    check!(
+        errors.iter().any(|error| error.contains("unconfirmed")),
+        "a scope that never appeared must be reported as unconfirmed, got {errors:?}"
+    );
     Ok(())
 }
 

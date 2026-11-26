@@ -5,7 +5,10 @@
 
 use std::path::Path;
 
-use super::super::{platform::Programs, scope::Scope};
+use super::super::{
+    platform::Programs,
+    scope::{Scope, names_absent},
+};
 use crate::{
     ambient,
     scratch::{Scratch, check},
@@ -85,11 +88,21 @@ fn an_absent_unit_is_none() -> Result<(), String> {
 }
 
 /// A failing `Result` query propagates rather than becoming a completion.
+///
+/// `ActiveState` is answered with `failed`, so the wait reaches the `Result`
+/// query; only that query fails.
 #[test]
 fn a_failed_result_query_is_an_error() -> Result<(), String> {
     let mut scratch = Scratch::try_new("boundary-result-failure")
         .map_err(|error| format!("cannot create scratch: {error}"))?;
-    let systemctl = failing_systemctl(&scratch, "Failed to connect to bus: no socket")?;
+    let systemctl = scratch.path().join("systemctl");
+    ambient::write(
+        &systemctl,
+        b"#!/bin/sh\ncase \"$*\" in\n  *ActiveState*) echo failed ;;\n  *) echo 'Failed to connect to bus: no socket' >&2; exit 1 ;;\nesac\n",
+    )
+    .map_err(|error| format!("cannot write the controlled systemctl: {error}"))?;
+    ambient::make_executable(&systemctl)
+        .map_err(|error| format!("cannot make it executable: {error}"))?;
     let programs = Programs {
         systemctl,
         ..Programs::standard()
@@ -102,6 +115,27 @@ fn a_failed_result_query_is_an_error() -> Result<(), String> {
     check!(
         outcome.is_err(),
         "a failed Result query must be an error, got {outcome:?}"
+    );
+    Ok(())
+}
+
+/// Only the exact systemd absence message is accepted.
+#[test]
+fn only_the_exact_absence_message_is_accepted() -> Result<(), String> {
+    check!(
+        names_absent("Unit polean-x.scope could not be found.", "polean-x.scope"),
+        "systemd's absence message must be accepted"
+    );
+    check!(
+        !names_absent(
+            "Failed to query polean-x.scope: D-Bus socket could not be found",
+            "polean-x.scope"
+        ),
+        "an unrelated failure mentioning the unit must still be an error"
+    );
+    check!(
+        !names_absent("Unit other.scope could not be found.", "polean-x.scope"),
+        "another unit's absence must not be accepted"
     );
     Ok(())
 }
