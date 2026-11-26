@@ -158,6 +158,30 @@ impl Scope<'_> {
         }
     }
 
+    /// Wait for the scope's cgroup to exist, without requiring the original
+    /// pid to be in it.
+    ///
+    /// A late scope may contain only descendants after the direct child has
+    /// exited, so membership of the original pid is the wrong test for it.
+    ///
+    /// # Errors
+    ///
+    /// Returns a diagnostic when a query fails for a reason other than the
+    /// scope being absent.
+    pub fn wait_until_present_within(&self, bound: Duration) -> Result<Option<PathBuf>, String> {
+        let started = Instant::now();
+        loop {
+            let remaining = bound.saturating_sub(started.elapsed());
+            if remaining.is_zero() {
+                return Ok(None);
+            }
+            if let Some(cgroup) = self.control_group_within(remaining)? {
+                return Ok(Some(cgroup));
+            }
+            thread::sleep(POLL.min(remaining));
+        }
+    }
+
     /// The scope's cgroup, but only once `pid` is inside it.
     fn active_with(&self, pid: u32, bound: Duration) -> Result<Option<PathBuf>, String> {
         let Some(cgroup) = self.control_group_within(bound)? else {

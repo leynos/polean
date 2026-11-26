@@ -60,7 +60,7 @@ pub use self::job::{Cancel, Job, Run};
 pub(crate) use self::{
     reader::contains_marker,
     run::reset_failed_unit,
-    teardown::{Inputs as TestInputs, tear_down as tear_down_for_test},
+    teardown::{Inputs as TestInputs, LateScope as TestLateScope, tear_down as tear_down_for_test},
     wait::retain_seen,
 };
 use self::{
@@ -231,7 +231,7 @@ impl Supervisor<'_> {
             kill: self.programs.kill.as_path(),
             running: waiting.running,
             status: waiting.status,
-            scope: &scope,
+            late: &scope,
             require_scope: job.require_scope,
         });
         diagnostics.extend(errors);

@@ -68,7 +68,7 @@ pub(super) fn abandon(
         kill: programs.kill.as_path(),
         running: true,
         status: None,
-        scope: target.scope,
+        late: target.scope,
         require_scope: true,
     });
     let mut drain = Vec::new();

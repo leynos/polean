@@ -60,11 +60,38 @@ pub struct Inputs<'a> {
     pub running: bool,
     /// The status already observed by `try_wait`, if any.
     pub status: Option<ExitStatus>,
-    /// The job's scope, used for a unit kill when no cgroup was observed.
-    pub scope: &'a super::Scope<'a>,
+    /// The whole-tree handle used when no cgroup was observed.
+    pub late: &'a dyn LateScope,
     /// Whether the job required the scope observation. A tool job may finish
     /// before its scope appears, so it does not wait for one in teardown.
     pub require_scope: bool,
+}
+
+/// The whole-tree operations teardown needs when discovery failed.
+///
+/// Injecting them lets a test simulate a late scope with an exited original
+/// pid, which a real systemd manager cannot be made to produce on demand.
+pub trait LateScope {
+    /// Kill every process of the unit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a diagnostic when the unit kill fails.
+    fn kill_unit(&self) -> Result<(), String>;
+    /// Wait for the scope's cgroup to exist, bounded by `bound`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a diagnostic when the query fails.
+    fn wait_for_cgroup(&self, bound: std::time::Duration) -> Result<Option<PathBuf>, String>;
+}
+
+impl LateScope for super::Scope<'_> {
+    fn kill_unit(&self) -> Result<(), String> { super::Scope::kill_unit(self) }
+
+    fn wait_for_cgroup(&self, bound: std::time::Duration) -> Result<Option<PathBuf>, String> {
+        self.wait_until_present_within(bound)
+    }
 }
 
 /// Tear one job down and report what was observed.
@@ -89,7 +116,7 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
         // briefly for it and clean it like any observed cgroup; a scope that
         // never appears is reported, because the fallback direct-child kill
         // cannot be described as a whole-tree kill.
-        match kill_late_scope(inputs.scope, inputs.pgid, &mut errors) {
+        match kill_late_scope(inputs.late, &mut errors) {
             Ok(Some(cgroup)) => clean_cgroup(&cgroup, &mut errors),
             Ok(None) => (Vec::new(), Emptiness::default()),
             Err(reason) => {
@@ -102,7 +129,7 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
         // evidence is the unit's recorded success and the canary (D21), so the
         // unit kill is attempted without waiting for a scope that may never
         // exist.
-        super::note(inputs.scope.kill_unit(), &mut errors);
+        super::note(inputs.late.kill_unit(), &mut errors);
         (Vec::new(), Emptiness::default())
     };
     let status = reap(inputs.status, inputs.running, inputs.child, &mut errors);
@@ -124,19 +151,21 @@ pub fn tear_down(inputs: Inputs<'_>) -> (Report, Option<ExitStatus>, Vec<String>
 /// appears is killed and confirmed empty; one that never appears is reported,
 /// so the run cannot claim a whole-tree kill it did not perform.
 fn kill_late_scope(
-    scope: &super::Scope<'_>,
-    pgid: u32,
+    late: &dyn LateScope,
     errors: &mut Vec<String>,
 ) -> Result<Option<PathBuf>, String> {
     // Kill the unit first: `systemctl kill` succeeds for a unit that is not
     // loaded, and catches a scope the manager has already created.
-    super::note(scope.kill_unit(), errors);
-    match scope.wait_until_joined_within(pgid, super::super::scope::JOIN_BOUND) {
-        Ok(cgroup) => Ok(Some(cgroup)),
+    super::note(late.kill_unit(), errors);
+    match late.wait_for_cgroup(super::super::scope::JOIN_BOUND) {
+        Ok(Some(cgroup)) => Ok(Some(cgroup)),
+        Ok(None) => Err(
+            "no cgroup was observed and no scope appeared, so the whole-tree kill is unconfirmed"
+                .to_owned(),
+        ),
         Err(reason) => Err(format!(
-                "no cgroup was observed and no scope appeared, so the whole-tree kill is \
-                 unconfirmed:              {reason}"
-            )),
+            "the scope query failed, so the whole-tree kill is unconfirmed: {reason}"
+        )),
     }
 }
 
