@@ -55,6 +55,17 @@ fn beneath_root(path: &Path) -> io::Result<PathBuf> {
 /// Returns the underlying error, with its kind intact.
 pub fn metadata(path: &Path) -> io::Result<Metadata> { root()?.metadata(beneath_root(path)?) }
 
+/// Make `path` executable by its owner, for a controlled test program.
+///
+/// # Errors
+///
+/// Returns the underlying error.
+pub fn make_executable(path: &Path) -> io::Result<()> {
+    let mut permissions = metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    root()?.set_permissions(beneath_root(path)?, permissions)
+}
+
 /// The target of the symbolic link at `path`, for comparing namespace
 /// identities.
 ///
