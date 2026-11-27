@@ -12,6 +12,16 @@ categories = ["command-line-utilities", "development-tools"]
 publish = false
 
 [dependencies]
+# `serde` and `serde_json` decode the policy IR. The IR types do not implement
+# either trait: the decoders classify every fault in repository code, and
+# `serde` is a tool the decoder uses rather than a way to construct a `Policy`.
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+# `vstd` is a production dependency because the canonical encoder is verified
+# where it ships: the `verus!` kernel in `src/ir/model/` is this crate's own
+# code, and `verus!` erases its ghost items under plain `rustc`. ADR 0008
+# records the decision and its cost.
+vstd = "=0.0.0-2026-09-06-0133"
 
 [dev-dependencies]
 cap-std = "=4.0.2"
@@ -23,9 +33,6 @@ regorus = { version = "=0.13.0", default-features = false, features = ["ast", "s
 rstest = "=0.27.0"
 rstest-bdd = "=0.6.0"
 rstest-bdd-macros = "=0.6.0"
-serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.154"
-vstd = "=0.0.0-2026-09-06-0133"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
