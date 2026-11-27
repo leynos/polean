@@ -11,7 +11,8 @@ technical design rather than racing ahead to a broad Rego interpreter.
   `rustc-codegen-cranelift-preview` component;
 - the `mold` linker on Linux (`.cargo/config.toml` selects it);
 - `cargo-nextest`, which `make test` runs (`.config/nextest.toml` serialises
-  the tests that start a child cargo and bounds each test's run time);
+  the test that starts a child cargo and bounds each test's run time; see "Test
+  timeouts and a contended host" below);
 - Python 3.11 or later for the design harness;
 - `jsonschema` and `hypothesis` from `validation/requirements.txt` for design
   checks;
@@ -185,6 +186,42 @@ installer-managed toolchain builds without repository development flags.
 CI installs `mold` through `install-mold` on `setup-rust`, and the Cranelift
 component for the Whitaker toolchain through `cranelift: 'true'` on
 `install-whitaker`, the CI equivalent of `whitaker-installer --cranelift`.
+
+## Test timeouts and a contended host
+
+`make test` runs `cargo nextest`, whose bounds live in `.config/nextest.toml`.
+They form a hierarchy, each level strictly above the one it contains:
+
+| Level                        | Bound  |
+| ---------------------------- | ------ |
+| Per test, ordinary           | 5 min  |
+| Per test, nested cargo build | 30 min |
+| Whole run (`global-timeout`) | 45 min |
+| CI job (`timeout-minutes`)   | 60 min |
+
+Each level exceeds the level below it so a failure is reported by the narrowest
+bound that applies, rather than by an outer job being cancelled with no
+diagnostic. They are upper bounds, not expected durations: a passing run
+finishes in whatever it takes and pays nothing for the headroom.
+
+The wide allowance exists for one case. Exactly one test starts a child cargo,
+`compile_fail::tests::the_protected_matches_stop_the_build_when_a_variant_is_unhandled`,
+and it compiles the workspace three times through the same compile-admission
+pool every other process on a shared host uses. When other agents' builds have
+queued hundreds of compiler requests ahead of it, a cold build waits rather
+than hangs; the test logs a `SLOW` line each minute so the wait is visible. The
+ordinary allowance would fail such a run for queueing alone, which is why the
+bound is generous.
+
+That test is selected by name rather than by binary. Selecting
+`binary(=admission)` would put all 76 tests in that binary into the serial
+`nested-cargo-builds` group and onto the wide allowance, which slows the suite
+and hides a genuinely slow ordinary test. If a second test starts a child
+cargo, add it to the filter rather than widening the selection.
+
+On a dedicated CI runner there is no compile-admission queue, so the bounds are
+never approached; the job timeout stays above the suite's so nextest reports
+first.
 
 ## Fetching dependencies before tests
 

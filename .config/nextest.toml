@@ -1,21 +1,46 @@
 # cargo-nextest configuration.
 #
 # Policy: no blanket retries; an intermittent failure is a defect to diagnose.
+#
+# The timeouts form a hierarchy, each strictly above the one it contains:
+#
+#   per-test, ordinary            5 min   (5 x 60 s)
+#   per-test, nested build       30 min  (30 x 60 s)
+#   whole run (`global-timeout`) 45 min
+#   CI job (`timeout-minutes`)   60 min
+#
+# Each level must exceed the level below it, so a failure is always reported by
+# the narrowest bound that applies rather than by an outer job being cancelled
+# with no diagnostic. They are upper bounds, not expected durations: a passing
+# run finishes in whatever it takes and pays nothing for the headroom.
 
 [profile.default]
 # Warn after 60 s and terminate a test that has run for five warning periods
-# (300 s). This governs every test no override matches.
+# (300 s). This governs every test no override matches. These run in process
+# and are not exposed to the compiler queue, so the allowance stays tight: a
+# test that reaches it is slow or hung on its own account.
 slow-timeout = { period = "60s", terminate-after = 5 }
-# The whole run, strictly above the largest per-test allowance (600 s, below).
-global-timeout = "30m"
+# The whole run. Above the largest per-test allowance (30 min) with room for
+# the rest of the suite, so a run on a contended host is not failed for
+# queueing alone.
+global-timeout = "45m"
 
 [test-groups.nested-cargo-builds]
-# Tests that start a child cargo or rustc contend for the package-cache lock
-# and for build parallelism, and a cold build looks like a hang. One at a time,
-# each is bounded by its own allowance.
+# A test that starts a child cargo contends for the package-cache lock and for
+# the shared compile-admission pool, where other agents' builds can leave
+# hundreds of compiler requests ahead of it. A cold build behind such a queue
+# is slow, not hung. Only the tests selected by the override below run in this
+# group, so its serialisation costs the rest of the suite nothing.
 max-threads = 1
 
 [[profile.default.overrides]]
-filter = 'binary(=admission)'
+# `tests/admission/compile_fail/tests.rs` is the only test that starts a child
+# cargo; it compiles the workspace three times through the compile-admission
+# pool. Selecting it by name keeps the other 75 tests in the `admission` binary
+# on the ordinary allowance and out of the serial group.
+filter = 'test(=compile_fail::tests::the_protected_matches_stop_the_build_when_a_variant_is_unhandled)'
 test-group = "nested-cargo-builds"
-slow-timeout = { period = "60s", terminate-after = 10 }
+# Warn every minute and terminate at 30 min. A build waiting behind a deep
+# compiler queue keeps reporting progress, so it does not look like a hang, and
+# a genuinely stuck build still fails within the bound.
+slow-timeout = { period = "60s", terminate-after = 30 }
