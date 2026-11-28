@@ -2,10 +2,11 @@
 
 ## Status
 
-Proposed. The probe this record rests on is implemented and passes on the probe
-host; the record awaits the project sponsor's acceptance in conversation. It
-settles the mechanism roadmap 1.2.4 asked for and leaves the supported-platform
-matrix (ToR §8.1) and the agreed measurement machine (OQ4, roadmap 4.3.3) open.
+Accepted on 2026-11-28 by the project sponsor, in conversation, together with
+ratification of the plan's D20, D25, and D26. The probe this record rests on is
+implemented and passes on the probe host. The record settles the mechanism
+roadmap 1.2.4 asked for and leaves the supported-platform matrix (ToR §8.1) and
+the agreed measurement machine (OQ4, roadmap 4.3.3) open.
 
 ## Date
 
@@ -320,9 +321,10 @@ does not hide socket files; the allowlisted filesystem view does.
 
 ## Acceptance
 
-Proposed. The project sponsor accepted the 1.2.4 ExecPlan on 2026-11-21 and
-this record awaits acceptance in conversation. The measured results are
-recorded in that plan's `Outcomes & retrospective` section.
+Accepted by the project sponsor on 2026-11-28. The sponsor also ratified the
+plan's D20 (size tolerance breach), D25 (proof-size breach and manual
+composition), and D26 (probe-owned canary listener and the AC1 wording). The
+measured results are recorded in that plan's `Outcomes & retrospective` section.
 
 ## References
 
