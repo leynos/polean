@@ -100,19 +100,20 @@ explicit design revision. See technical-design.md §§4–6 and 11–13.
     wrong statements, wrong kinds, and both forgery fixtures. `make
     toolchain-smoke` runs it end to end. The demonstration is test-only;
     promotion is 2.2.4 and environment integrity is 4.3.2.
-- [ ] 1.2.4. Record an enforceable Linux execution-boundary decision.
+- [x] 1.2.4. Record an enforceable Linux execution-boundary decision.
   - Requires 1.2.1.
   - See technical-design.md §§2 and 11; terms-of-reference.md §8.2, A4–A6.
   - Success: a bounded probe demonstrates offline execution, memory and output
     limits, process-group cancellation, and private storage on the intended
     platform. Unavailable enforcement blocks public acceptance.
-  - Proposed 2026-11-22: the probe shows all five properties enforced by a
+  - Complete 2026-11-28. The probe shows all five properties enforced by a
     systemd user scope around bubblewrap on its host, each beside a negative
     control, with pinned OPA and Lean usable inside. The decision is
     [ADR 0007](adrs/adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md),
-    proposed pending sponsor acceptance; the item is checked once that
-    acceptance is recorded. It names enforcement prerequisites, not a supported
-    platform; 4.3.1 promotes the mechanism and 4.3.3 measures budgets.
+    accepted by the sponsor on 2026-11-28 together with ratification of the
+    plan's D20, D25, and D26. It names enforcement prerequisites, not a
+    supported platform; 4.3.1 promotes the mechanism and 4.3.3 measures
+    budgets.
 
 ## 2. Detect a tenant-boundary regression from source through one workflow
 

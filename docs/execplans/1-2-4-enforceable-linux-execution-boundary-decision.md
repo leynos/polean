@@ -5,12 +5,13 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current as work proceeds.
 
-Status: APPROVED (revision 3). On 2026-11-21 the user accepted D1 and D3,
+Status: COMPLETE (revision 3). On 2026-11-21 the user accepted D1 and D3,
 installed bubblewrap 0.10.0 on the probe host, and asked for the size limits to
 be checked against past outcomes; revision 3 recalibrates them. The user
 confirmed the revised tolerances and authorised implementation on 2026-11-21.
-The ADR this plan produces stays `Proposed` until the user accepts it in
-conversation.
+Implementation landed on `main` as squash `cd7644d` on 2026-11-26. On
+2026-11-28 the sponsor accepted ADR 0007 and ratified D20, D25, and D26, which
+closes this plan and roadmap item 1.2.4.
 
 Roadmap item: [1.2.4](../roadmap.md). Branch:
 `1-2-4-enforceable-linux-execution-boundary-decision`.
@@ -967,19 +968,19 @@ plateau. Remaining gaps: one host only.
 Requirements: AC8. End state:
 
 - `docs/adrs/adr-0007-enforce-the-execution-boundary-with-a-user-scope-and-bubblewrap.md`
-  follows ADR 0006's shape: Status (`Proposed` until the user accepts it in
-  conversation), Date, Context and problem statement, Decision drivers,
-  Decision, Consequences, Observed results (the property matrix and single-run
-  tool timings, labelled as observations rather than 4.3.3 measurements),
-  Alternatives considered, Known risks and limitations, Outstanding decisions,
-  Acceptance, and References. The alternatives compare concretely: a systemd
-  user service with private namespaces (no install, no inherited descriptors,
-  but a denylist filesystem view); rootless `crun` with a repository-owned OCI
-  configuration (declarative and installed, but with container state and slower
-  start-up); the util-linux composition (O4 and O5 with the exact command);
-  Landlock alone; `RLIMIT_AS`; Podman; and a repository-owned launcher. The
-  constraints for 4.3.1 include spawning and reaping on one thread, the stream
-  caps, and the proposed outcome mapping.
+  follows ADR 0006's shape: Status (recorded `Proposed` until the sponsor
+  accepted it on 2026-11-28), Date, Context and problem statement, Decision
+  drivers, Decision, Consequences, Observed results (the property matrix and
+  single-run tool timings, labelled as observations rather than 4.3.3
+  measurements), Alternatives considered, Known risks and limitations,
+  Outstanding decisions, Acceptance, and References. The alternatives compare
+  concretely: a systemd user service with private namespaces (no install, no
+  inherited descriptors, but a denylist filesystem view); rootless `crun` with
+  a repository-owned OCI configuration (declarative and installed, but with
+  container state and slower start-up); the util-linux composition (O4 and O5
+  with the exact command); Landlock alone; `RLIMIT_AS`; Podman; and a
+  repository-owned launcher. The constraints for 4.3.1 include spawning and
+  reaping on one thread, the stream caps, and the proposed outcome mapping.
 - `docs/technical-design.md`: §2's "Evidence to reported result" row adds the
   kernel, systemd, and bubblewrap to the remaining trust, leaving the
   first-slice guarantee column unchanged; §11 states the selected mechanism,
@@ -1238,8 +1239,8 @@ section and in each ADR.
   three validation modules, and the regenerated validation summary) did not
   match their files even at `ad217c8`. They are regenerated here, so
   `sha256sum -c SHA256SUMS` passes.
-- [ ] Sponsor acceptance of ADR 0007, which closes the roadmap item and this
-  plan.
+- [x] 2026-11-28: the sponsor accepted ADR 0007 and ratified D20, D25, and
+  D26, closing the roadmap item and this plan.
 
 ## Surprises & discoveries
 
@@ -1471,27 +1472,29 @@ section and in each ADR.
   outbound attempt first moved from a public resolver to TEST-NET-1
   (`192.0.2.1:53`, RFC 5737). A host route could still deliver that address, so
   D26 replaces it with a probe-owned listener.
-- **D26, 2026-11-23 (review repair, plan deviations recorded):** two plan
-  wordings change, both awaiting the sponsor's ratification. First, the
-  canary's outbound attempt targets a loopback listener the probe owns and
-  passes in, not a documentation address, so the probe contacts nothing it does
-  not own. Control 4 and AC1 both said `ENETUNREACH for an outbound connect`;
-  inside the boundary the empty network namespace reports a refusal or
-  unreachability, because a loopback route exists even with `lo` down, and both
-  the canary and the offline cell accept either. Second, the supervisor
-  compares the job's network-namespace link target with its own, so a shared or
-  unobserved namespace fails the control independently of the connection
-  result; a host firewall that refused the probe's listener would otherwise
-  look like isolation. A host whose isolation failed normally connects to the
-  probe's own listener, which is also an observation failure.
-- **D25, 2026-11-23 (review repair, tolerance breach recorded):** the capture
-  proof's whole-stream property is a manual composition. The executable
-  `Capture::feed` contract is checked per call, and the model's `fold_at`
-  theorem is checked over every finite chunk sequence; no verified trace
-  harness composes repeated executable calls. The ADR states that boundary. The
-  four proof files total 620 lines against the plan's 450-line escalation
-  tolerance, so the overrun is recorded for ratification, as D20 records the
-  code-size breach. No proof clause was removed to meet the tolerance.
+- **D26, 2026-11-23 (review repair, plan deviations recorded; ratified
+  2026-11-28):** two plan wordings change, both ratified by the sponsor on
+  2026-11-28. First, the canary's outbound attempt targets a loopback listener
+  the probe owns and passes in, not a documentation address, so the probe
+  contacts nothing it does not own. Control 4 and AC1 both said
+  `ENETUNREACH for an outbound connect`; inside the boundary the empty network
+  namespace reports a refusal or unreachability, because a loopback route
+  exists even with `lo` down, and both the canary and the offline cell accept
+  either. Second, the supervisor compares the job's network-namespace link
+  target with its own, so a shared or unobserved namespace fails the control
+  independently of the connection result; a host firewall that refused the
+  probe's listener would otherwise look like isolation. A host whose isolation
+  failed normally connects to the probe's own listener, which is also an
+  observation failure.
+- **D25, 2026-11-23 (review repair, tolerance breach recorded; ratified
+  2026-11-28):** the capture proof's whole-stream property is a manual
+  composition. The executable `Capture::feed` contract is checked per call, and
+  the model's `fold_at` theorem is checked over every finite chunk sequence; no
+  verified trace harness composes repeated executable calls. The ADR states
+  that boundary. The four proof files total 620 lines against the plan's
+  450-line escalation tolerance; the sponsor ratified the overrun on
+  2026-11-28, as they ratified D20's code-size breach. No proof clause was
+  removed to meet the tolerance.
 - **D22, 2026-11-22 (rebase repair):** the supervisor samples the job's
   descriptor table on every poll and keeps the descriptors present in every
   sample, instead of taking one snapshot. A single snapshot taken while the
@@ -1505,7 +1508,7 @@ section and in each ADR.
   invisible, and so is one opened and closed between two polls.
   `tests/toolchain/boundary/tests/wait.rs` pins the intersection, and five
   consecutive probe runs pass.
-- **D20, 2026-11-22 (tolerance breach, recorded for ratification):** the code
+- **D20, 2026-11-22 (tolerance breach, ratified 2026-11-28):** the code
   limit is breached before EP-M3. Measured against `git merge-base main HEAD`
   (`ad217c8`), excluding this plan and the reviewed snapshot: 43 files and
   6,684 net lines against limits of 42 files and 5,800 lines; the snapshot is
@@ -1519,12 +1522,13 @@ section and in each ADR.
   to need a further 1,000–1,500. Options: ratify a revised code limit of about
   8,500 net lines and 55 files, or direct a reduction. The work continues under
   the user's explicit completion directive, and the overrun is reported for
-  post-hoc ratification, as 1.2.2 and 1.2.3 were. No control has been weakened
-  to save lines. Final measurement against the rebased base `13dc116c`,
-  excluding this plan and the reviewed snapshot: 9,879 net code lines in 61
-  files (the classification counts `Makefile`, the feature file,
-  `tests/**/*.rs`, `verus/*.rs`, and `scripts/*.py` as code); documentation 9
-  files and 503 net lines; one snapshot of 60 lines.
+  post-hoc ratification, as 1.2.2 and 1.2.3 were; the sponsor ratified the
+  overrun on 2026-11-28. No control has been weakened to save lines. Final
+  measurement against the rebased base `13dc116c`, excluding this plan and the
+  reviewed snapshot: 9,879 net code lines in 61 files (the classification counts
+  `Makefile`, the feature file, `tests/**/*.rs`, `verus/*.rs`, and
+  `scripts/*.py` as code); documentation 9 files and 503 net lines; one
+  snapshot of 60 lines.
 
 ## Outcomes & retrospective
 
@@ -1553,16 +1557,20 @@ and a fast job needed a window before the supervisor could see its scope (D13).
 And a cgroup can disappear under an open file, so `ENODEV` means "gone" rather
 than an error (the second round of repairs).
 
-The size tolerances were breached and not met: the code is roughly 6,700 net
-lines in 43 files at EP-M2 against 5,800 in 42, and later milestones add more
-(D20). The trace understated the kernels, the supervisor, and the tests rather
-than one component the contingency covered. The overrun is recorded for the
-sponsor's ratification rather than absorbed by weakening a control.
+The size tolerances were breached and not met: the final code is 9,879 net
+lines in 61 files against 5,800 in 42 (D20), and the proof is 620 lines against
+450 (D25). The trace understated the kernels, the supervisor, and the tests
+rather than one component the contingency covered. The sponsor ratified both
+overruns on 2026-11-28 rather than absorbing them by weakening a control.
 
-Open: the sponsor's acceptance of ADR 0007, which closes roadmap 1.2.4 and this
-plan; roadmap 4.3.1 promotes the supervisor, kernels, and launcher into product
-behaviour and owns the outcome mapping; roadmap 4.3.3 measures budgets on an
-agreed machine.
+Delivered: implementation landed on `main` as squash `cd7644d` on 2026-11-26
+after CodeRabbit approved `1f32ab2`, and the post-merge workflows pass. On
+2026-11-28 the sponsor accepted ADR 0007 and ratified D20, D25, and D26,
+closing roadmap 1.2.4 and this plan.
+
+Remaining owners: roadmap 4.3.1 promotes the supervisor, kernels, and launcher
+into product behaviour and owns the outcome mapping; roadmap 4.3.3 measures
+budgets on an agreed machine; ToR §8.1 and OQ4 remain open.
 
 ## Revision notes
 
